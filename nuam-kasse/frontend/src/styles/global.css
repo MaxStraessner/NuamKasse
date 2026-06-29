@@ -1,0 +1,329 @@
+:root {
+  --color-page: #f6f8f4;
+  --color-surface: #ffffff;
+  --color-surface-soft: #eef3ee;
+  --color-text: #17201a;
+  --color-muted: #68736a;
+  --color-border: rgba(23, 32, 26, 0.1);
+  --color-accent: #2f6f5e;
+  --color-accent-soft: #dcebe5;
+  --color-warning: #9a5a16;
+  --color-warning-soft: #fbecd7;
+  --color-positive: #276343;
+  --color-positive-soft: #dcefe5;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.5rem;
+  --shadow-card: 0 18px 45px rgba(31, 43, 35, 0.09);
+  --shadow-subtle: 0 8px 24px rgba(31, 43, 35, 0.08);
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2.25rem;
+  --transition-fast: 160ms ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--color-text);
+  background: var(--color-page);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 248, 244, 0.96)),
+    var(--color-page);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(47, 111, 94, 0.42);
+  outline-offset: 4px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.page-container {
+  width: min(100%, 30rem);
+  margin: 0 auto;
+  padding: calc(1.5rem + env(safe-area-inset-top)) var(--space-4) var(--space-6);
+}
+
+.home-header {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.home-header h1 {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-2xl);
+  line-height: 1.05;
+}
+
+.home-header__eyebrow {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.app-card {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-card);
+}
+
+.app-card + .app-card {
+  margin-top: var(--space-4);
+}
+
+.card-heading {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.card-heading span {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+}
+
+.card-heading small {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.health-badge {
+  display: inline-flex;
+  min-height: 2.75rem;
+  max-width: 11.5rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-subtle);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.health-badge__pulse {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.health-badge--checking .health-badge__pulse {
+  animation: pulse 1s infinite;
+}
+
+.health-badge--online {
+  color: var(--color-positive);
+}
+
+.health-badge--offline {
+  color: #9b2f2f;
+}
+
+.health-badge__meta {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.metric-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.metric-tile {
+  min-height: 6.5rem;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+}
+
+.metric-tile--warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.metric-tile--positive {
+  background: var(--color-positive-soft);
+  color: var(--color-positive);
+}
+
+.metric-tile__label,
+.metric-tile__hint {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.metric-tile__value {
+  display: block;
+  margin: var(--space-2) 0;
+  font-size: var(--font-size-xl);
+  line-height: 1;
+}
+
+.metric-tile__hint {
+  color: var(--color-muted);
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.category-placeholder {
+  display: flex;
+  min-height: 5.25rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #fbfcfa;
+  color: var(--color-text);
+  opacity: 1;
+}
+
+.category-placeholder span {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 900;
+}
+
+.category-placeholder strong {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.bottom-nav {
+  position: fixed;
+  right: max(var(--space-4), env(safe-area-inset-right));
+  bottom: max(var(--space-4), env(safe-area-inset-bottom));
+  left: max(var(--space-4), env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: min(calc(100% - 2rem), 28rem);
+  min-height: 4.25rem;
+  margin: 0 auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-card);
+}
+
+.bottom-nav__item {
+  display: flex;
+  min-width: 0;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.bottom-nav__dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.bottom-nav__item--active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.placeholder-copy {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+@media (min-width: 420px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metric-tile {
+    min-height: 7.25rem;
+  }
+}
+
+@media (max-width: 359px) {
+  .home-header {
+    flex-direction: column;
+  }
+
+  .health-badge {
+    max-width: 100%;
+  }
+
+  .bottom-nav__item {
+    font-size: 0.72rem;
+    gap: var(--space-1);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

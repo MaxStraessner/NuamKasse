@@ -1,0 +1,23 @@
+services:
+  db:
+    restart: always
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    restart: always
+    environment:
+      APP_ENV: production
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    restart: always
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 10
