@@ -586,6 +586,20 @@ a:focus-visible {
   opacity: 0.7;
 }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-decoration: underline;
+}
+
+.link-button:disabled {
+  opacity: 0.55;
+}
+
 .form-error,
 .form-success {
   margin: var(--space-3) 0;
@@ -631,6 +645,122 @@ a:focus-visible {
 
 .stack-form {
   display: grid;
+}
+
+.expense-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.expense-item {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.expense-item:last-child {
+  border-bottom: 0;
+}
+
+.expense-item__body,
+.expense-item__amount {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.expense-item__body {
+  min-width: 0;
+}
+
+.expense-item__body strong,
+.expense-item__body span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-item__body span,
+.expense-preview span,
+.expense-dialog__category span,
+.amount-field span {
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.expense-item__amount {
+  justify-items: end;
+  text-align: right;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-items: end;
+  padding: var(--space-4);
+  background: rgba(25, 32, 29, 0.38);
+}
+
+.expense-dialog {
+  width: min(100%, 32rem);
+  margin: 0 auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.expense-dialog form,
+.expense-dialog__category,
+.expense-preview {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.expense-dialog__category {
+  grid-template-columns: 6rem minmax(0, 1fr);
+  align-items: center;
+}
+
+.amount-field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.amount-field input {
+  width: 100%;
+  min-height: 4.25rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: #fbfcfa;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.amount-field input:focus {
+  border-color: rgba(47, 111, 94, 0.55);
+  outline: 3px solid rgba(47, 111, 94, 0.2);
+}
+
+.expense-preview {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+
+.expense-preview div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .catalog-grid {
@@ -841,6 +971,16 @@ a:focus-visible {
 @media (max-width: 359px) {
   .home-header {
     flex-direction: column;
+  }
+
+  .expense-item {
+    grid-template-columns: 3.75rem minmax(0, 1fr);
+  }
+
+  .expense-item__amount {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
   }
 
   .health-badge {

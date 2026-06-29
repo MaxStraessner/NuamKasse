@@ -18,10 +18,10 @@ from app.services.cash_period_service import (
     create_cash_period,
     get_active_cash_period,
     get_cash_period_by_id,
-    get_cash_period_summary,
     list_cash_periods,
     update_cash_period,
 )
+from app.services.cash_summary_service import get_cash_period_summary
 
 router = APIRouter(prefix="/cash-periods", tags=["cash-periods"])
 
@@ -77,7 +77,7 @@ def read_current_cash_period_summary(
     db: Session = Depends(get_db),
     user: User = Depends(require_password_change_completed),
 ) -> dict[str, object]:
-    return get_cash_period_summary(_get_active_or_404(db))
+    return get_cash_period_summary(db, _get_active_or_404(db))
 
 
 @router.get("", response_model=list[CashPeriodRead])

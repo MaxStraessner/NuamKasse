@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
@@ -10,10 +10,22 @@ import { PageContainer } from "../components/PageContainer";
 import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod, getCurrentCashPeriodSummary } from "../services/cashPeriodsApi";
 import { getCategories } from "../services/categoriesApi";
-import { formatThaiBaht } from "../services/money";
+import { formatLocalDateTime } from "../services/dateTime";
+import { createExpense, getCurrentExpenses, voidExpense } from "../services/expensesApi";
+import {
+  decimalStringToMinorUnits,
+  formatThaiBaht,
+  minorUnitsToDecimalString,
+  normalizeMoneyInput,
+} from "../services/money";
 import { useHealth } from "../services/useHealth";
 import type { CashPeriod, CashPeriodSummary } from "../types/cashPeriod";
 import type { Category } from "../types/category";
+import type { Expense } from "../types/expense";
+
+function isNoActiveCashPeriod(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
 
 export function HomePage() {
   const health = useHealth();
@@ -26,9 +38,24 @@ export function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [voidingExpenseId, setVoidingExpenseId] = useState<number | null>(null);
 
-  async function loadCashPeriod() {
-    setIsLoadingCashPeriod(true);
+  const remainingMinorUnits = decimalStringToMinorUnits(cashSummary?.remaining_amount ?? "") ?? 0;
+  const enteredMinorUnits = decimalStringToMinorUnits(expenseAmount);
+  const canBook = Boolean(cashPeriod && cashSummary && remainingMinorUnits > 0 && !hasNoActiveCashPeriod);
+
+  async function loadCashPeriod(silent = false) {
+    if (!silent) {
+      setIsLoadingCashPeriod(true);
+    }
     try {
       const [current, summary] = await Promise.all([
         getCurrentCashPeriod(),
@@ -41,15 +68,39 @@ export function HomePage() {
     } catch (err) {
       setCashPeriod(null);
       setCashSummary(null);
-      if (err instanceof ApiError && err.status === 404) {
+      if (isNoActiveCashPeriod(err)) {
         setHasNoActiveCashPeriod(true);
         setCashPeriodError(null);
-      } else {
+      } else if (!silent) {
         setHasNoActiveCashPeriod(false);
         setCashPeriodError("Aktuelle Kassenperiode konnte nicht geladen werden.");
       }
     } finally {
-      setIsLoadingCashPeriod(false);
+      if (!silent) {
+        setIsLoadingCashPeriod(false);
+      }
+    }
+  }
+
+  async function loadExpenses(silent = false) {
+    if (!silent) {
+      setIsLoadingExpenses(true);
+    }
+    try {
+      const currentExpenses = await getCurrentExpenses({ limit: 5 });
+      setExpenses(Array.isArray(currentExpenses) ? currentExpenses : []);
+      setExpenseError(null);
+    } catch (err) {
+      if (isNoActiveCashPeriod(err)) {
+        setExpenses([]);
+        setExpenseError(null);
+      } else if (!silent) {
+        setExpenseError("Buchungen konnten nicht geladen werden.");
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingExpenses(false);
+      }
     }
   }
 
@@ -65,10 +116,114 @@ export function HomePage() {
     }
   }
 
+  async function refreshCashAndExpenses(silent = true) {
+    await Promise.all([loadCashPeriod(silent), loadExpenses(silent)]);
+  }
+
   useEffect(() => {
     void loadCashPeriod();
     void loadCategories();
+    void loadExpenses();
   }, []);
+
+  useEffect(() => {
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") {
+        void refreshCashAndExpenses(true);
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshCashAndExpenses(true);
+      }
+    }, 15000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+
+  function openExpenseDialog(category: Category) {
+    if (!canBook || !category.is_active) {
+      return;
+    }
+    setSelectedCategory(category);
+    setExpenseAmount("");
+    setDialogError(null);
+    setSuccessMessage(null);
+  }
+
+  function closeExpenseDialog() {
+    if (isSavingExpense) {
+      return;
+    }
+    setSelectedCategory(null);
+    setExpenseAmount("");
+    setDialogError(null);
+  }
+
+  async function handleCreateExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCategory) {
+      return;
+    }
+    if (enteredMinorUnits === null) {
+      setDialogError("Bitte einen Betrag eingeben.");
+      return;
+    }
+    if (enteredMinorUnits <= 0) {
+      setDialogError("Der Betrag muss groesser als null sein.");
+      return;
+    }
+
+    setIsSavingExpense(true);
+    setDialogError(null);
+    try {
+      const response = await createExpense({
+        category_id: selectedCategory.id,
+        amount: normalizeMoneyInput(expenseAmount),
+      });
+      setCashSummary(response.summary);
+      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} fuer ${response.expense.category.name} gespeichert.`);
+      setSelectedCategory(null);
+      setExpenseAmount("");
+      await loadExpenses(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setDialogError(err.message);
+        await refreshCashAndExpenses(true);
+      } else {
+        setDialogError(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
+      }
+    } finally {
+      setIsSavingExpense(false);
+    }
+  }
+
+  async function handleVoidExpense(expense: Expense) {
+    const confirmed = window.confirm(
+      `Buchung entfernen?\n\n${expense.category.name}\n${formatThaiBaht(expense.amount, expense.currency)}\n\nDer Betrag wird der Kasse wieder gutgeschrieben.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setVoidingExpenseId(expense.id);
+    setExpenseError(null);
+    try {
+      const response = await voidExpense(expense.id);
+      setCashSummary(response.summary);
+      setSuccessMessage("Buchung wurde entfernt.");
+      await loadExpenses(true);
+    } catch (err) {
+      setExpenseError(err instanceof Error ? err.message : "Buchung konnte nicht storniert werden.");
+      await refreshCashAndExpenses(true);
+    } finally {
+      setVoidingExpenseId(null);
+    }
+  }
 
   return (
     <PageContainer>
@@ -91,7 +246,7 @@ export function HomePage() {
         {cashPeriodError ? (
           <div className="empty-state" role="alert">
             <p>{cashPeriodError}</p>
-            <button className="secondary-action" type="button" onClick={() => void loadCashPeriod()}>
+            <button className="secondary-action" type="button" onClick={() => void refreshCashAndExpenses(false)}>
               Erneut laden
             </button>
           </div>
@@ -124,23 +279,25 @@ export function HomePage() {
                 label="Ausgaben"
                 value={formatThaiBaht(cashSummary.spent_amount, cashSummary.currency)}
                 tone="warning"
-                hint="noch keine Buchungen"
+                hint="gueltige Buchungen"
               />
               <MetricTile
                 label="Restbetrag"
                 value={formatThaiBaht(cashSummary.remaining_amount, cashSummary.currency)}
                 tone="positive"
-                hint="ohne Buchungen"
+                hint="nach Ausgaben"
               />
             </div>
           </>
         ) : null}
       </AppCard>
 
+      {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
+
       <AppCard className="category-card" ariaLabel="Kategoriesymbole">
         <div className="card-heading">
           <span>Kategorien</span>
-          <small>Auswahl vorbereitet</small>
+          <small>{canBook ? "Ausgabe erfassen" : "nicht buchbar"}</small>
         </div>
         {isLoadingCategories ? (
           <div className="category-grid" aria-label="Kategorien werden geladen">
@@ -167,11 +324,121 @@ export function HomePage() {
         {!isLoadingCategories && !categoryError && categories.length > 0 ? (
           <div className="category-grid">
             {categories.map((category) => (
-              <CategoryTile category={category} key={category.id} />
+              <CategoryTile
+                category={category}
+                isDisabled={!canBook || !category.is_active}
+                key={category.id}
+                onSelect={() => openExpenseDialog(category)}
+              />
             ))}
           </div>
         ) : null}
       </AppCard>
+
+      <AppCard ariaLabel="Letzte Ausgaben">
+        <div className="card-heading">
+          <span>Letzte Ausgaben</span>
+          <small>{expenses.length ? `${expenses.length} angezeigt` : "aktuelle Kasse"}</small>
+        </div>
+        {isLoadingExpenses ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
+        {expenseError ? (
+          <div className="form-error" role="alert">
+            <p>{expenseError}</p>
+            <button className="secondary-action" type="button" onClick={() => void loadExpenses(false)}>
+              Erneut laden
+            </button>
+          </div>
+        ) : null}
+        {!isLoadingExpenses && !expenseError && expenses.length === 0 ? (
+          <p className="empty-state">Noch keine Ausgaben erfasst.</p>
+        ) : null}
+        {!isLoadingExpenses && !expenseError && expenses.length > 0 ? (
+          <div className="expense-list">
+            {expenses.map((expense) => {
+              const canVoidExpense = Boolean(
+                cashPeriod?.status === "active"
+                && !expense.is_voided
+                && (user?.role === "admin" || user?.id === expense.created_by.id),
+              );
+              return (
+                <div className="expense-item" key={expense.id}>
+                  <CategoryTile category={expense.category} size="compact" />
+                  <div className="expense-item__body">
+                    <strong>{expense.category.name}</strong>
+                    <span>{expense.created_by.display_name} / {formatLocalDateTime(expense.created_at)}</span>
+                  </div>
+                  <div className="expense-item__amount">
+                    <strong>{formatThaiBaht(expense.amount, expense.currency)}</strong>
+                    {canVoidExpense ? (
+                      <button
+                        className="link-button"
+                        disabled={voidingExpenseId === expense.id}
+                        onClick={() => void handleVoidExpense(expense)}
+                        type="button"
+                      >
+                        Buchung entfernen
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </AppCard>
+
+      {selectedCategory ? (
+        <div className="dialog-backdrop" role="presentation">
+          <div aria-modal="true" className="expense-dialog" role="dialog">
+            <form onSubmit={(event) => void handleCreateExpense(event)}>
+              <div className="expense-dialog__category">
+                <CategoryTile category={selectedCategory} />
+                <div>
+                  <span>Neue Ausgabe</span>
+                  <strong>{selectedCategory.name}</strong>
+                </div>
+              </div>
+              <label className="amount-field">
+                <span>Betrag</span>
+                <input
+                  autoFocus
+                  inputMode="decimal"
+                  onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
+                  placeholder="250.00"
+                  value={expenseAmount}
+                />
+              </label>
+              <div className="expense-preview">
+                <div>
+                  <span>Verbleibend vorher</span>
+                  <strong>{formatThaiBaht(cashSummary?.remaining_amount ?? "0.00", cashSummary?.currency ?? "THB")}</strong>
+                </div>
+                <div>
+                  <span>Neue Ausgabe</span>
+                  <strong>{enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "ungueltiger Betrag"}</strong>
+                </div>
+                <div>
+                  <span>Voraussichtlich verbleibend</span>
+                  <strong>
+                    {enteredMinorUnits !== null
+                      ? formatThaiBaht(minorUnitsToDecimalString(Math.max(remainingMinorUnits - enteredMinorUnits, 0)))
+                      : "ungueltiger Betrag"}
+                  </strong>
+                </div>
+              </div>
+              {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
+              <div className="action-row">
+                <button className="primary-action" disabled={isSavingExpense} type="submit">
+                  Ausgabe speichern
+                </button>
+                <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">
+                  Abbrechen
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </PageContainer>
   );
 }

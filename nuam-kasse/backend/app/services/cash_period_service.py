@@ -5,9 +5,10 @@ from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.money import MoneyError, format_money, parse_money, validate_currency
+from app.core.money import MoneyError, parse_money, validate_currency
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, utc_now
+from app.services.cash_summary_service import get_cash_period_summary
 
 
 class CashPeriodServiceError(ValueError):
@@ -109,7 +110,6 @@ def create_cash_period(
     db.refresh(cash_period)
     return cash_period
 
-
 def update_cash_period(
     db: Session,
     cash_period: CashPeriod,
@@ -147,7 +147,6 @@ def update_cash_period(
     db.refresh(cash_period)
     return cash_period
 
-
 def close_cash_period(
     db: Session,
     cash_period: CashPeriod,
@@ -173,16 +172,3 @@ def close_cash_period(
     db.commit()
     db.refresh(cash_period)
     return cash_period
-
-
-def get_cash_period_summary(cash_period: CashPeriod) -> dict[str, object]:
-    opening_amount = format_money(cash_period.opening_amount)
-    return {
-        "cash_period_id": cash_period.id,
-        "name": cash_period.name,
-        "opening_amount": opening_amount,
-        "spent_amount": "0.00",
-        "remaining_amount": opening_amount,
-        "currency": cash_period.currency,
-        "status": cash_period.status,
-    }
