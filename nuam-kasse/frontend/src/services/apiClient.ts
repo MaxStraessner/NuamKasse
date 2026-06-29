@@ -35,8 +35,14 @@ export async function apiRequest<TResponse>(
   if (!response.ok) {
     let message = `API request failed with ${response.status}`;
     try {
-      const data = (await response.json()) as { detail?: string };
-      message = data.detail || message;
+      const data = (await response.json()) as {
+        detail?: string | { message?: string; code?: string };
+      };
+      if (typeof data.detail === "string") {
+        message = data.detail;
+      } else if (data.detail?.message) {
+        message = data.detail.message;
+      }
     } catch {
       // Keep the generic message when the backend returned no JSON body.
     }

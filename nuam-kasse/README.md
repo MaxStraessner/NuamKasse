@@ -2,7 +2,7 @@
 
 Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt und soll spaeter als Progressive Web App auf einem Hostinger VPS betrieben werden.
 
-Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen sowie das Kategorienmodul als Stammdatenverwaltung. Kassenperioden, Buchungen, Berechnungen und Statistiken sind bewusst noch nicht enthalten.
+Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung sowie das Kassenmodul fuer aktive und abgeschlossene Kassenperioden. Buchungen, echte Ausgabenberechnungen und Statistiken sind bewusst noch nicht enthalten.
 
 ## Architektur
 
@@ -156,7 +156,7 @@ docker compose config
 
 ## Datenbankmigrationen
 
-Alembic enthaelt Migrationen fuer Benutzer, serverseitige Sitzungen und Kategorien.
+Alembic enthaelt Migrationen fuer Benutzer, serverseitige Sitzungen, Kategorien und Kassenperioden.
 
 Beispiel fuer spaetere Migrationen:
 
@@ -337,20 +337,107 @@ Manuelle Pruefschritte:
 5. Startseite pruefen: aktive Kategorien werden angezeigt, deaktivierte nicht.
 6. Als Mitglied anmelden: aktive Kategorien sind sichtbar, Verwaltung ist nicht sichtbar.
 
+## Kassenmodul
+
+Das Kassenmodul verwaltet den Geldbetrag, der Nuam fuer einen bestimmten Zeitraum zur Verfuegung steht. Der fachliche Begriff dafuer ist `Kassenperiode`.
+
+In diesem Modul gilt ausdruecklich:
+
+- Ausgaben = `0.00`
+- Verbleibend = Ausgangsbetrag
+- Im naechsten Buchungsmodul wird die Zusammenfassung an echte Buchungen angebunden.
+
+Fachliche Regeln:
+
+- Alle Benutzer greifen auf dieselben Kassenperioden zu.
+- Es darf immer nur eine aktive Kassenperiode geben.
+- Normale Benutzer duerfen die aktive Kassenperiode und deren Zusammenfassung lesen.
+- Nur Administratoren duerfen Kassenperioden anlegen, bearbeiten, abschliessen und die Historie sehen.
+- Abgeschlossene Kassenperioden bleiben dauerhaft gespeichert.
+- Abgeschlossene Kassenperioden duerfen nicht mehr bearbeitet oder reaktiviert werden.
+- Kassenperioden werden nicht geloescht.
+- Es wird keine automatische Nachfolgeperiode erstellt.
+
+Datenmodell `cash_periods`:
+
+- `id`: Primaerschluessel.
+- `name`: sichtbare Bezeichnung, z. B. `Juli 2026`.
+- `opening_amount`: Ausgangsbetrag als `NUMERIC(14, 2)`.
+- `currency`: aktuell ausschliesslich `THB`.
+- `start_date`: fachliches Startdatum.
+- `end_date`: optional bei aktiver Periode, gesetzt beim Abschluss.
+- `status`: `active` oder `closed`.
+- `created_by_user_id`: Administrator, der die Periode angelegt hat.
+- `closed_by_user_id`: Administrator, der die Periode abgeschlossen hat.
+- `created_at`, `updated_at`, `closed_at`: UTC-Zeitstempel.
+
+Statusmodell:
+
+- `active`: aktuelle Kassenperiode, auf der Startseite sichtbar und durch Administratoren bearbeitbar.
+- `closed`: historische Kassenperiode, lesbar fuer Administratoren, nicht mehr bearbeitbar.
+
+Absicherung fuer nur eine aktive Periode:
+
+- Der Service prueft vor dem Anlegen auf eine vorhandene aktive Kassenperiode.
+- Die Datenbankmigration legt zusaetzlich einen partiellen eindeutigen Index fuer `status = 'active'` an.
+- Bei Konflikt antwortet die API mit HTTP `409 Conflict` und dem Code `active_cash_period_exists`.
+
+Geldverarbeitung:
+
+- Das Backend verarbeitet Geldbetraege ausschliesslich mit Python `Decimal`.
+- Floats werden fuer Geldlogik nicht verwendet.
+- Erlaubt sind maximal zwei Nachkommastellen.
+- Der Hoechstbetrag ist `999999999.99`.
+- Die API gibt Geldbetraege als Dezimalzeichenkette aus, z. B. `"20000.00"`.
+- Das Frontend formatiert nur zur Anzeige mit `Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" })`.
+
+API-Endpunkte:
+
+- `GET /api/v1/cash-periods/current`: aktive Kassenperiode fuer angemeldete Benutzer.
+- `GET /api/v1/cash-periods/current/summary`: Zusammenfassung der aktiven Kassenperiode.
+- `GET /api/v1/cash-periods`: Historie und aktive Periode, nur fuer Administratoren.
+- `GET /api/v1/cash-periods?status=active`
+- `GET /api/v1/cash-periods?status=closed`
+- `GET /api/v1/cash-periods/{cash_period_id}`: einzelne Periode, nur fuer Administratoren.
+- `POST /api/v1/cash-periods`: neue aktive Kassenperiode anlegen, nur fuer Administratoren.
+- `PATCH /api/v1/cash-periods/{cash_period_id}`: aktive Periode bearbeiten, nur fuer Administratoren.
+- `POST /api/v1/cash-periods/{cash_period_id}/close`: aktive Periode abschliessen, nur fuer Administratoren.
+
+Frontend-Ansichten:
+
+- Startseite: zeigt aktive Kassenperiode, verbleibenden Betrag, Ausgangsbetrag und Ausgaben.
+- Zustand ohne aktive Periode: ruhiger Leerzustand; Administratoren erhalten eine Aktion zum Anlegen.
+- Einstellungen: Kassenverwaltung nur fuer Administratoren.
+- Kassenverwaltung: mobile Karten fuer aktive und abgeschlossene Perioden, Formular zum Anlegen/Bearbeiten und Abschlussaktion.
+
+Manuelle Pruefschritte:
+
+1. Als Administrator anmelden.
+2. Kassenverwaltung oeffnen.
+3. Neue Kassenperiode mit `20000.00` THB anlegen.
+4. Startseite pruefen: Ausgangsbetrag, Ausgaben `0.00`, Verbleibend `20000.00`.
+5. Zweite aktive Periode anlegen: muss mit Konflikt abgelehnt werden.
+6. Aktive Periode bearbeiten.
+7. Als Mitglied anmelden: aktive Periode sichtbar, Kassenverwaltung nicht sichtbar.
+8. Als Administrator aktive Periode abschliessen.
+9. Startseite zeigt Zustand ohne aktive Periode.
+10. Abgeschlossene Periode erscheint in der Historie.
+11. Neue aktive Periode anlegen.
+
 ## Bekannte Einschraenkungen
 
-- Noch keine Kassenperioden, Buchungen, Ausgabenberechnung oder Statistiken.
+- Noch keine Buchungstabelle, kein Buchungsdialog und keine echten Ausgaben.
+- Noch keine echte Restbetragsberechnung aus Buchungen; aktuell gilt Verbleibend = Ausgangsbetrag.
+- Nur Thai Baht (`THB`) wird unterstuetzt.
 - Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
 - Noch keine Hostinger-, Domain- oder HTTPS-Konfiguration.
-- Die sichtbaren Geldbetraege sind weiterhin Platzhalter.
 
 ## Naechste geplante Module
 
-1. Kassenmodul
-2. Buchungsmodul
-3. Uebersichtsmodul
-4. PWA und Deployment
-5. abschliessende Tests und Absicherung
+1. Buchungsmodul
+2. Uebersichtsmodul
+3. PWA und Deployment
+4. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 
