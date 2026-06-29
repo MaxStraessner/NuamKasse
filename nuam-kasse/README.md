@@ -2,7 +2,7 @@
 
 Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt und soll spaeter als Progressive Web App auf einem Hostinger VPS betrieben werden.
 
-Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung sowie das Kassenmodul fuer aktive und abgeschlossene Kassenperioden. Buchungen, echte Ausgabenberechnungen und Statistiken sind bewusst noch nicht enthalten.
+Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden sowie das Buchungsmodul fuer Ausgaben und Stornierungen. Umfangreiche Statistiken, Exporte und PWA-Funktionen sind bewusst noch nicht enthalten.
 
 ## Architektur
 
@@ -341,11 +341,11 @@ Manuelle Pruefschritte:
 
 Das Kassenmodul verwaltet den Geldbetrag, der Nuam fuer einen bestimmten Zeitraum zur Verfuegung steht. Der fachliche Begriff dafuer ist `Kassenperiode`.
 
-In diesem Modul gilt ausdruecklich:
+Seit dem Buchungsmodul gilt:
 
-- Ausgaben = `0.00`
-- Verbleibend = Ausgangsbetrag
-- Im naechsten Buchungsmodul wird die Zusammenfassung an echte Buchungen angebunden.
+- Ausgaben = Summe aller nicht stornierten Buchungen der Kassenperiode.
+- Verbleibend = Ausgangsbetrag minus Ausgaben.
+- Stornierte Buchungen bleiben gespeichert, werden aber nicht in Summen einbezogen.
 
 Fachliche Regeln:
 
@@ -424,20 +424,103 @@ Manuelle Pruefschritte:
 10. Abgeschlossene Periode erscheint in der Historie.
 11. Neue aktive Periode anlegen.
 
+## Buchungsmodul
+
+Das Buchungsmodul erfasst Ausgaben fuer die aktive Kassenperiode. Eine Ausgabe wird immer einer Kassenperiode, einer Kategorie, einem Benutzer und einem serverseitigen Zeitpunkt zugeordnet.
+
+Fachliche Regeln:
+
+- Neue Ausgaben koennen nur fuer die aktive Kassenperiode erfasst werden.
+- Die Kategorie muss aktiv sein.
+- Der angemeldete Benutzer wird serverseitig als Ersteller gespeichert.
+- Der Client darf weder Kassenperiode noch Ersteller frei setzen.
+- Der Betrag muss groesser als `0.00` sein, maximal zwei Nachkommastellen besitzen und darf den verbleibenden Betrag nicht ueberschreiten.
+- Geldlogik bleibt im Backend und verwendet Python `Decimal`.
+- Ausgaben werden nicht geloescht, sondern storniert.
+- Normale Benutzer duerfen eigene Buchungen der aktiven Periode stornieren.
+- Administratoren duerfen jede Buchung der aktiven Periode stornieren.
+- Buchungen abgeschlossener Kassenperioden bleiben lesbar, aber unveraenderlich.
+
+Datenmodell `expenses`:
+
+- `id`: Primaerschluessel.
+- `cash_period_id`: Fremdschluessel zur Kassenperiode.
+- `category_id`: Fremdschluessel zur Kategorie.
+- `amount`: Ausgabe als `NUMERIC(14, 2)`.
+- `currency`: aktuell ausschliesslich `THB`.
+- `created_by_user_id`: Benutzer aus der aktuellen Sitzung.
+- `created_at`: serverseitiger UTC-Zeitstempel.
+- `is_voided`: Stornierungsstatus.
+- `voided_at`: serverseitiger UTC-Zeitstempel der Stornierung.
+- `voided_by_user_id`: Benutzer, der storniert hat.
+- `void_reason`: optionaler Grund bis 200 Zeichen.
+
+Transaktionale Restbetragspruefung:
+
+- Beim Erstellen einer Ausgabe wird die aktive Kassenperiode per `SELECT FOR UPDATE` gesperrt.
+- Der Service berechnet die aktuelle Summe aller nicht stornierten Ausgaben.
+- Der neue Betrag wird gegen den verbleibenden Betrag geprueft.
+- Bei zu hohem Betrag antwortet die API mit HTTP `409 Conflict`, Code `insufficient_remaining_amount` und dem aktuellen `remaining_amount`.
+- Dadurch werden parallele Ueberbuchungen kontrolliert verhindert.
+
+API-Endpunkte:
+
+- `POST /api/v1/expenses`: Ausgabe in der aktiven Kassenperiode erstellen.
+- `GET /api/v1/expenses/current`: aktuelle Buchungen der aktiven Kassenperiode abrufen.
+- `GET /api/v1/expenses/current?limit=20&offset=0`
+- `GET /api/v1/expenses/current?category_id=1`
+- `GET /api/v1/expenses/current?created_by_user_id=2`
+- `GET /api/v1/expenses/current?include_voided=true`: stornierte Buchungen nur fuer Administratoren sichtbar.
+- `GET /api/v1/expenses/{expense_id}`: einzelne Buchung abrufen.
+- `POST /api/v1/expenses/{expense_id}/void`: Buchung stornieren.
+
+Nicht vorhanden:
+
+- Kein `PATCH /api/v1/expenses/{expense_id}`.
+- Kein `DELETE /api/v1/expenses/{expense_id}`.
+- Korrekturen erfolgen durch Stornierung und neue Buchung.
+
+Frontend:
+
+- Die Kategoriekacheln auf der Startseite sind buchbar, sobald eine aktive Kassenperiode mit Restbetrag existiert.
+- Der mobile Buchungsdialog zeigt Kategorie, Betragseingabe, verbleibenden Betrag und Vorschau.
+- Nach dem Speichern uebernimmt das Frontend die Backend-Zusammenfassung als Quelle der Wahrheit.
+- Die Startseite zeigt die letzten fuenf gueltigen Ausgaben.
+- Eigene Buchungen koennen ueber `Buchung entfernen` storniert werden; Administratoren koennen jede aktuelle Buchung stornieren.
+- Beim Oeffnen, nach Buchung, nach Stornierung, bei Rueckkehr in den Vordergrund und alle 15 Sekunden bei sichtbarer Seite werden Kassenstand und Buchungsliste aktualisiert.
+
+Manuelle Pruefschritte:
+
+1. Als Administrator eine aktive Kassenperiode mit `20000.00` THB sicherstellen.
+2. Aktive Kategorien pruefen.
+3. Als Mitglied anmelden.
+4. Kategorie `Essen` auswaehlen.
+5. `250.00` THB speichern.
+6. Startseite pruefen: Ausgaben `250.00`, Restbetrag `19750.00`, letzte Ausgabe sichtbar.
+7. Weitere Ausgabe speichern und Summen pruefen.
+8. Betrag ueber Restbetrag speichern: muss abgelehnt werden.
+9. Eigene Buchung entfernen: Restbetrag steigt.
+10. Als Administrator anmelden und Buchungen pruefen.
+11. Administratorbuchung als Mitglied pruefen: darf nicht entfernt werden.
+12. Nuam-Buchung als Administrator entfernen.
+13. Kassenperiode abschliessen und neue Buchung versuchen: muss abgelehnt werden.
+14. Anwendung neu laden: gespeicherte Buchungen bleiben vorhanden.
+
 ## Bekannte Einschraenkungen
 
-- Noch keine Buchungstabelle, kein Buchungsdialog und keine echten Ausgaben.
-- Noch keine echte Restbetragsberechnung aus Buchungen; aktuell gilt Verbleibend = Ausgangsbetrag.
+- Keine Bearbeitung bestehender Buchungen; Korrekturen laufen ueber Stornierung und Neuerfassung.
+- Keine endgueltige Loeschung von Buchungen.
+- Noch keine umfangreichen Statistiken, Diagramme oder Periodenvergleiche.
+- Noch keine Einnahmen, Ueberweisungen, Belege, Anhange oder Exporte.
 - Nur Thai Baht (`THB`) wird unterstuetzt.
 - Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
 - Noch keine Hostinger-, Domain- oder HTTPS-Konfiguration.
 
 ## Naechste geplante Module
 
-1. Buchungsmodul
-2. Uebersichtsmodul
-3. PWA und Deployment
-4. abschliessende Tests und Absicherung
+1. Uebersichtsmodul
+2. PWA und Deployment
+3. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 

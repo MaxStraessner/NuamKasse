@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { App } from "../src/App";
 import type { CashPeriod, CashPeriodSummary } from "../src/types/cashPeriod";
+import type { Expense } from "../src/types/expense";
 
 const memberUser = {
   id: 2,
@@ -95,6 +96,38 @@ const activeCashSummary: CashPeriodSummary = {
   status: "active",
 };
 
+const spentCashSummary: CashPeriodSummary = {
+  ...activeCashSummary,
+  spent_amount: "250.00",
+  remaining_amount: "19750.00",
+};
+
+const essenExpense: Expense = {
+  id: 1,
+  cash_period_id: 1,
+  category: {
+    id: essenCategory.id,
+    name: essenCategory.name,
+    icon_key: "utensils",
+    color_key: "orange",
+  },
+  amount: "250.00",
+  currency: "THB",
+  created_by: { id: memberUser.id, display_name: memberUser.display_name },
+  created_at: "2026-07-03T12:25:00Z",
+  is_voided: false,
+  voided_at: null,
+  voided_by: null,
+  void_reason: null,
+};
+
+const adminExpense: Expense = {
+  ...essenExpense,
+  id: 2,
+  amount: "100.00",
+  created_by: { id: adminUser.id, display_name: adminUser.display_name },
+};
+
 function jsonResponse(data: unknown, status = 200) {
   return Promise.resolve({
     ok: status >= 200 && status < 300,
@@ -118,6 +151,8 @@ function healthResponse() {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.pushState({}, "", "/");
 });
@@ -496,6 +531,160 @@ describe("Categories", () => {
 
     expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Kategorien" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Expenses", () => {
+  test("member can select a category, enter an amount, and save an expense", async () => {
+    window.history.pushState({}, "", "/");
+    let summary = activeCashSummary;
+    let expenses: Expense[] = [];
+    let createPayload: { category_id: number; amount: string } | null = null;
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(summary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        return jsonResponse(expenses);
+      }
+      if (url.endsWith("/expenses") && options?.method === "POST") {
+        createPayload = JSON.parse(String(options.body)) as typeof createPayload;
+        summary = spentCashSummary;
+        expenses = [essenExpense];
+        return jsonResponse({ expense: essenExpense, summary }, 201);
+      }
+      if (url.endsWith("/health")) {
+        return healthResponse();
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getAllByText("Neue Ausgabe").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "250,00" } });
+    expect(screen.getByText("Voraussichtlich verbleibend")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
+
+    expect(await screen.findByText(/gespeichert/)).toBeInTheDocument();
+    expect(createPayload).toEqual({ category_id: 1, amount: "250.00" });
+    expect(screen.getByText("Letzte Ausgaben")).toBeInTheDocument();
+    expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
+  });
+
+  test("category tiles are not bookable without an active remaining amount", async () => {
+    window.history.pushState({}, "", "/");
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/cash-periods/current") || url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(
+          { detail: { code: "no_active_cash_period", message: "Es ist keine aktive Kassenperiode vorhanden." } },
+          404,
+        );
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        return jsonResponse([], 404);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    const category = await screen.findByLabelText("Kategorie Essen");
+    expect(category).toBeDisabled();
+    fireEvent.click(category);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  test("member can void own expense but not a foreign expense", async () => {
+    window.history.pushState({}, "", "/");
+    let expenses: Expense[] = [adminExpense, essenExpense];
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(spentCashSummary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        return jsonResponse(expenses);
+      }
+      if (url.includes("/expenses/1/void") && options?.method === "POST") {
+        expenses = [adminExpense];
+        return jsonResponse({ expense: { ...essenExpense, is_voided: true }, summary: activeCashSummary });
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    expect(await screen.findByText("Letzte Ausgaben")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Buchung entfernen" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Buchung entfernen" }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByText("Buchung wurde entfernt.")).toBeInTheDocument();
+    expect(screen.queryByText("Nuam /")).not.toBeInTheDocument();
+  });
+
+  test("visible home page refreshes expenses silently", async () => {
+    window.history.pushState({}, "", "/");
+    let expenseCalls = 0;
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(activeCashSummary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        expenseCalls += 1;
+        return jsonResponse([]);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    expect(await screen.findByText("Letzte Ausgaben")).toBeInTheDocument();
+    expect(expenseCalls).toBeGreaterThan(0);
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => expect(expenseCalls).toBeGreaterThan(1));
   });
 });
 
