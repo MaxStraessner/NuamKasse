@@ -11,7 +11,7 @@ const navItems = [
 export function BottomNav() {
   const { user } = useAuth();
   const items = user?.role === "admin"
-    ? [...navItems, { label: "Benutzer", to: "/settings/users" }]
+    ? [...navItems, { label: "Kategorien", to: "/settings/categories" }, { label: "Benutzer", to: "/settings/users" }]
     : navItems;
 
   return (
