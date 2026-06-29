@@ -19,7 +19,7 @@ PostgreSQL Datenbank
 ## Technologien
 
 - Frontend: React, TypeScript, Vite, React Router, Vitest, React Testing Library
-- Backend: Python, FastAPI, SQLAlchemy 2, Pydantic Settings, Alembic, Pytest
+- Backend: Python, FastAPI, SQLAlchemy 2, Pydantic Settings, Alembic, Argon2, Pytest
 - Datenbank: PostgreSQL mit persistentem Docker Volume
 - Betrieb: Docker Compose mit getrennten Containern fuer Frontend, Backend und Datenbank
 
@@ -82,6 +82,10 @@ Wichtige Variablen:
 - `BACKEND_CORS_ORIGINS`: erlaubte Frontend-Urspruenge
 - `VITE_API_BASE_URL`: API-Basis-URL im Frontend
 - `FRONTEND_PORT`: lokaler Port fuer den Frontend-Container
+- `SESSION_COOKIE_NAME`: Name des HttpOnly-Sitzungscookies
+- `SESSION_TTL_HOURS`: Sitzungsdauer in Stunden
+- `SESSION_COOKIE_SECURE`: in Produktion auf `true` setzen
+- `SESSION_COOKIE_SAMESITE`: SameSite-Wert, lokal `lax`
 
 ## Lokaler Start mit Docker Compose
 
@@ -152,19 +156,83 @@ docker compose config
 
 ## Datenbankmigrationen
 
-Alembic ist vorbereitet. Es gibt noch keine fachlichen Tabellen oder Migrationen.
+Alembic enthaelt die Migration fuer Benutzer und serverseitige Sitzungen.
 
 Beispiel fuer spaetere Migrationen:
 
 ```bash
 cd backend
-alembic revision --autogenerate -m "describe change"
 alembic upgrade head
 ```
 
+Im Docker-Setup:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+## Benutzermodul
+
+Das Benutzermodul schuetzt die App vor nicht angemeldeten Benutzern. Es gibt keine oeffentliche Registrierung. Benutzer werden durch Administratoren angelegt.
+
+Rollen:
+
+- `admin`: Benutzer auflisten, anlegen, bearbeiten, aktivieren, deaktivieren, Rollen aendern und Passwoerter zuruecksetzen.
+- `member`: anmelden, abmelden, eigene Kontodaten sehen, eigenes Passwort aendern und spaeter normale Kassenfunktionen verwenden.
+
+Datenmodell:
+
+- `users`: Benutzername, normalisierter eindeutiger Benutzername, Anzeigename, Argon2-Passwort-Hash, Rolle, Aktivstatus, Pflicht-Passwortwechsel und Zeitstempel.
+- `user_sessions`: serverseitige Sitzung mit Benutzerbezug, Hash des Sitzungsschluessels, Ablaufzeit und letzter Verwendung.
+
+Sicherheitsentscheidungen:
+
+- Passwoerter werden ausschliesslich mit Argon2 gehasht.
+- Sitzungsschluessel werden nur als HttpOnly-Cookie im Browser gespeichert.
+- In der Datenbank liegt nur ein SHA-256-Hash des zufaelligen Sitzungsschluessels.
+- Cookies verwenden `SameSite=Lax`; in Produktion muss `SESSION_COOKIE_SECURE=true` gesetzt werden.
+- Rollen- und Passwortwechsel-Pruefungen werden verbindlich im Backend durchgesetzt.
+- Der letzte aktive Administrator kann nicht deaktiviert oder zum Mitglied herabgestuft werden.
+
+API-Endpunkte:
+
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+- `POST /api/v1/auth/change-password`
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `PATCH /api/v1/users/{user_id}`
+- `POST /api/v1/users/{user_id}/reset-password`
+
+CLI-Befehle:
+
+```bash
+python -m app.scripts.create_admin
+python -m app.scripts.reset_password
+```
+
+Im Docker-Setup:
+
+```bash
+docker compose exec backend python -m app.scripts.create_admin
+docker compose exec backend python -m app.scripts.reset_password
+```
+
+Einrichtungsablauf:
+
+1. Container starten.
+2. Datenbankmigration ausfuehren.
+3. Ersten Administrator ueber CLI anlegen.
+4. Als Administrator anmelden.
+5. Nuam ueber die Benutzerverwaltung anlegen.
+6. Als Administrator abmelden.
+7. Als Nuam mit dem vorlaeufigen Passwort anmelden.
+8. Eigenes Passwort vergeben.
+9. Normale App-Oberflaeche oeffnen.
+
 ## Bekannte Einschraenkungen
 
-- Noch keine Benutzeranmeldung oder Rollen.
 - Noch keine Kategorien, Kassenperioden, Buchungen oder Berechnungen.
 - Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
 - Noch keine Hostinger-, Domain- oder HTTPS-Konfiguration.
@@ -172,13 +240,12 @@ alembic upgrade head
 
 ## Naechste geplante Module
 
-1. Benutzermodul
-2. Kategorienmodul
-3. Kassenmodul
-4. Buchungsmodul
-5. Uebersichtsmodul
-6. PWA und Deployment
-7. abschliessende Tests und Absicherung
+1. Kategorienmodul
+2. Kassenmodul
+3. Buchungsmodul
+4. Uebersichtsmodul
+5. PWA und Deployment
+6. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 

@@ -1,5 +1,7 @@
 import { NavLink } from "react-router-dom";
 
+import { useAuth } from "../app/AuthContext";
+
 const navItems = [
   { label: "Start", to: "/" },
   { label: "Uebersicht", to: "/overview" },
@@ -7,9 +9,14 @@ const navItems = [
 ];
 
 export function BottomNav() {
+  const { user } = useAuth();
+  const items = user?.role === "admin"
+    ? [...navItems, { label: "Benutzer", to: "/settings/users" }]
+    : navItems;
+
   return (
     <nav className="bottom-nav" aria-label="Hauptnavigation">
-      {navItems.map((item) => (
+      {items.map((item) => (
         <NavLink
           className={({ isActive }) =>
             `bottom-nav__item${isActive ? " bottom-nav__item--active" : ""}`
