@@ -42,6 +42,11 @@ export function SettingsPage() {
       {user?.role === "admin" ? (
         <>
           <AppCard>
+            <Link className="primary-link" to="/settings/cash-periods">
+              Kassenverwaltung
+            </Link>
+          </AppCard>
+          <AppCard>
             <Link className="primary-link" to="/settings/categories">
               Kategorieverwaltung
             </Link>
