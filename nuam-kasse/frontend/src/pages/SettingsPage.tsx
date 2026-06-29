@@ -40,11 +40,18 @@ export function SettingsPage() {
       </AppCard>
 
       {user?.role === "admin" ? (
-        <AppCard>
-          <Link className="primary-link" to="/settings/users">
-            Benutzerverwaltung
-          </Link>
-        </AppCard>
+        <>
+          <AppCard>
+            <Link className="primary-link" to="/settings/categories">
+              Kategorieverwaltung
+            </Link>
+          </AppCard>
+          <AppCard>
+            <Link className="primary-link" to="/settings/users">
+              Benutzerverwaltung
+            </Link>
+          </AppCard>
+        </>
       ) : null}
     </PageContainer>
   );

@@ -1,0 +1,67 @@
+import {
+  Baby,
+  Bike,
+  Bus,
+  Cake,
+  Car,
+  CarTaxiFront,
+  CircleEllipsis,
+  Coffee,
+  Fuel,
+  Gift,
+  HeartPulse,
+  Hotel,
+  House,
+  Landmark,
+  PawPrint,
+  Phone,
+  Pill,
+  Plane,
+  School,
+  Shirt,
+  ShoppingCart,
+  Train,
+  Utensils,
+  Wallet,
+  Wifi,
+  Wrench,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+
+import type { CategoryIconKey } from "../types/category";
+import { isCategoryIconKey } from "../types/category";
+
+export const categoryIcons: Record<CategoryIconKey, LucideIcon> = {
+  utensils: Utensils,
+  "shopping-cart": ShoppingCart,
+  "heart-pulse": HeartPulse,
+  pill: Pill,
+  zap: Zap,
+  landmark: Landmark,
+  wallet: Wallet,
+  gift: Gift,
+  plane: Plane,
+  bike: Bike,
+  car: Car,
+  "car-taxi-front": CarTaxiFront,
+  hotel: Hotel,
+  house: House,
+  cake: Cake,
+  baby: Baby,
+  shirt: Shirt,
+  school: School,
+  fuel: Fuel,
+  phone: Phone,
+  wifi: Wifi,
+  wrench: Wrench,
+  "paw-print": PawPrint,
+  coffee: Coffee,
+  bus: Bus,
+  train: Train,
+  "circle-ellipsis": CircleEllipsis,
+};
+
+export function getCategoryIcon(iconKey: string): LucideIcon {
+  return isCategoryIconKey(iconKey) ? categoryIcons[iconKey] : CircleEllipsis;
+}

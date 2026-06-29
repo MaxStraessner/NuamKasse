@@ -2,7 +2,7 @@
 
 Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt und soll spaeter als Progressive Web App auf einem Hostinger VPS betrieben werden.
 
-In diesem Schritt sind nur die technische Basis und eine erste visuelle App-Huelle umgesetzt. Fachliche Module wie Anmeldung, Kategorienverwaltung, Kassenperioden oder Buchungen sind bewusst noch nicht enthalten.
+Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen sowie das Kategorienmodul als Stammdatenverwaltung. Kassenperioden, Buchungen, Berechnungen und Statistiken sind bewusst noch nicht enthalten.
 
 ## Architektur
 
@@ -18,7 +18,7 @@ PostgreSQL Datenbank
 
 ## Technologien
 
-- Frontend: React, TypeScript, Vite, React Router, Vitest, React Testing Library
+- Frontend: React, TypeScript, Vite, React Router, lucide-react, Vitest, React Testing Library
 - Backend: Python, FastAPI, SQLAlchemy 2, Pydantic Settings, Alembic, Argon2, Pytest
 - Datenbank: PostgreSQL mit persistentem Docker Volume
 - Betrieb: Docker Compose mit getrennten Containern fuer Frontend, Backend und Datenbank
@@ -156,7 +156,7 @@ docker compose config
 
 ## Datenbankmigrationen
 
-Alembic enthaelt die Migration fuer Benutzer und serverseitige Sitzungen.
+Alembic enthaelt Migrationen fuer Benutzer, serverseitige Sitzungen und Kategorien.
 
 Beispiel fuer spaetere Migrationen:
 
@@ -231,21 +231,126 @@ Einrichtungsablauf:
 8. Eigenes Passwort vergeben.
 9. Normale App-Oberflaeche oeffnen.
 
+## Kategorienmodul
+
+Das Kategorienmodul verwaltet zentrale Ausgabenkategorien, die spaeter beim Erfassen von Buchungen als grosse Symbole ausgewaehlt werden. In diesem Modul werden noch keine Buchungen, Kassenperioden, Betraege oder Statistiken erzeugt.
+
+Fachliche Regeln:
+
+- Kategorien sind globale Stammdaten fuer alle angemeldeten Benutzer.
+- Normale Benutzer sehen nur aktive Kategorien.
+- Administratoren koennen aktive und inaktive Kategorien sehen.
+- Nur Administratoren koennen Kategorien anlegen, bearbeiten, aktivieren, deaktivieren und sortieren.
+- Kategorien werden nicht endgueltig geloescht, damit spaetere historische Buchungen referenziert bleiben koennen.
+- Die Reihenfolge wird zentral ueber `sort_order` gespeichert.
+
+Datenmodell `categories`:
+
+- `id`: Primaerschluessel.
+- `name`: sichtbarer Name, getrimmt, 1 bis 50 Zeichen.
+- `name_normalized`: normalisierter eindeutiger Name fuer case-insensitive Eindeutigkeit.
+- `icon_key`: kontrollierter Symbolschluessel.
+- `color_key`: kontrollierter Farbschluessel.
+- `sort_order`: zentrale Anzeige-Reihenfolge.
+- `is_active`: Aktivstatus.
+- `created_at` und `updated_at`: UTC-Zeitstempel.
+
+Symbolkonzept:
+
+- In der Datenbank wird nur ein kontrollierter `icon_key` gespeichert.
+- Das Frontend mappt diese Schluessel zentral auf `lucide-react` Icons.
+- Es werden keine SVG-Inhalte, HTML-Inhalte, JavaScript-Fragmente, externen Bildadressen oder Uploads gespeichert.
+- Unbekannte Symbolschluessel werden im Backend abgelehnt; das Frontend nutzt als Fallback ein neutrales Symbol.
+
+Verfuegbare Symbolschluessel:
+
+```text
+utensils, shopping-cart, heart-pulse, pill, zap, landmark, wallet, gift,
+plane, bike, car, car-taxi-front, hotel, house, cake, baby, shirt, school,
+fuel, phone, wifi, wrench, paw-print, coffee, bus, train, circle-ellipsis
+```
+
+Farbkonzept:
+
+- In der Datenbank wird nur ein kontrollierter `color_key` gespeichert.
+- Die tatsaechlichen Farben liegen im Frontend-Designsystem als CSS-Variablen und kontrollierte `data-category-color` Attribute.
+- Es werden keine freien CSS-Werte, CSS-Klassen oder Hex-Werte aus der Datenbank ausgefuehrt.
+- Kategorien sind immer ueber Symbol und Name erkennbar, nicht nur ueber Farbe.
+
+Verfuegbare Farbschluessel:
+
+```text
+orange, green, blue, red, purple, pink, teal, yellow, indigo, gray
+```
+
+API-Endpunkte:
+
+- `GET /api/v1/categories`: aktive Kategorien fuer alle angemeldeten Benutzer.
+- `GET /api/v1/categories?include_inactive=true`: aktive und inaktive Kategorien nur fuer Administratoren; fuer Mitglieder wird der Parameter ignoriert.
+- `GET /api/v1/categories/catalog`: kontrollierter Symbol- und Farbkatalog, nur fuer Administratoren.
+- `POST /api/v1/categories`: Kategorie anlegen, nur fuer Administratoren.
+- `PATCH /api/v1/categories/{category_id}`: Name, Symbol, Farbe und Aktivstatus bearbeiten, nur fuer Administratoren.
+- `PUT /api/v1/categories/reorder`: vollstaendige Kategorie-Reihenfolge speichern, nur fuer Administratoren.
+
+Seed-Skript fuer Standardkategorien:
+
+```bash
+python -m app.scripts.seed_categories
+```
+
+Im Docker-Setup:
+
+```bash
+docker compose exec backend python -m app.scripts.seed_categories
+```
+
+Das Skript ist idempotent: Es legt fehlende Standardkategorien an, erzeugt keine Duplikate und ueberschreibt vorhandene Kategorien nicht.
+
+Standardkategorien:
+
+1. Essen
+2. Einkauf
+3. Gesundheit
+4. Strom
+5. Bank
+6. Geschenk
+7. Reise
+8. Motorrad
+9. Taxi
+10. Unterkunft
+11. Geburtstag
+12. Sonstiges
+
+Einrichtungsablauf fuer Kategorien:
+
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.scripts.seed_categories
+```
+
+Manuelle Pruefschritte:
+
+1. Als Administrator anmelden.
+2. Kategorieverwaltung in den Einstellungen oeffnen.
+3. Standardkategorien pruefen.
+4. Kategorie anlegen, bearbeiten, deaktivieren, reaktivieren und sortieren.
+5. Startseite pruefen: aktive Kategorien werden angezeigt, deaktivierte nicht.
+6. Als Mitglied anmelden: aktive Kategorien sind sichtbar, Verwaltung ist nicht sichtbar.
+
 ## Bekannte Einschraenkungen
 
-- Noch keine Kategorien, Kassenperioden, Buchungen oder Berechnungen.
+- Noch keine Kassenperioden, Buchungen, Ausgabenberechnung oder Statistiken.
 - Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
 - Noch keine Hostinger-, Domain- oder HTTPS-Konfiguration.
-- Die sichtbaren Geldbetraege und Kategoriesymbole sind nur als Platzhalter markiert.
+- Die sichtbaren Geldbetraege sind weiterhin Platzhalter.
 
 ## Naechste geplante Module
 
-1. Kategorienmodul
-2. Kassenmodul
-3. Buchungsmodul
-4. Uebersichtsmodul
-5. PWA und Deployment
-6. abschliessende Tests und Absicherung
+1. Kassenmodul
+2. Buchungsmodul
+3. Uebersichtsmodul
+4. PWA und Deployment
+5. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 

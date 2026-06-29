@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { AuthProvider } from "./app/AuthContext";
 import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
+import { CategoryAdminPage } from "./pages/CategoryAdminPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -49,6 +50,10 @@ const router = createBrowserRouter([
               {
                 path: "settings/users",
                 element: <UserAdminPage />,
+              },
+              {
+                path: "settings/categories",
+                element: <CategoryAdminPage />,
               },
             ],
           },
