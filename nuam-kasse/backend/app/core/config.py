@@ -13,6 +13,13 @@ class Settings(BaseSettings):
         default="http://localhost:5173,http://localhost:8080",
         alias="BACKEND_CORS_ORIGINS",
     )
+    session_cookie_name: str = Field(
+        default="nuam_kasse_session",
+        alias="SESSION_COOKIE_NAME",
+    )
+    session_ttl_hours: int = Field(default=168, alias="SESSION_TTL_HOURS")
+    session_cookie_secure: bool = Field(default=False, alias="SESSION_COOKIE_SECURE")
+    session_cookie_samesite: str = Field(default="lax", alias="SESSION_COOKIE_SAMESITE")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -28,6 +35,10 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
 
 
 @lru_cache

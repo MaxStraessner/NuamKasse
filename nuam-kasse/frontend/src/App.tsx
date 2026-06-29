@@ -1,30 +1,67 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
+import { AuthProvider } from "./app/AuthContext";
+import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
+import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { UserAdminPage } from "./pages/UserAdminPage";
 
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <AppLayout />,
+    element: <PublicOnlyRoute />,
     children: [
       {
-        index: true,
-        element: <HomePage />,
+        path: "/login",
+        element: <LoginPage />,
+      },
+    ],
+  },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        path: "/change-password",
+        element: <ChangePasswordPage />,
       },
       {
-        path: "overview",
-        element: <PlaceholderPage title="Uebersicht" />,
-      },
-      {
-        path: "settings",
-        element: <PlaceholderPage title="Einstellungen" />,
+        path: "/",
+        element: <AppLayout />,
+        children: [
+          {
+            index: true,
+            element: <HomePage />,
+          },
+          {
+            path: "overview",
+            element: <PlaceholderPage title="Uebersicht" />,
+          },
+          {
+            path: "settings",
+            element: <SettingsPage />,
+          },
+          {
+            element: <AdminRoute />,
+            children: [
+              {
+                path: "settings/users",
+                element: <UserAdminPage />,
+              },
+            ],
+          },
+        ],
       },
     ],
   },
 ]);
 
 export function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  );
 }
