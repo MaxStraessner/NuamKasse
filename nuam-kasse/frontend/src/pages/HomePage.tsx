@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
+import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
 import { CategoryTile } from "../components/CategoryTile";
 import { HealthStatus } from "../components/HealthStatus";
@@ -29,6 +30,7 @@ function isNoActiveCashPeriod(error: unknown): boolean {
 
 export function HomePage() {
   const health = useHealth();
+  const { status: networkStatus } = useNetworkStatus();
   const { user } = useAuth();
   const [cashPeriod, setCashPeriod] = useState<CashPeriod | null>(null);
   const [cashSummary, setCashSummary] = useState<CashPeriodSummary | null>(null);
@@ -47,10 +49,12 @@ export function HomePage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [voidingExpenseId, setVoidingExpenseId] = useState<number | null>(null);
+  const hadServerOutage = useRef(false);
 
   const remainingMinorUnits = decimalStringToMinorUnits(cashSummary?.remaining_amount ?? "") ?? 0;
   const enteredMinorUnits = decimalStringToMinorUnits(expenseAmount);
-  const canBook = Boolean(cashPeriod && cashSummary && remainingMinorUnits > 0 && !hasNoActiveCashPeriod);
+  const canUseServer = networkStatus.isOnline && networkStatus.isServerReachable;
+  const canBook = Boolean(cashPeriod && cashSummary && remainingMinorUnits > 0 && !hasNoActiveCashPeriod && canUseServer);
 
   async function loadCashPeriod(silent = false) {
     if (!silent) {
@@ -127,6 +131,18 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
+    if (!canUseServer) {
+      hadServerOutage.current = true;
+      return;
+    }
+    if (hadServerOutage.current) {
+      hadServerOutage.current = false;
+      void refreshCashAndExpenses(true);
+      void loadCategories();
+    }
+  }, [canUseServer]);
+
+  useEffect(() => {
     function refreshWhenVisible() {
       if (document.visibilityState === "visible") {
         void refreshCashAndExpenses(true);
@@ -146,6 +162,11 @@ export function HomePage() {
   }, []);
 
   function openExpenseDialog(category: Category) {
+    if (!canUseServer) {
+      setSuccessMessage(null);
+      setExpenseError("Neue Buchungen sind erst wieder mit Serververbindung moeglich.");
+      return;
+    }
     if (!canBook || !category.is_active) {
       return;
     }
@@ -167,6 +188,10 @@ export function HomePage() {
   async function handleCreateExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedCategory) {
+      return;
+    }
+    if (!canUseServer) {
+      setDialogError("Keine Verbindung zum Server. Die Ausgabe wurde nicht gespeichert.");
       return;
     }
     if (enteredMinorUnits === null) {
@@ -203,6 +228,10 @@ export function HomePage() {
   }
 
   async function handleVoidExpense(expense: Expense) {
+    if (!canUseServer) {
+      setExpenseError("Keine Verbindung zum Server. Die Buchung wurde nicht entfernt.");
+      return;
+    }
     const confirmed = window.confirm(
       `Buchung entfernen?\n\n${expense.category.name}\n${formatThaiBaht(expense.amount, expense.currency)}\n\nDer Betrag wird der Kasse wieder gutgeschrieben.`,
     );
@@ -372,7 +401,7 @@ export function HomePage() {
                     {canVoidExpense ? (
                       <button
                         className="link-button"
-                        disabled={voidingExpenseId === expense.id}
+                        disabled={voidingExpenseId === expense.id || !canUseServer}
                         onClick={() => void handleVoidExpense(expense)}
                         type="button"
                       >
@@ -428,7 +457,7 @@ export function HomePage() {
               </div>
               {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
               <div className="action-row">
-                <button className="primary-action" disabled={isSavingExpense} type="submit">
+                <button className="primary-action" disabled={isSavingExpense || !canUseServer} type="submit">
                   Ausgabe speichern
                 </button>
                 <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">

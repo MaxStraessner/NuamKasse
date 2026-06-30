@@ -1,6 +1,10 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
+backups/
+*.dump
+*.sql.gz
 
 __pycache__/
 *.py[cod]
