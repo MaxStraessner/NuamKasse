@@ -8,7 +8,7 @@ import { CashPeriodAdminPage } from "./pages/CashPeriodAdminPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { OverviewPage } from "./pages/OverviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UserAdminPage } from "./pages/UserAdminPage";
 
@@ -39,7 +39,7 @@ const router = createBrowserRouter([
           },
           {
             path: "overview",
-            element: <PlaceholderPage title="Uebersicht" />,
+            element: <OverviewPage />,
           },
           {
             path: "settings",

@@ -2,7 +2,7 @@
 
 Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt und soll spaeter als Progressive Web App auf einem Hostinger VPS betrieben werden.
 
-Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden sowie das Buchungsmodul fuer Ausgaben und Stornierungen. Umfangreiche Statistiken, Exporte und PWA-Funktionen sind bewusst noch nicht enthalten.
+Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden, das Buchungsmodul fuer Ausgaben und Stornierungen sowie das Uebersichtsmodul fuer Auswertungen. Exporte und PWA-Funktionen sind bewusst noch nicht enthalten.
 
 ## Architektur
 
@@ -156,7 +156,7 @@ docker compose config
 
 ## Datenbankmigrationen
 
-Alembic enthaelt Migrationen fuer Benutzer, serverseitige Sitzungen, Kategorien und Kassenperioden.
+Alembic enthaelt Migrationen fuer Benutzer, serverseitige Sitzungen, Kategorien, Kassenperioden, Buchungen und die zusaetzlichen Uebersichtsindizes.
 
 Beispiel fuer spaetere Migrationen:
 
@@ -506,11 +506,139 @@ Manuelle Pruefschritte:
 13. Kassenperiode abschliessen und neue Buchung versuchen: muss abgelehnt werden.
 14. Anwendung neu laden: gespeicherte Buchungen bleiben vorhanden.
 
+## Uebersichtsmodul
+
+Das Uebersichtsmodul bereitet vorhandene Kassenperioden, Kategorien, Benutzer und Buchungen lesbar auf. Es erzeugt keine neue Buchungslogik und speichert keine redundanten Summen.
+
+Fachliche Berechnungen:
+
+- Gesamtausgaben = Summe aller nicht stornierten Buchungen der ausgewaehlten Kassenperiode.
+- Verbleibend = Ausgangsbetrag minus Gesamtausgaben, nie kleiner als `0.00`.
+- Kategorieausgaben = Summe aller nicht stornierten Buchungen einer Kategorie in der Kassenperiode.
+- Benutzerausgaben = Summe aller nicht stornierten Buchungen eines Benutzers in der Kassenperiode.
+- Prozentanteile werden serverseitig mit `Decimal` berechnet und mit zwei Nachkommastellen ausgegeben.
+- Bei Gesamtausgaben `0.00` ist der Prozentanteil `0.00`; es gibt keine Division durch null.
+- Stornierte Buchungen zaehlen nur in `expense_count` und `voided_expense_count`, nicht in `spent_amount`, Kategorie- oder Benutzersummen.
+
+Rollen und Berechtigungen:
+
+- Mitglieder sehen nur die aktive Kassenperiode, gueltige Buchungen, Kategorie- und Benutzersummen.
+- Mitglieder sehen keine historischen Perioden, keine stornierten Buchungen und keine Stornierungsdetails.
+- Administratoren sehen aktive und abgeschlossene Kassenperioden, historische Zusammenfassungen, stornierte Buchungen, Stornierer, Stornierungszeitpunkt und optionalen Grund.
+- Alle Regeln werden im Backend geprueft; Frontend-Ausblendung ersetzt keine Berechtigung.
+
+Backend-Struktur:
+
+- `backend/app/services/overview_service.py`: Aggregationen, Filtervalidierung, Sortierung, Pagination und Berechtigungen.
+- `backend/app/schemas/overview.py`: typisierte Pydantic-Schemas fuer Uebersicht, Kategorieauswertung, Benutzerauswertung und paginierte Buchungsliste.
+- `backend/app/api/v1/endpoints/overview.py`: kleine API-Routen unter `/api/v1/overview`.
+- `backend/app/services/cash_summary_service.py`: erweitert um Buchungszaehlungen.
+
+Neue API-Endpunkte:
+
+- `GET /api/v1/overview/current`: zentrale Uebersicht der aktiven Kassenperiode fuer angemeldete Benutzer.
+- `GET /api/v1/overview/cash-periods/{cash_period_id}`: Uebersicht einer bestimmten Kassenperiode, nur fuer Administratoren.
+- `GET /api/v1/overview/cash-periods/{cash_period_id}/expenses`: paginierte Buchungsliste einer Kassenperiode.
+
+Filter der Buchungsliste:
+
+- `category_id`: Kategorie filtern.
+- `created_by_user_id`: Ersteller filtern.
+- `date_from`: fachliches Startdatum, inklusive.
+- `date_to`: fachliches Enddatum, inklusive.
+- `include_voided`: nur fuer Administratoren wirksam.
+- `limit`: Standard `20`, Maximum `100`.
+- `offset`: Standard `0`.
+- `sort`: `created_at_desc`, `created_at_asc`, `amount_desc` oder `amount_asc`.
+
+Datumsfilter:
+
+- `date_from` und `date_to` sind optional.
+- `date_to` darf nicht vor `date_from` liegen.
+- Die Eingabe ist eine lokale fachliche Datumsauswahl.
+- Das Backend vergleicht gegen eindeutige UTC-Tagesgrenzen; Zeitstempel bleiben in UTC gespeichert.
+
+Seitennavigation:
+
+```json
+{
+  "items": [],
+  "total": 48,
+  "limit": 20,
+  "offset": 0,
+  "has_more": true
+}
+```
+
+Sortierung und Stabilitaet:
+
+- Standard ist `created_at` absteigend und danach `id` absteigend.
+- Betragssortierungen verwenden `amount` und danach `id`.
+- Dadurch bleiben Seiten stabil und zeigen keine doppelten oder ausgelassenen Buchungen.
+
+Kategorienauswertung:
+
+- Gruppierung erfolgt serverseitig nach Kategorie.
+- Nur nicht stornierte Buchungen werden summiert.
+- Deaktivierte Kategorien mit historischen Buchungen bleiben sichtbar.
+- Kategorien ohne Buchungen werden nicht angezeigt.
+- Sortierung: Gesamtbetrag absteigend, danach Kategoriename.
+
+Benutzerauswertung:
+
+- Gruppierung erfolgt serverseitig nach Benutzer.
+- Nur Anzeigenamen werden ausgegeben; keine Benutzernamen, Passwortdaten oder Sitzungsdaten.
+- Deaktivierte Benutzer mit historischen Buchungen bleiben ueber ihren Anzeigenamen sichtbar.
+- Sortierung: Gesamtbetrag absteigend, danach Anzeigename.
+
+Datenbankabfragen und Indizes:
+
+- Vorhanden: `ix_expenses_cash_period_voided_created` fuer Kassenperiode, Stornierungsstatus und Zeit.
+- Neu: `ix_expenses_cash_period_category_voided` fuer Kategorieaggregation und Kategoriefilter.
+- Neu: `ix_expenses_cash_period_user_voided` fuer Benutzeraggregation und Benutzerfilter.
+- Es gibt keine neuen Summen- oder Cachetabellen.
+
+Frontend:
+
+- Der vorhandene Navigationspunkt `Uebersicht` oeffnet jetzt `OverviewPage`.
+- Die Seite zeigt Kassenperiodenkopf, verbleibenden Betrag, Ausgaben, Ausgangsbetrag, Kategorieauswertung, Benutzerauswertung und eine paginierte Buchungsliste.
+- Administratoren koennen abgeschlossene Perioden auswaehlen und stornierte Buchungen einblenden.
+- Mitglieder sehen keine Periodenauswahl und keine stornierten Buchungen.
+- Kategorie- und Benutzerzeilen setzen den jeweiligen Buchungsfilter.
+- Aktive Filter werden als entfernbare Chips angezeigt.
+- Zeitraumfilter: gesamte Periode, heute, letzte 7 Tage und benutzerdefiniert.
+- Weitere Buchungen werden ueber `Weitere Buchungen laden` nachgeladen.
+- Stornierungen nutzen weiter die bestehende Buchungs-API.
+- Die Seite aktualisiert aktive Perioden beim Oeffnen, bei Vordergrundwechsel und alle 15 Sekunden bei sichtbarem Browserfenster.
+- Fuer Balken und Prozentanzeigen werden CSS und vorhandene Komponenten verwendet; es wurde keine Diagrammbibliothek hinzugefuegt.
+
+Manuelle Pruefschritte:
+
+1. Als Administrator anmelden.
+2. Aktive Kassenperiode mit Buchungen oeffnen.
+3. `Uebersicht` oeffnen.
+4. Ausgangsbetrag, Gesamtausgaben und Restbetrag pruefen.
+5. Kategorieauswertung und Benutzerauswertung pruefen.
+6. Kategorie `Essen` auswaehlen; Buchungsliste muss nur diese Kategorie zeigen.
+7. Kategorie-Filter entfernen.
+8. Benutzer `Nuam` auswaehlen; Buchungsliste muss Nuams Buchungen zeigen.
+9. Zeitraum `Heute`, `Letzte 7 Tage` und benutzerdefinierten Zeitraum pruefen.
+10. Ungueltigen Zeitraum pruefen.
+11. Sortierung nach Datum und Betrag pruefen.
+12. Weitere Buchungen laden und stabile Reihenfolge pruefen.
+13. Stornierte Buchungen als Administrator einblenden.
+14. Stornierte Buchungen muessen gekennzeichnet sein und duerfen Summen nicht erhoehen.
+15. Abgeschlossene Kassenperiode auswaehlen und historische Summen pruefen.
+16. Als Mitglied anmelden.
+17. Historische Periodenauswahl darf nicht sichtbar sein.
+18. Stornierte Buchungen duerfen nicht sichtbar sein.
+19. In einem zweiten Browser anmelden und Aktualisierung nach Buchung/Stornierung pruefen.
+
 ## Bekannte Einschraenkungen
 
 - Keine Bearbeitung bestehender Buchungen; Korrekturen laufen ueber Stornierung und Neuerfassung.
 - Keine endgueltige Loeschung von Buchungen.
-- Noch keine umfangreichen Statistiken, Diagramme oder Periodenvergleiche.
+- Keine schweren Diagramme oder Periodenvergleiche ueber die aktuelle Uebersicht hinaus.
 - Noch keine Einnahmen, Ueberweisungen, Belege, Anhange oder Exporte.
 - Nur Thai Baht (`THB`) wird unterstuetzt.
 - Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
@@ -518,9 +646,8 @@ Manuelle Pruefschritte:
 
 ## Naechste geplante Module
 
-1. Uebersichtsmodul
-2. PWA und Deployment
-3. abschliessende Tests und Absicherung
+1. PWA und Deployment
+2. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 

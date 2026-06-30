@@ -68,3 +68,6 @@ class CashPeriodSummary(BaseModel):
     remaining_amount: str
     currency: str
     status: CashPeriodStatus
+    expense_count: int
+    active_expense_count: int
+    voided_expense_count: int

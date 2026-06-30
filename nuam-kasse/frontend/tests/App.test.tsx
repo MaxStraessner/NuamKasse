@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/App";
 import type { CashPeriod, CashPeriodSummary } from "../src/types/cashPeriod";
 import type { Expense } from "../src/types/expense";
+import type { CashPeriodOverview, OverviewExpense, PaginatedOverviewExpenses } from "../src/types/overview";
 
 const memberUser = {
   id: 2,
@@ -94,12 +95,17 @@ const activeCashSummary: CashPeriodSummary = {
   remaining_amount: "20000.00",
   currency: "THB",
   status: "active",
+  expense_count: 0,
+  active_expense_count: 0,
+  voided_expense_count: 0,
 };
 
 const spentCashSummary: CashPeriodSummary = {
   ...activeCashSummary,
   spent_amount: "250.00",
   remaining_amount: "19750.00",
+  expense_count: 1,
+  active_expense_count: 1,
 };
 
 const essenExpense: Expense = {
@@ -127,6 +133,116 @@ const adminExpense: Expense = {
   amount: "100.00",
   created_by: { id: adminUser.id, display_name: adminUser.display_name },
 };
+
+const overviewExpense = {
+  id: 11,
+  cash_period_id: 1,
+  category: {
+    id: essenCategory.id,
+    name: essenCategory.name,
+    icon_key: essenCategory.icon_key,
+    color_key: essenCategory.color_key,
+  },
+  amount: "250.00",
+  currency: "THB",
+  created_by: { id: memberUser.id, display_name: memberUser.display_name },
+  created_at: "2026-07-03T12:25:00Z",
+  is_voided: false,
+  voided_at: null,
+  voided_by: null,
+  void_reason: null,
+} satisfies CashPeriodOverview["recent_expenses"][number];
+
+const voidedOverviewExpense = {
+  ...overviewExpense,
+  id: 12,
+  is_voided: true,
+  voided_at: "2026-07-03T13:00:00Z",
+  voided_by: { id: adminUser.id, display_name: adminUser.display_name },
+  void_reason: "Doppelt",
+} satisfies CashPeriodOverview["recent_expenses"][number];
+
+const currentOverview: CashPeriodOverview = {
+  summary: {
+    cash_period: {
+      id: activeCashPeriod.id,
+      name: activeCashPeriod.name,
+      status: activeCashPeriod.status,
+      start_date: activeCashPeriod.start_date,
+      end_date: activeCashPeriod.end_date,
+      currency: activeCashPeriod.currency,
+    },
+    opening_amount: "20000.00",
+    spent_amount: "400.00",
+    remaining_amount: "19600.00",
+    expense_count: 3,
+    active_expense_count: 2,
+    voided_expense_count: 1,
+  },
+  categories: [
+    {
+      category_id: essenCategory.id,
+      category_name: essenCategory.name,
+      icon_key: essenCategory.icon_key,
+      color_key: essenCategory.color_key,
+      expense_count: 1,
+      total_amount: "250.00",
+      percentage_of_spending: "62.50",
+    },
+    {
+      category_id: bankCategory.id,
+      category_name: bankCategory.name,
+      icon_key: bankCategory.icon_key,
+      color_key: bankCategory.color_key,
+      expense_count: 1,
+      total_amount: "150.00",
+      percentage_of_spending: "37.50",
+    },
+  ],
+  users: [
+    {
+      user_id: memberUser.id,
+      display_name: memberUser.display_name,
+      expense_count: 1,
+      total_amount: "250.00",
+      percentage_of_spending: "62.50",
+    },
+    {
+      user_id: adminUser.id,
+      display_name: adminUser.display_name,
+      expense_count: 1,
+      total_amount: "150.00",
+      percentage_of_spending: "37.50",
+    },
+  ],
+  recent_expenses: [overviewExpense],
+};
+
+const closedOverview: CashPeriodOverview = {
+  ...currentOverview,
+  summary: {
+    ...currentOverview.summary,
+    cash_period: {
+      id: closedCashPeriod.id,
+      name: closedCashPeriod.name,
+      status: closedCashPeriod.status,
+      start_date: closedCashPeriod.start_date,
+      end_date: closedCashPeriod.end_date,
+      currency: closedCashPeriod.currency,
+    },
+  },
+  recent_expenses: [voidedOverviewExpense],
+};
+
+function overviewPage(items: OverviewExpense[] = [overviewExpense], hasMore = false): PaginatedOverviewExpenses {
+  return {
+    items,
+    total: hasMore ? items.length + 1 : items.length,
+    limit: 20,
+    offset: 0,
+    has_more: hasMore,
+  };
+}
 
 function jsonResponse(data: unknown, status = 200) {
   return Promise.resolve({
@@ -685,6 +801,150 @@ describe("Expenses", () => {
     document.dispatchEvent(new Event("visibilitychange"));
 
     await waitFor(() => expect(expenseCalls).toBeGreaterThan(1));
+  });
+});
+
+describe("Overview", () => {
+  test("member can open overview and filter expenses by category and user", async () => {
+    const expenseUrls: string[] = [];
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/overview/current")) {
+        return jsonResponse(currentOverview);
+      }
+      if (url.includes("/overview/cash-periods/1/expenses")) {
+        expenseUrls.push(url);
+        return jsonResponse(overviewPage([overviewExpense]));
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(activeCashSummary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory, bankCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        return jsonResponse([]);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+
+    expect(await screen.findByRole("heading", { name: "Uebersicht" })).toBeInTheDocument();
+    expect(screen.getByText("Juli 2026")).toBeInTheDocument();
+    expect(screen.getAllByText(/19,600\.00/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/400\.00/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/62\.50/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Kassenperiode")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mit stornierten")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText("Essen")[0]);
+    await waitFor(() => expect(expenseUrls.some((url) => url.includes("category_id=1"))).toBe(true));
+    expect(screen.getByRole("button", { name: "Kategorie: Essen" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText("Nuam")[0]);
+    await waitFor(() => expect(expenseUrls.some((url) => url.includes("created_by_user_id=2"))).toBe(true));
+    expect(screen.getByRole("button", { name: "Benutzer: Nuam" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Alle Filter zuruecksetzen" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Kategorie: Essen" })).not.toBeInTheDocument());
+  });
+
+  test("admin can select historical periods and include voided expenses", async () => {
+    const expenseUrls: string[] = [];
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(adminUser);
+      }
+      if (url.endsWith("/cash-periods")) {
+        return jsonResponse([activeCashPeriod, closedCashPeriod]);
+      }
+      if (url.endsWith("/overview/current")) {
+        return jsonResponse(currentOverview);
+      }
+      if (url.endsWith("/overview/cash-periods/2")) {
+        return jsonResponse(closedOverview);
+      }
+      if (url.includes("/overview/cash-periods/1/expenses")) {
+        expenseUrls.push(url);
+        return jsonResponse(overviewPage([overviewExpense]));
+      }
+      if (url.includes("/overview/cash-periods/2/expenses")) {
+        expenseUrls.push(url);
+        return jsonResponse(overviewPage([voidedOverviewExpense]));
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+    expect(await screen.findByLabelText("Kassenperiode")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Kassenperiode"), { target: { value: "2" } });
+    expect(await screen.findByText("Juni 2026")).toBeInTheDocument();
+    expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "all" } });
+    await waitFor(() => expect(expenseUrls.some((url) => url.includes("include_voided=true"))).toBe(true));
+    expect(await screen.findByText("Storniert")).toBeInTheDocument();
+    expect(screen.getByText(/Doppelt/)).toBeInTheDocument();
+  });
+
+  test("overview validates custom date range and supports loading more expenses", async () => {
+    const expenseUrls: string[] = [];
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/overview/current")) {
+        return jsonResponse(currentOverview);
+      }
+      if (url.includes("/overview/cash-periods/1/expenses")) {
+        expenseUrls.push(url);
+        const isSecondPage = url.includes("offset=20");
+        return jsonResponse(
+          isSecondPage
+            ? { ...overviewPage([{ ...overviewExpense, id: 13, amount: "75.00" }]), offset: 20, has_more: false }
+            : overviewPage([overviewExpense], true),
+        );
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(activeCashSummary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.includes("/expenses/current")) {
+        return jsonResponse([]);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+    expect(await screen.findByText("Weitere Buchungen laden")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Weitere Buchungen laden" }));
+    await waitFor(() => expect(expenseUrls.some((url) => url.includes("offset=20"))).toBe(true));
+    expect(await screen.findByText(/75\.00/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Zeitraum"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-07-10" } });
+    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "2026-07-01" } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Das Ende darf nicht vor dem Beginn liegen.");
   });
 });
 

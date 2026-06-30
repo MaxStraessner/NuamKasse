@@ -28,6 +28,9 @@ export type CashPeriodSummary = {
   remaining_amount: string;
   currency: "THB";
   status: CashPeriodStatus;
+  expense_count: number;
+  active_expense_count: number;
+  voided_expense_count: number;
 };
 
 export type CashPeriodCreate = {
