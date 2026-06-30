@@ -1,9 +1,12 @@
-import type { Category } from "../types/category";
 import { isCategoryColorKey } from "../types/category";
 import { getCategoryIcon } from "./categoryIconMap";
 
 type CategoryTileProps = {
-  category: Pick<Category, "name" | "icon_key" | "color_key">;
+  category: {
+    name: string;
+    icon_key: string;
+    color_key: string;
+  };
   size?: "regular" | "compact";
   isDisabled?: boolean;
   onSelect?: () => void;
