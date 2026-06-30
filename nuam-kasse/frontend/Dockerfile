@@ -3,7 +3,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY index.html .
 COPY public ./public
@@ -12,7 +12,9 @@ COPY tests ./tests
 COPY tsconfig.json tsconfig.node.json vite.config.ts ./
 
 ARG VITE_API_BASE_URL=/api/v1
+ARG VITE_APP_VERSION=0.6.0
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
 RUN npm run build
 

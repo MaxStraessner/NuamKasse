@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { APP_VERSION } from "../app/appVersion";
 import { useAuth } from "../app/AuthContext";
 import { AppCard } from "../components/AppCard";
 import { PageContainer } from "../components/PageContainer";
@@ -29,6 +30,10 @@ export function SettingsPage() {
           <div>
             <span>Rolle</span>
             <strong>{user?.role === "admin" ? "Administrator" : "Mitglied"}</strong>
+          </div>
+          <div>
+            <span>Version</span>
+            <strong>{APP_VERSION}</strong>
           </div>
         </div>
       </AppCard>

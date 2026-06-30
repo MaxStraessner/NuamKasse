@@ -81,7 +81,9 @@ a:focus-visible {
 
 .app-shell {
   min-height: 100vh;
+  padding-right: env(safe-area-inset-right);
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  padding-left: env(safe-area-inset-left);
 }
 
 .user-strip {
@@ -115,6 +117,89 @@ a:focus-visible {
   width: min(100%, 30rem);
   margin: 0 auto;
   padding: calc(1.5rem + env(safe-area-inset-top)) var(--space-4) var(--space-6);
+}
+
+.offline-notice,
+.pwa-prompt {
+  position: sticky;
+  z-index: 12;
+  display: flex;
+  width: min(calc(100% - 2rem), 30rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-3) auto 0;
+  padding: var(--space-3);
+  border: 1px solid rgba(154, 90, 22, 0.22);
+  border-radius: var(--radius-md);
+  background: #fff8eb;
+  box-shadow: var(--shadow-subtle);
+  color: var(--color-warning);
+}
+
+.offline-notice {
+  top: calc(3.35rem + env(safe-area-inset-top));
+}
+
+.pwa-prompt {
+  position: fixed;
+  right: max(var(--space-4), env(safe-area-inset-right));
+  bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  left: max(var(--space-4), env(safe-area-inset-left));
+  width: auto;
+  max-width: 30rem;
+  margin: 0 auto;
+  border-color: rgba(47, 111, 94, 0.2);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.pwa-prompt--update {
+  border-color: rgba(31, 91, 143, 0.24);
+}
+
+.offline-notice div,
+.pwa-prompt div:first-child {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.offline-notice strong,
+.pwa-prompt strong {
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.offline-notice span,
+.pwa-prompt span {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.offline-notice button,
+.pwa-prompt button {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.pwa-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pwa-prompt__actions button:last-child {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+  color: var(--color-text);
 }
 
 .home-header {

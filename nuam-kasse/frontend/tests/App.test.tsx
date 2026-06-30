@@ -255,14 +255,18 @@ function jsonResponse(data: unknown, status = 200) {
 function mockFetch(handler: (url: string, options?: RequestInit) => Promise<Response>) {
   vi.stubGlobal(
     "fetch",
-    vi.fn((input: RequestInfo | URL, options?: RequestInit) =>
-      handler(String(input), options),
-    ),
+    vi.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        return healthResponse();
+      }
+      return handler(url, options);
+    }),
   );
 }
 
 function healthResponse() {
-  return jsonResponse({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.1.0" });
+  return jsonResponse({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.6.0" });
 }
 
 afterEach(() => {

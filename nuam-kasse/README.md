@@ -1,8 +1,8 @@
 # Nuam Kasse
 
-Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt und soll spaeter als Progressive Web App auf einem Hostinger VPS betrieben werden.
+Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt, als Progressive Web App vorbereitet und fuer ein eigenstaendiges Produktionsdeployment auf einem Hostinger VPS dokumentiert.
 
-Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden, das Buchungsmodul fuer Ausgaben und Stornierungen sowie das Uebersichtsmodul fuer Auswertungen. Exporte und PWA-Funktionen sind bewusst noch nicht enthalten.
+Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden, das Buchungsmodul fuer Ausgaben und Stornierungen, das Uebersichtsmodul fuer Auswertungen sowie PWA- und Deployment-Vorbereitung. Exporte sind bewusst noch nicht enthalten.
 
 ## Architektur
 
@@ -19,6 +19,7 @@ PostgreSQL Datenbank
 ## Technologien
 
 - Frontend: React, TypeScript, Vite, React Router, lucide-react, Vitest, React Testing Library
+- PWA: vite-plugin-pwa mit App-Shell-Cache und NetworkOnly fuer API-Pfade
 - Backend: Python, FastAPI, SQLAlchemy 2, Pydantic Settings, Alembic, Argon2, Pytest
 - Datenbank: PostgreSQL mit persistentem Docker Volume
 - Betrieb: Docker Compose mit getrennten Containern fuer Frontend, Backend und Datenbank
@@ -56,7 +57,10 @@ nuam-kasse/
 |   +-- package.json
 +-- docker-compose.yml
 +-- docker-compose.prod.yml
++-- docs/
++-- scripts/
 +-- .env.example
++-- .env.production.example
 +-- README.md
 ```
 
@@ -75,12 +79,15 @@ Wichtige Variablen:
 - `APP_NAME`: Anzeigename der App
 - `APP_VERSION`: technische App-Version
 - `APP_ENV`: `development`, `test` oder `production`
+- `DEBUG`: Debugmodus, in Produktion `false`
+- `ENABLE_API_DOCS`: API-Dokumentation ausserhalb Produktion aktivierbar
 - `DATABASE_URL`: SQLAlchemy-Verbindungsstring
 - `POSTGRES_DB`: PostgreSQL-Datenbankname
 - `POSTGRES_USER`: PostgreSQL-Benutzer
 - `POSTGRES_PASSWORD`: PostgreSQL-Passwort
 - `BACKEND_CORS_ORIGINS`: erlaubte Frontend-Urspruenge
 - `VITE_API_BASE_URL`: API-Basis-URL im Frontend
+- `VITE_APP_VERSION`: Version im Frontend und PWA-Build
 - `FRONTEND_PORT`: lokaler Port fuer den Frontend-Container
 - `SESSION_COOKIE_NAME`: Name des HttpOnly-Sitzungscookies
 - `SESSION_TTL_HOURS`: Sitzungsdauer in Stunden
@@ -100,6 +107,45 @@ Lokale URLs:
 - OpenAPI Docs: http://localhost:8000/api/v1/docs
 
 Das Frontend ruft den echten Backend-Health-Check ueber `/api/v1/health` auf. Im Docker-Setup leitet Nginx diese Route an den Backend-Container weiter.
+
+## PWA
+
+Die PWA-Konfiguration liegt in `frontend/vite.config.ts`. Das Manifest wird im Produktionsbuild als `/manifest.webmanifest` erzeugt. Der Service Worker cached nur App Shell und statische Assets; alle `/api/`-Routen sind `NetworkOnly`, damit keine Benutzer-, Sitzungs-, Kassen- oder Buchungsdaten dauerhaft im Service-Worker-Cache landen.
+
+Offline-Verhalten:
+
+- Die App Shell darf sichtbar bleiben.
+- Es erscheint ein Hinweis bei fehlender Serververbindung.
+- Buchungen und Stornierungen sind ohne Serververbindung deaktiviert.
+- Es gibt keine Offline-Buchungen, keine Warteschlange und kein Background Sync.
+
+Icons werden lokal erzeugt:
+
+```bash
+cd frontend
+npm run icons
+```
+
+Weitere Details: `docs/pwa.md`.
+
+## Produktion und Deployment
+
+Die Produktionsdatei `docker-compose.prod.yml` definiert einen eigenstaendigen Stack mit:
+
+- `nuam-kasse-db`
+- `nuam-kasse-migrate`
+- `nuam-kasse-backend`
+- `nuam-kasse-frontend`
+- Volume `nuam_kasse_postgres_data`
+- Volume `nuam_kasse_backups`
+- internem Netzwerk `nuam_kasse_internal`
+- optionaler Anbindung an ein vorhandenes externes Reverse-Proxy-Netzwerk
+
+Der Datenbankport wird nicht oeffentlich freigegeben. In Produktion laufen sichere Cookies (`SESSION_COOKIE_SECURE=true`) und FastAPI-Dokumentation ist ueber `ENABLE_API_DOCS=false` deaktiviert.
+
+Produktionsablauf, Reverse Proxy, HTTPS, erster Administrator und Rollback sind in `docs/deployment.md` dokumentiert.
+
+Backups und Wiederherstellung sind in `docs/backup-and-restore.md` dokumentiert.
 
 ## Lokale Entwicklung ohne Docker
 
@@ -641,13 +687,12 @@ Manuelle Pruefschritte:
 - Keine schweren Diagramme oder Periodenvergleiche ueber die aktuelle Uebersicht hinaus.
 - Noch keine Einnahmen, Ueberweisungen, Belege, Anhange oder Exporte.
 - Nur Thai Baht (`THB`) wird unterstuetzt.
-- Noch keine PWA-Installation, kein Service Worker und kein Offline-Modus.
-- Noch keine Hostinger-, Domain- oder HTTPS-Konfiguration.
+- Das Hostinger-Deployment ist vorbereitet und dokumentiert, aber in diesem Schritt nicht auf dem Server ausgefuehrt.
+- Domain, DNS, HTTPS und Reverse Proxy muessen auf dem VPS manuell final geprueft werden.
 
 ## Naechste geplante Module
 
-1. PWA und Deployment
-2. abschliessende Tests und Absicherung
+1. abschliessende Tests und Absicherung
 
 ## Technische Entscheidungen
 

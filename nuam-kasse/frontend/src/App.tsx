@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AuthProvider } from "./app/AuthContext";
+import { NetworkStatusProvider } from "./app/NetworkStatusContext";
 import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
 import { CategoryAdminPage } from "./pages/CategoryAdminPage";
@@ -71,7 +72,9 @@ const router = createBrowserRouter([
 export function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <NetworkStatusProvider>
+        <RouterProvider router={router} />
+      </NetworkStatusProvider>
     </AuthProvider>
   );
 }

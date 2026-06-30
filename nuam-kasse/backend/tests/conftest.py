@@ -31,7 +31,7 @@ def db_session(tmp_path) -> Session:
 def settings(tmp_path) -> Settings:
     return Settings(
         app_name="Nuam Kasse",
-        app_version="0.1.0",
+        app_version="0.6.0",
         app_env="test",
         database_url=f"sqlite+pysqlite:///{tmp_path / 'health.db'}",
         backend_cors_origins="http://testserver",
