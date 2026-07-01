@@ -40,7 +40,7 @@ export function SettingsPage() {
 
       <AppCard>
         <Link className="primary-link" to="/change-password">
-          Eigenes Passwort aendern
+          Eigenes Passwort ändern
         </Link>
       </AppCard>
 

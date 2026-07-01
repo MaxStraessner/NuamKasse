@@ -26,7 +26,7 @@ def get_current_session_and_user(
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Die Sitzung ist ungueltig oder abgelaufen.",
+            detail="Die Sitzung ist ungültig oder abgelaufen.",
         )
 
     now = utc_now()
@@ -38,7 +38,7 @@ def get_current_session_and_user(
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Die Sitzung ist ungueltig oder abgelaufen.",
+            detail="Die Sitzung ist ungültig oder abgelaufen.",
         )
 
     user = session.user
@@ -47,7 +47,7 @@ def get_current_session_and_user(
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Die Sitzung ist ungueltig oder abgelaufen.",
+            detail="Die Sitzung ist ungültig oder abgelaufen.",
         )
 
     session.last_used_at = now
@@ -75,7 +75,7 @@ def require_admin(
     if user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Diese Funktion ist nur fuer Administratoren verfuegbar.",
+            detail="Diese Funktion ist nur für Administratoren verfügbar.",
         )
     return user
 

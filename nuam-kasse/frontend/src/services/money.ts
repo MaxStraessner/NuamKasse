@@ -1,7 +1,7 @@
 export function formatThaiBaht(amount: string, currency = "THB"): string {
   const numericAmount = Number(amount);
   if (!Number.isFinite(numericAmount)) {
-    return "ungueltiger Betrag";
+    return "ungültiger Betrag";
   }
 
   return new Intl.NumberFormat("th-TH", {

@@ -216,7 +216,7 @@ def _apply_sort(query: Select[tuple[Expense]], sort: str) -> Select[tuple[Expens
         return query.order_by(Expense.amount.desc(), Expense.id.desc())
     if sort == "amount_asc":
         return query.order_by(Expense.amount.asc(), Expense.id.asc())
-    raise OverviewServiceError("Ungueltige Sortierung.", code="invalid_sort")
+    raise OverviewServiceError("Ungültige Sortierung.", code="invalid_sort")
 
 
 def list_cash_period_expenses(
@@ -235,14 +235,14 @@ def list_cash_period_expenses(
 ) -> dict[str, object]:
     if cash_period.status != CashPeriodStatus.active and user.role != UserRole.admin:
         raise OverviewServiceError(
-            "Diese Kassenperiode ist nur fuer Administratoren verfuegbar.",
+            "Diese Kassenperiode ist nur für Administratoren verfügbar.",
             code="cash_period_forbidden",
             status_code=403,
         )
     if date_from is not None and date_to is not None and date_to < date_from:
         raise OverviewServiceError("Das Ende darf nicht vor dem Beginn liegen.", code="invalid_date_range")
     if sort not in VALID_EXPENSE_SORTS:
-        raise OverviewServiceError("Ungueltige Sortierung.", code="invalid_sort")
+        raise OverviewServiceError("Ungültige Sortierung.", code="invalid_sort")
 
     _validate_filter_entities(db, category_id=category_id, created_by_user_id=created_by_user_id)
     effective_include_voided = include_voided and user.role == UserRole.admin

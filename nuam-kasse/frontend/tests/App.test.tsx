@@ -55,7 +55,7 @@ const categoryCatalog = {
   ],
   colors: [
     { key: "orange", label: "Orange" },
-    { key: "green", label: "Gruen" },
+    { key: "green", label: "Grün" },
     { key: "blue", label: "Blau" },
     { key: "gray", label: "Grau" },
   ],
@@ -394,7 +394,8 @@ describe("App authentication", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Benutzer/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
+    fireEvent.click(await screen.findByRole("link", { name: "Benutzerverwaltung" }));
     expect(await screen.findByRole("heading", { name: "Benutzer" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Benutzername"), { target: { value: "nuam" } });
     fireEvent.change(screen.getByLabelText("Anzeigename"), { target: { value: "Nuam" } });
@@ -436,7 +437,7 @@ describe("App authentication", () => {
       }
       if (url.endsWith("/auth/change-password") && options?.method === "POST") {
         changed = true;
-        return jsonResponse({ message: "Passwort wurde geaendert." });
+        return jsonResponse({ message: "Passwort wurde geändert." });
       }
       if (url.endsWith("/categories")) {
         return jsonResponse([essenCategory]);
@@ -449,7 +450,7 @@ describe("App authentication", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Passwort aendern" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Passwort ändern" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Bisheriges Passwort"), {
       target: { value: "temp-pass-123" },
     });
@@ -566,11 +567,12 @@ describe("Categories", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Kategorien/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
+    fireEvent.click(await screen.findByRole("link", { name: "Kategorieverwaltung" }));
     expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Kategoriename"), { target: { value: "Einkauf" } });
     fireEvent.click(screen.getByRole("button", { name: "Symbol Einkauf" }));
-    fireEvent.click(screen.getByRole("button", { name: "Farbe Gruen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Farbe Grün" }));
     fireEvent.click(screen.getByRole("button", { name: "Kategorie anlegen" }));
 
     expect(await screen.findByText("Kategorie wurde angelegt.")).toBeInTheDocument();
@@ -614,12 +616,13 @@ describe("Categories", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Kategorien/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
+    fireEvent.click(await screen.findByRole("link", { name: "Kategorieverwaltung" }));
     await screen.findByRole("heading", { name: "Kategorien" });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
     fireEvent.change(screen.getByLabelText("Kategoriename"), { target: { value: "Lebensmittel" } });
-    fireEvent.click(screen.getByRole("button", { name: "Farbe Gruen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Farbe Grün" }));
     fireEvent.click(screen.getByRole("button", { name: "Kategorie speichern" }));
     expect(await screen.findByText("Kategorie wurde aktualisiert.")).toBeInTheDocument();
     expect(screen.getAllByText("Lebensmittel").length).toBeGreaterThan(0);
@@ -658,7 +661,6 @@ describe("Expenses", () => {
   test("member can select a category, enter an amount, and save an expense", async () => {
     window.history.pushState({}, "", "/");
     let summary = activeCashSummary;
-    let expenses: Expense[] = [];
     let createPayload: { category_id: number; amount: string } | null = null;
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
@@ -673,13 +675,9 @@ describe("Expenses", () => {
       if (url.endsWith("/categories")) {
         return jsonResponse([essenCategory]);
       }
-      if (url.includes("/expenses/current")) {
-        return jsonResponse(expenses);
-      }
       if (url.endsWith("/expenses") && options?.method === "POST") {
         createPayload = JSON.parse(String(options.body)) as typeof createPayload;
         summary = spentCashSummary;
-        expenses = [essenExpense];
         return jsonResponse({ expense: essenExpense, summary }, 201);
       }
       if (url.endsWith("/health")) {
@@ -700,7 +698,7 @@ describe("Expenses", () => {
 
     expect(await screen.findByText(/gespeichert/)).toBeInTheDocument();
     expect(createPayload).toEqual({ category_id: 1, amount: "250.00" });
-    expect(screen.getByText("Letzte Ausgaben")).toBeInTheDocument();
+    expect(screen.queryByText("Letzte Ausgaben")).not.toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
   });
@@ -735,11 +733,10 @@ describe("Expenses", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  test("member can void own expense but not a foreign expense", async () => {
+  test("home page does not load or show recent expenses", async () => {
     window.history.pushState({}, "", "/");
-    let expenses: Expense[] = [adminExpense, essenExpense];
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockFetch((url, options) => {
+    let expenseCalls = 0;
+    mockFetch((url) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(memberUser);
       }
@@ -753,11 +750,8 @@ describe("Expenses", () => {
         return jsonResponse([essenCategory]);
       }
       if (url.includes("/expenses/current")) {
-        return jsonResponse(expenses);
-      }
-      if (url.includes("/expenses/1/void") && options?.method === "POST") {
-        expenses = [adminExpense];
-        return jsonResponse({ expense: { ...essenExpense, is_voided: true }, summary: activeCashSummary });
+        expenseCalls += 1;
+        return jsonResponse([adminExpense, essenExpense]);
       }
       return jsonResponse({});
     });
@@ -765,23 +759,22 @@ describe("Expenses", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
-    expect(await screen.findByText("Letzte Ausgaben")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Buchung entfernen" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Buchung entfernen" }));
-
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(await screen.findByText("Buchung wurde entfernt.")).toBeInTheDocument();
+    expect(await screen.findByText("Kategorien")).toBeInTheDocument();
+    expect(screen.queryByText("Letzte Ausgaben")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Buchung entfernen" })).not.toBeInTheDocument();
     expect(screen.queryByText("Nuam /")).not.toBeInTheDocument();
+    expect(expenseCalls).toBe(0);
   });
 
-  test("visible home page refreshes expenses silently", async () => {
+  test("visible home page refreshes cash summary silently", async () => {
     window.history.pushState({}, "", "/");
-    let expenseCalls = 0;
+    let summaryCalls = 0;
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(memberUser);
       }
       if (url.endsWith("/cash-periods/current/summary")) {
+        summaryCalls += 1;
         return jsonResponse(activeCashSummary);
       }
       if (url.endsWith("/cash-periods/current")) {
@@ -791,8 +784,7 @@ describe("Expenses", () => {
         return jsonResponse([essenCategory]);
       }
       if (url.includes("/expenses/current")) {
-        expenseCalls += 1;
-        return jsonResponse([]);
+        throw new Error("Home page should not request recent expenses.");
       }
       return jsonResponse({});
     });
@@ -800,11 +792,11 @@ describe("Expenses", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
-    expect(await screen.findByText("Letzte Ausgaben")).toBeInTheDocument();
-    expect(expenseCalls).toBeGreaterThan(0);
+    expect(await screen.findByText("Kategorien")).toBeInTheDocument();
+    expect(summaryCalls).toBeGreaterThan(0);
     document.dispatchEvent(new Event("visibilitychange"));
 
-    await waitFor(() => expect(expenseCalls).toBeGreaterThan(1));
+    await waitFor(() => expect(summaryCalls).toBeGreaterThan(1));
   });
 });
 
@@ -839,9 +831,9 @@ describe("Overview", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Übersicht/i }));
 
-    expect(await screen.findByRole("heading", { name: "Uebersicht" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Übersicht" })).toBeInTheDocument();
     expect(screen.getByText("Juli 2026")).toBeInTheDocument();
     expect(screen.getAllByText(/19,600\.00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/400\.00/).length).toBeGreaterThan(0);
@@ -857,7 +849,7 @@ describe("Overview", () => {
     await waitFor(() => expect(expenseUrls.some((url) => url.includes("created_by_user_id=2"))).toBe(true));
     expect(screen.getByRole("button", { name: "Benutzer: Nuam" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Alle Filter zuruecksetzen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Alle Filter zurücksetzen" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Kategorie: Essen" })).not.toBeInTheDocument());
   });
 
@@ -889,7 +881,7 @@ describe("Overview", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Übersicht/i }));
     expect(await screen.findByLabelText("Kassenperiode")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Kassenperiode"), { target: { value: "2" } });
@@ -937,7 +929,7 @@ describe("Overview", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: /Uebersicht/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Übersicht/i }));
     expect(await screen.findByText("Weitere Buchungen laden")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Weitere Buchungen laden" }));
@@ -976,10 +968,11 @@ describe("Cash periods", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
-    expect(await screen.findByText("Verbleibend")).toBeInTheDocument();
+    expect(await screen.findByText("Restbetrag")).toBeInTheDocument();
+    expect(screen.getByText(/Startbetrag: .*20,000\.00/)).toBeInTheDocument();
     expect(screen.getAllByText(/20,000\.00/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/0\.00/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Beginn: 1.7.2026")).toBeInTheDocument();
+    expect(screen.queryByText("Ausgaben")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beginn: 1.7.2026")).not.toBeInTheDocument();
   });
 
   test("shows no active cash period state with admin action only for admins", async () => {
@@ -1066,7 +1059,7 @@ describe("Cash periods", () => {
     fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
     fireEvent.click(await screen.findByRole("link", { name: "Kassenverwaltung" }));
     expect(await screen.findByRole("heading", { name: "Kassenperioden" })).toBeInTheDocument();
-    expect(screen.queryByText("Loeschen")).not.toBeInTheDocument();
+    expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Beginn"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "21000.00" } });
@@ -1112,7 +1105,7 @@ describe("Cash periods", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
     fireEvent.click(await screen.findByRole("link", { name: "Kassenverwaltung" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Abschliessen" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abschließen" }));
 
     expect(promptSpy).toHaveBeenCalled();
     expect(await screen.findByText("Kassenperiode wurde abgeschlossen.")).toBeInTheDocument();

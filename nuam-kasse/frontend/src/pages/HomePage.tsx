@@ -6,13 +6,11 @@ import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
 import { CategoryTile } from "../components/CategoryTile";
 import { HealthStatus } from "../components/HealthStatus";
-import { MetricTile } from "../components/MetricTile";
 import { PageContainer } from "../components/PageContainer";
 import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod, getCurrentCashPeriodSummary } from "../services/cashPeriodsApi";
 import { getCategories } from "../services/categoriesApi";
-import { formatLocalDateTime } from "../services/dateTime";
-import { createExpense, getCurrentExpenses, voidExpense } from "../services/expensesApi";
+import { createExpense } from "../services/expensesApi";
 import {
   decimalStringToMinorUnits,
   formatThaiBaht,
@@ -22,7 +20,6 @@ import {
 import { useHealth } from "../services/useHealth";
 import type { CashPeriod, CashPeriodSummary } from "../types/cashPeriod";
 import type { Category } from "../types/category";
-import type { Expense } from "../types/expense";
 
 function isNoActiveCashPeriod(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
@@ -40,15 +37,12 @@ export function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [categoryError, setCategoryError] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
-  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [expenseAmount, setExpenseAmount] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
-  const [voidingExpenseId, setVoidingExpenseId] = useState<number | null>(null);
   const hadServerOutage = useRef(false);
 
   const remainingMinorUnits = decimalStringToMinorUnits(cashSummary?.remaining_amount ?? "") ?? 0;
@@ -86,28 +80,6 @@ export function HomePage() {
     }
   }
 
-  async function loadExpenses(silent = false) {
-    if (!silent) {
-      setIsLoadingExpenses(true);
-    }
-    try {
-      const currentExpenses = await getCurrentExpenses({ limit: 5 });
-      setExpenses(Array.isArray(currentExpenses) ? currentExpenses : []);
-      setExpenseError(null);
-    } catch (err) {
-      if (isNoActiveCashPeriod(err)) {
-        setExpenses([]);
-        setExpenseError(null);
-      } else if (!silent) {
-        setExpenseError("Buchungen konnten nicht geladen werden.");
-      }
-    } finally {
-      if (!silent) {
-        setIsLoadingExpenses(false);
-      }
-    }
-  }
-
   async function loadCategories() {
     setIsLoadingCategories(true);
     try {
@@ -120,14 +92,13 @@ export function HomePage() {
     }
   }
 
-  async function refreshCashAndExpenses(silent = true) {
-    await Promise.all([loadCashPeriod(silent), loadExpenses(silent)]);
+  async function refreshCashPeriod(silent = true) {
+    await loadCashPeriod(silent);
   }
 
   useEffect(() => {
     void loadCashPeriod();
     void loadCategories();
-    void loadExpenses();
   }, []);
 
   useEffect(() => {
@@ -137,7 +108,7 @@ export function HomePage() {
     }
     if (hadServerOutage.current) {
       hadServerOutage.current = false;
-      void refreshCashAndExpenses(true);
+      void refreshCashPeriod(true);
       void loadCategories();
     }
   }, [canUseServer]);
@@ -145,13 +116,13 @@ export function HomePage() {
   useEffect(() => {
     function refreshWhenVisible() {
       if (document.visibilityState === "visible") {
-        void refreshCashAndExpenses(true);
+        void refreshCashPeriod(true);
       }
     }
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        void refreshCashAndExpenses(true);
+        void refreshCashPeriod(true);
       }
     }, 15000);
     document.addEventListener("visibilitychange", refreshWhenVisible);
@@ -164,7 +135,7 @@ export function HomePage() {
   function openExpenseDialog(category: Category) {
     if (!canUseServer) {
       setSuccessMessage(null);
-      setExpenseError("Neue Buchungen sind erst wieder mit Serververbindung moeglich.");
+      setBookingError("Neue Buchungen sind erst wieder mit Serververbindung moeglich.");
       return;
     }
     if (!canBook || !category.is_active) {
@@ -173,6 +144,7 @@ export function HomePage() {
     setSelectedCategory(category);
     setExpenseAmount("");
     setDialogError(null);
+    setBookingError(null);
     setSuccessMessage(null);
   }
 
@@ -211,46 +183,19 @@ export function HomePage() {
         amount: normalizeMoneyInput(expenseAmount),
       });
       setCashSummary(response.summary);
-      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} fuer ${response.expense.category.name} gespeichert.`);
+      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${response.expense.category.name} gespeichert.`);
       setSelectedCategory(null);
       setExpenseAmount("");
-      await loadExpenses(true);
+      setBookingError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setDialogError(err.message);
-        await refreshCashAndExpenses(true);
+        await refreshCashPeriod(true);
       } else {
         setDialogError(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
       }
     } finally {
       setIsSavingExpense(false);
-    }
-  }
-
-  async function handleVoidExpense(expense: Expense) {
-    if (!canUseServer) {
-      setExpenseError("Keine Verbindung zum Server. Die Buchung wurde nicht entfernt.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Buchung entfernen?\n\n${expense.category.name}\n${formatThaiBaht(expense.amount, expense.currency)}\n\nDer Betrag wird der Kasse wieder gutgeschrieben.`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    setVoidingExpenseId(expense.id);
-    setExpenseError(null);
-    try {
-      const response = await voidExpense(expense.id);
-      setCashSummary(response.summary);
-      setSuccessMessage("Buchung wurde entfernt.");
-      await loadExpenses(true);
-    } catch (err) {
-      setExpenseError(err instanceof Error ? err.message : "Buchung konnte nicht storniert werden.");
-      await refreshCashAndExpenses(true);
-    } finally {
-      setVoidingExpenseId(null);
     }
   }
 
@@ -275,7 +220,7 @@ export function HomePage() {
         {cashPeriodError ? (
           <div className="empty-state" role="alert">
             <p>{cashPeriodError}</p>
-            <button className="secondary-action" type="button" onClick={() => void refreshCashAndExpenses(false)}>
+            <button className="secondary-action" type="button" onClick={() => void refreshCashPeriod(false)}>
               Erneut laden
             </button>
           </div>
@@ -291,33 +236,13 @@ export function HomePage() {
           </div>
         ) : null}
         {!isLoadingCashPeriod && !cashPeriodError && cashPeriod && cashSummary ? (
-          <>
-            <div className="cash-hero">
-              <span>Verbleibend</span>
+          <div className="cash-summary-hero">
+            <span>Restbetrag</span>
+            <div>
               <strong>{formatThaiBaht(cashSummary.remaining_amount, cashSummary.currency)}</strong>
-              <small>Beginn: {new Date(cashPeriod.start_date).toLocaleDateString("de-DE")}</small>
             </div>
-            <div className="metric-grid">
-              <MetricTile
-                label="Ausgangsbetrag"
-                value={formatThaiBaht(cashSummary.opening_amount, cashSummary.currency)}
-                tone="neutral"
-                hint="bereitgestellt"
-              />
-              <MetricTile
-                label="Ausgaben"
-                value={formatThaiBaht(cashSummary.spent_amount, cashSummary.currency)}
-                tone="warning"
-                hint="gueltige Buchungen"
-              />
-              <MetricTile
-                label="Restbetrag"
-                value={formatThaiBaht(cashSummary.remaining_amount, cashSummary.currency)}
-                tone="positive"
-                hint="nach Ausgaben"
-              />
-            </div>
-          </>
+            <small>Startbetrag: {formatThaiBaht(cashSummary.opening_amount, cashSummary.currency)}</small>
+          </div>
         ) : null}
       </AppCard>
 
@@ -343,6 +268,7 @@ export function HomePage() {
             </button>
           </div>
         ) : null}
+        {bookingError ? <p className="form-error" role="alert">{bookingError}</p> : null}
         {!isLoadingCategories && !categoryError && categories.length === 0 ? (
           <p className="empty-state">
             {user?.role === "admin"
@@ -360,58 +286,6 @@ export function HomePage() {
                 onSelect={() => openExpenseDialog(category)}
               />
             ))}
-          </div>
-        ) : null}
-      </AppCard>
-
-      <AppCard ariaLabel="Letzte Ausgaben">
-        <div className="card-heading">
-          <span>Letzte Ausgaben</span>
-          <small>{expenses.length ? `${expenses.length} angezeigt` : "aktuelle Kasse"}</small>
-        </div>
-        {isLoadingExpenses ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
-        {expenseError ? (
-          <div className="form-error" role="alert">
-            <p>{expenseError}</p>
-            <button className="secondary-action" type="button" onClick={() => void loadExpenses(false)}>
-              Erneut laden
-            </button>
-          </div>
-        ) : null}
-        {!isLoadingExpenses && !expenseError && expenses.length === 0 ? (
-          <p className="empty-state">Noch keine Ausgaben erfasst.</p>
-        ) : null}
-        {!isLoadingExpenses && !expenseError && expenses.length > 0 ? (
-          <div className="expense-list">
-            {expenses.map((expense) => {
-              const canVoidExpense = Boolean(
-                cashPeriod?.status === "active"
-                && !expense.is_voided
-                && (user?.role === "admin" || user?.id === expense.created_by.id),
-              );
-              return (
-                <div className="expense-item" key={expense.id}>
-                  <CategoryTile category={expense.category} size="compact" />
-                  <div className="expense-item__body">
-                    <strong>{expense.category.name}</strong>
-                    <span>{expense.created_by.display_name} / {formatLocalDateTime(expense.created_at)}</span>
-                  </div>
-                  <div className="expense-item__amount">
-                    <strong>{formatThaiBaht(expense.amount, expense.currency)}</strong>
-                    {canVoidExpense ? (
-                      <button
-                        className="link-button"
-                        disabled={voidingExpenseId === expense.id || !canUseServer}
-                        onClick={() => void handleVoidExpense(expense)}
-                        type="button"
-                      >
-                        Buchung entfernen
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         ) : null}
       </AppCard>
@@ -444,14 +318,14 @@ export function HomePage() {
                 </div>
                 <div>
                   <span>Neue Ausgabe</span>
-                  <strong>{enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "ungueltiger Betrag"}</strong>
+                  <strong>{enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "ungültiger Betrag"}</strong>
                 </div>
                 <div>
                   <span>Voraussichtlich verbleibend</span>
                   <strong>
                     {enteredMinorUnits !== null
                       ? formatThaiBaht(minorUnitsToDecimalString(Math.max(remainingMinorUnits - enteredMinorUnits, 0)))
-                      : "ungueltiger Betrag"}
+                      : "ungültiger Betrag"}
                   </strong>
                 </div>
               </div>

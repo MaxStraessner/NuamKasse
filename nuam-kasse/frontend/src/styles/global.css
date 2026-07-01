@@ -424,6 +424,40 @@ textarea:focus-visible {
   line-height: 1;
 }
 
+.cash-summary-hero {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.12), transparent 42%),
+    var(--color-surface);
+  text-align: center;
+}
+
+.cash-summary-hero span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cash-summary-hero strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: clamp(2.45rem, 12vw, 4.25rem);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0;
+  line-height: var(--line-height-tight);
+}
+
+.cash-summary-hero small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
 .cash-empty {
   display: grid;
   gap: var(--space-3);
@@ -508,6 +542,18 @@ textarea:focus-visible {
   flex-direction: row;
   justify-content: flex-start;
   text-align: left;
+}
+
+.category-tile--icon-only {
+  width: 4.25rem;
+  min-height: 4.25rem;
+  padding: var(--space-2);
+  justify-content: center;
+}
+
+.category-tile--icon-only .category-tile__icon {
+  width: 3rem;
+  height: 3rem;
 }
 
 .category-tile--disabled {
@@ -610,9 +656,9 @@ textarea:focus-visible {
   bottom: max(var(--space-4), env(safe-area-inset-bottom));
   left: max(var(--space-4), env(safe-area-inset-left));
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(calc(100% - 2rem), 28rem);
-  min-height: 4.25rem;
+  min-height: 4.5rem;
   margin: 0 auto;
   padding: var(--space-2);
   border: 1px solid var(--color-border);
@@ -625,18 +671,26 @@ textarea:focus-visible {
 .bottom-nav__item {
   display: flex;
   min-width: 0;
-  min-height: 3rem;
+  min-height: 3.25rem;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  padding: var(--space-1);
   border-radius: var(--radius-md);
   color: var(--color-muted);
   font-size: 0.78rem;
   font-weight: 800;
+  line-height: 1.15;
   text-decoration: none;
+  text-align: center;
   transition:
     background var(--transition-fast),
     color var(--transition-fast);
+}
+
+.bottom-nav__item span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .bottom-nav__dot {

@@ -22,7 +22,7 @@ def parse_money(value: str | Decimal) -> Decimal:
         try:
             amount = Decimal(clean_value)
         except InvalidOperation as exc:
-            raise MoneyError("Der Ausgangsbetrag ist ungueltig.") from exc
+            raise MoneyError("Der Ausgangsbetrag ist ungültig.") from exc
 
     if amount.as_tuple().exponent < -2:
         raise MoneyError("Der Ausgangsbetrag darf hoechstens zwei Nachkommastellen haben.")

@@ -96,4 +96,4 @@ def reset_user_password_endpoint(
         )
     except UserServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return MessageResponse(message="Passwort wurde zurueckgesetzt.")
+    return MessageResponse(message="Passwort wurde zurückgesetzt.")
