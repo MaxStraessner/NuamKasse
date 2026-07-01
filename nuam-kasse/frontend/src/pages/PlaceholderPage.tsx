@@ -16,7 +16,7 @@ export function PlaceholderPage({ title }: PlaceholderPageProps) {
       </header>
       <AppCard>
         <p className="placeholder-copy">
-          Dieses Modul ist fuer einen spaeteren Arbeitsschritt reserviert.
+          Dieses Modul ist für einen späteren Arbeitsschritt reserviert.
         </p>
       </AppCard>
     </PageContainer>

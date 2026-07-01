@@ -9,6 +9,7 @@ type CategoryTileProps = {
   };
   size?: "regular" | "compact";
   isDisabled?: boolean;
+  showLabel?: boolean;
   onSelect?: () => void;
 };
 
@@ -16,17 +17,18 @@ export function CategoryTile({
   category,
   size = "regular",
   isDisabled = false,
+  showLabel = true,
   onSelect,
 }: CategoryTileProps) {
   const Icon = getCategoryIcon(category.icon_key);
   const colorKey = isCategoryColorKey(category.color_key) ? category.color_key : "gray";
-  const className = `category-tile category-tile--${size}${isDisabled ? " category-tile--disabled" : ""}`;
+  const className = `category-tile category-tile--${size}${showLabel ? "" : " category-tile--icon-only"}${isDisabled ? " category-tile--disabled" : ""}`;
   const content = (
     <>
       <span className="category-tile__icon" aria-hidden="true">
         <Icon strokeWidth={2.35} />
       </span>
-      <strong>{category.name}</strong>
+      {showLabel ? <strong>{category.name}</strong> : null}
     </>
   );
 

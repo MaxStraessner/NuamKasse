@@ -301,7 +301,7 @@ export function CashPeriodAdminPage() {
                   Bearbeiten
                 </button>
                 <button className="secondary-action" onClick={() => void handleClose(cashPeriod)} type="button">
-                  Abschliessen
+                  Abschließen
                 </button>
               </div>
             ) : null}

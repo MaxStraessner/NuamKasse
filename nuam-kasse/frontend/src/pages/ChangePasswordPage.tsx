@@ -25,7 +25,7 @@ export function ChangePasswordPage() {
       });
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Passwort konnte nicht geaendert werden.");
+      setError(err instanceof Error ? err.message : "Passwort konnte nicht geändert werden.");
     } finally {
       setIsSubmitting(false);
     }
@@ -35,7 +35,7 @@ export function ChangePasswordPage() {
     <main className="auth-screen">
       <form className="auth-panel" onSubmit={(event) => void handleSubmit(event)}>
         <p className="home-header__eyebrow">Sicherheit</p>
-        <h1>Passwort aendern</h1>
+        <h1>Passwort ändern</h1>
         <p className="auth-copy">
           Lege ein eigenes Passwort fest, bevor du die App weiter nutzt.
         </p>

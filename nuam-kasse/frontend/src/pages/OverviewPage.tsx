@@ -183,7 +183,7 @@ export function OverviewPage() {
         setHasNoActivePeriod(true);
         setOverviewError(null);
       } else if (!silent) {
-        setOverviewError(err instanceof Error ? err.message : "Uebersicht konnte nicht geladen werden.");
+        setOverviewError(err instanceof Error ? err.message : "Übersicht konnte nicht geladen werden.");
       }
     } finally {
       if (!silent) {
@@ -327,7 +327,7 @@ export function OverviewPage() {
       <header className="home-header">
         <div>
           <p className="home-header__eyebrow">Auswertung</p>
-          <h1>Uebersicht</h1>
+          <h1>Übersicht</h1>
         </div>
         {isAdmin && periodOptions.length > 0 ? (
           <label className="period-select">
@@ -347,7 +347,7 @@ export function OverviewPage() {
       </header>
 
       {isLoadingOverview && !overview ? (
-        <AppCard ariaLabel="Uebersicht wird geladen">
+        <AppCard ariaLabel="Übersicht wird geladen">
           <div className="overview-skeleton" />
         </AppCard>
       ) : null}
@@ -395,7 +395,7 @@ export function OverviewPage() {
             <div className="cash-hero">
               <span>Verbleibend</span>
               <strong>{formatThaiBaht(overview.summary.remaining_amount, cashPeriod.currency)}</strong>
-              <small>{overview.summary.active_expense_count} gueltige Buchungen</small>
+              <small>{overview.summary.active_expense_count} gültige Buchungen</small>
             </div>
             <div className="metric-grid">
               <MetricTile
@@ -537,7 +537,7 @@ export function OverviewPage() {
                     }
                     value={filters.status}
                   >
-                    <option value="active">Gueltig</option>
+                    <option value="active">Gültig</option>
                     <option value="all">Mit stornierten</option>
                   </select>
                 </label>
@@ -551,7 +551,7 @@ export function OverviewPage() {
                   value={filters.sort}
                 >
                   <option value="created_at_desc">Neueste zuerst</option>
-                  <option value="created_at_asc">Aelteste zuerst</option>
+                  <option value="created_at_asc">Älteste zuerst</option>
                   <option value="amount_desc">Betrag absteigend</option>
                   <option value="amount_asc">Betrag aufsteigend</option>
                 </select>
@@ -588,7 +588,7 @@ export function OverviewPage() {
                 {filters.datePreset !== "all" ? <button onClick={() => setFilters((current) => ({ ...current, datePreset: "all", dateFrom: "", dateTo: "" }))} type="button">Zeitraum</button> : null}
                 {isAdmin && filters.status !== "active" ? <button onClick={() => setFilters((current) => ({ ...current, status: "active" }))} type="button">Stornierte sichtbar</button> : null}
                 {filters.sort !== "created_at_desc" ? <button onClick={() => setFilters((current) => ({ ...current, sort: "created_at_desc" }))} type="button">Sortierung</button> : null}
-                <button onClick={resetFilters} type="button">Alle Filter zuruecksetzen</button>
+                <button onClick={resetFilters} type="button">Alle Filter zurücksetzen</button>
               </div>
             ) : null}
             {filterError ? <p className="form-error" role="alert">{filterError}</p> : null}
@@ -596,7 +596,7 @@ export function OverviewPage() {
             {isLoadingExpenses && !expensesPage ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
             {expensesPage && expensesPage.items.length === 0 ? (
               <p className="empty-state">
-                {hasActiveFilters ? "Fuer diese Auswahl wurden keine Buchungen gefunden." : "Noch keine Ausgaben vorhanden."}
+                {hasActiveFilters ? "Für diese Auswahl wurden keine Buchungen gefunden." : "Noch keine Ausgaben vorhanden."}
               </p>
             ) : null}
             {expensesPage && expensesPage.items.length > 0 ? (
@@ -609,7 +609,7 @@ export function OverviewPage() {
                   );
                   return (
                     <div className={`expense-item${expense.is_voided ? " expense-item--voided" : ""}`} key={expense.id}>
-                      <CategoryTile category={expense.category} size="compact" />
+                      <CategoryTile category={expense.category} showLabel={false} size="compact" />
                       <div className="expense-item__body">
                         <strong>{expense.category.name}</strong>
                         <span>{expense.created_by.display_name} / {formatLocalDateTime(expense.created_at)}</span>

@@ -32,7 +32,7 @@ def main() -> None:
         except UserServiceError as exc:
             raise SystemExit(str(exc)) from exc
 
-    print(f"Passwort fuer '{reset_username}' wurde zurueckgesetzt.")
+    print(f"Passwort für '{reset_username}' wurde zurückgesetzt.")
 
 
 if __name__ == "__main__":

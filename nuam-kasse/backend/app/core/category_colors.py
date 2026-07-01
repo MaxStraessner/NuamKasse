@@ -3,12 +3,12 @@ from app.core.category_icons import CategoryCatalogItem
 
 CATEGORY_COLORS: tuple[CategoryCatalogItem, ...] = (
     {"key": "orange", "label": "Orange"},
-    {"key": "green", "label": "Gruen"},
+    {"key": "green", "label": "Grün"},
     {"key": "blue", "label": "Blau"},
     {"key": "red", "label": "Rot"},
     {"key": "purple", "label": "Violett"},
     {"key": "pink", "label": "Pink"},
-    {"key": "teal", "label": "Tuerkis"},
+    {"key": "teal", "label": "Türkis"},
     {"key": "yellow", "label": "Gelb"},
     {"key": "indigo", "label": "Indigo"},
     {"key": "gray", "label": "Grau"},

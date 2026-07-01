@@ -89,7 +89,7 @@ export function UserAdminPage() {
 
   async function handleReset(user: User) {
     const newPassword = resetPasswordByUser[user.id] || "";
-    if (!window.confirm(`Passwort von ${user.display_name} zuruecksetzen und Sitzungen beenden?`)) {
+    if (!window.confirm(`Passwort von ${user.display_name} zurücksetzen und Sitzungen beenden?`)) {
       return;
     }
     try {
@@ -99,9 +99,9 @@ export function UserAdminPage() {
       });
       await loadUsers();
       setResetPasswordByUser((current) => ({ ...current, [user.id]: "" }));
-      setMessage("Passwort wurde zurueckgesetzt. Der Benutzer muss ein eigenes Passwort vergeben.");
+      setMessage("Passwort wurde zurückgesetzt. Der Benutzer muss ein eigenes Passwort vergeben.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Passwort konnte nicht zurueckgesetzt werden.");
+      setError(err instanceof Error ? err.message : "Passwort konnte nicht zurückgesetzt werden.");
     }
   }
 
@@ -183,7 +183,7 @@ export function UserAdminPage() {
             </div>
             <div className="reset-row">
               <input
-                aria-label={`Neues Passwort fuer ${user.display_name}`}
+                aria-label={`Neues Passwort für ${user.display_name}`}
                 placeholder="Neues vorlaeufiges Passwort"
                 type="password"
                 value={resetPasswordByUser[user.id] || ""}
@@ -195,7 +195,7 @@ export function UserAdminPage() {
                 }
               />
               <button className="secondary-action" type="button" onClick={() => void handleReset(user)}>
-                Passwort zuruecksetzen
+                Passwort zurücksetzen
               </button>
             </div>
           </AppCard>
