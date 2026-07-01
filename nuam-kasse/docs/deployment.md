@@ -36,6 +36,47 @@ Enthalten sein sollten:
 - `backups/`
 - Quellcode oder ein kontrolliertes Release-Artefakt
 
+## Start ohne Domain ueber VPS-IP
+
+Eine Domain ist fuer den ersten Funktionstest nicht erforderlich. Nutze dafuer die
+separate Compose-Datei `docker-compose.ip.yml`. Sie veroeffentlicht nur das
+Frontend auf Port 80 und haelt Backend und Datenbank im internen Docker-Netzwerk.
+
+Wichtig: Diese Variante setzt `APP_ENV=development` und
+`SESSION_COOKIE_SECURE=false`, damit Login-Cookies auch ueber `http://VPS-IP`
+funktionieren. Sobald eine Domain mit HTTPS vorhanden ist, auf
+`docker-compose.prod.yml` und `.env.production` wechseln.
+
+Auf dem VPS:
+
+```sh
+cd /opt/nuam-kasse
+cp .env.ip.example .env.ip
+nano .env.ip
+```
+
+Mindestens `POSTGRES_PASSWORD` durch ein langes zufaelliges Passwort ersetzen.
+
+Erster Start:
+
+```sh
+sh scripts/deploy-ip.sh
+```
+
+Oeffentlich pruefen:
+
+```sh
+curl -fsS http://VPS-IP/api/v1/health
+```
+
+Ersten Administrator anlegen:
+
+```sh
+docker compose --env-file .env.ip -f docker-compose.ip.yml exec backend python -m app.scripts.create_admin
+```
+
+Danach im Browser `http://VPS-IP` oeffnen.
+
 ## Produktionsvariablen
 
 Kopiere `.env.production.example` nach `.env.production` und ersetze alle Secrets:

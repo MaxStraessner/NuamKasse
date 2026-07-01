@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.ip.example
 !.env.production.example
 backups/
 *.dump
