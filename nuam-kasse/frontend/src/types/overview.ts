@@ -47,6 +47,7 @@ export type OverviewExpenseCategory = {
   name: string;
   icon_key: string;
   color_key: string;
+  parent_category_id: number | null;
 };
 
 export type OverviewExpense = {

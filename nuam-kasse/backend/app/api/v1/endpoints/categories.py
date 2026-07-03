@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_admin, require_password_change_completed
+from app.api.dependencies.auth import require_password_change_completed
 from app.db.session import get_db
 from app.models.category import Category
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.category import (
     CategoryCatalogResponse,
     CategoryCreate,
@@ -15,6 +15,7 @@ from app.schemas.category import (
 from app.services.category_service import (
     CategoryServiceError,
     create_category,
+    delete_category,
     get_category_by_id,
     get_category_catalog,
     list_categories,
@@ -25,15 +26,8 @@ from app.services.category_service import (
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
-def require_category_admin(
-    admin: User = Depends(require_admin),
-    user: User = Depends(require_password_change_completed),
-) -> User:
-    return admin
-
-
-def _get_category(db: Session, category_id: int) -> Category:
-    category = get_category_by_id(db, category_id)
+def _get_category(db: Session, category_id: int, user: User) -> Category:
+    category = get_category_by_id(db, category_id, user_id=user.id)
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -48,13 +42,12 @@ def read_categories(
     db: Session = Depends(get_db),
     user: User = Depends(require_password_change_completed),
 ) -> list[Category]:
-    can_include_inactive = user.role == UserRole.admin and include_inactive
-    return list_categories(db, include_inactive=can_include_inactive)
+    return list_categories(db, user=user, include_inactive=include_inactive)
 
 
 @router.get("/catalog", response_model=CategoryCatalogResponse)
 def read_category_catalog(
-    admin: User = Depends(require_category_admin),
+    user: User = Depends(require_password_change_completed),
 ) -> dict[str, object]:
     return get_category_catalog()
 
@@ -63,7 +56,7 @@ def read_category_catalog(
 def create_category_endpoint(
     payload: CategoryCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_category_admin),
+    user: User = Depends(require_password_change_completed),
 ) -> Category:
     try:
         return create_category(
@@ -71,6 +64,8 @@ def create_category_endpoint(
             name=payload.name,
             icon_key=payload.icon_key,
             color_key=payload.color_key,
+            user_id=user.id,
+            parent_category_id=payload.parent_category_id,
             sort_order=payload.sort_order,
         )
     except CategoryServiceError as exc:
@@ -81,10 +76,54 @@ def create_category_endpoint(
 def reorder_categories_endpoint(
     payload: CategoryReorderRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_category_admin),
+    user: User = Depends(require_password_change_completed),
 ) -> list[Category]:
     try:
-        return reorder_categories(db, category_ids=payload.category_ids)
+        return reorder_categories(
+            db,
+            user_id=user.id,
+            category_ids=payload.category_ids,
+            parent_category_id=payload.parent_category_id,
+        )
+    except CategoryServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{category_id}/archive", response_model=CategoryRead)
+def archive_category_endpoint(
+    category_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+) -> Category:
+    category = _get_category(db, category_id, user)
+    try:
+        return update_category(db, category, is_active=False)
+    except CategoryServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{category_id}/restore", response_model=CategoryRead)
+def restore_category_endpoint(
+    category_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+) -> Category:
+    category = _get_category(db, category_id, user)
+    try:
+        return update_category(db, category, is_active=True)
+    except CategoryServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category_endpoint(
+    category_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+) -> None:
+    category = _get_category(db, category_id, user)
+    try:
+        delete_category(db, category=category)
     except CategoryServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -94,9 +133,9 @@ def update_category_endpoint(
     category_id: int,
     payload: CategoryUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_category_admin),
+    user: User = Depends(require_password_change_completed),
 ) -> Category:
-    category = _get_category(db, category_id)
+    category = _get_category(db, category_id, user)
     update_data = payload.model_dump(exclude_unset=True)
     try:
         return update_category(db, category, **update_data)

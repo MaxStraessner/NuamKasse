@@ -26,22 +26,42 @@ const adminUser = {
 
 const essenCategory = {
   id: 1,
+  user_id: memberUser.id,
   name: "Essen",
   icon_key: "utensils",
   color_key: "orange",
+  parent_category_id: null,
   sort_order: 1,
   is_active: true,
+  archived_at: null,
   created_at: "2026-06-29T12:00:00Z",
   updated_at: "2026-06-29T12:00:00Z",
 };
 
 const bankCategory = {
   id: 2,
+  user_id: memberUser.id,
   name: "Bank",
   icon_key: "landmark",
   color_key: "blue",
+  parent_category_id: null,
   sort_order: 2,
   is_active: true,
+  archived_at: null,
+  created_at: "2026-06-29T12:00:00Z",
+  updated_at: "2026-06-29T12:00:00Z",
+};
+
+const apothekeCategory = {
+  id: 3,
+  user_id: memberUser.id,
+  name: "Apotheke",
+  icon_key: "pill",
+  color_key: "red",
+  parent_category_id: essenCategory.id,
+  sort_order: 1,
+  is_active: true,
+  archived_at: null,
   created_at: "2026-06-29T12:00:00Z",
   updated_at: "2026-06-29T12:00:00Z",
 };
@@ -116,6 +136,7 @@ const essenExpense: Expense = {
     name: essenCategory.name,
     icon_key: "utensils",
     color_key: "orange",
+    parent_category_id: null,
   },
   amount: "250.00",
   currency: "THB",
@@ -142,6 +163,7 @@ const overviewExpense = {
     name: essenCategory.name,
     icon_key: essenCategory.icon_key,
     color_key: essenCategory.color_key,
+    parent_category_id: null,
   },
   amount: "250.00",
   currency: "THB",
@@ -409,7 +431,7 @@ describe("App authentication", () => {
     expect(screen.getByText("Nuam")).toBeInTheDocument();
   });
 
-  test("member cannot see user or category management", async () => {
+  test("member can see category management but not user management", async () => {
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(memberUser);
@@ -425,7 +447,7 @@ describe("App authentication", () => {
     fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
     expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
     expect(screen.queryByText("Benutzerverwaltung")).not.toBeInTheDocument();
-    expect(screen.queryByText("Kategorieverwaltung")).not.toBeInTheDocument();
+    expect(screen.getByText("Kategorieverwaltung")).toBeInTheDocument();
   });
 
   test("user with required password change is redirected and can change password", async () => {
@@ -638,11 +660,17 @@ describe("Categories", () => {
     expect(await screen.findByText("Reihenfolge wurde gespeichert.")).toBeInTheDocument();
   });
 
-  test("member direct access to category admin route is blocked", async () => {
+  test("member can directly open own category management", async () => {
     window.history.pushState({}, "", "/settings/categories");
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/categories/catalog")) {
+        return jsonResponse(categoryCatalog);
+      }
+      if (url.includes("/categories?include_inactive=true")) {
+        return jsonResponse([essenCategory]);
       }
       if (url.endsWith("/categories")) {
         return jsonResponse([essenCategory]);
@@ -652,8 +680,8 @@ describe("Categories", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Kategorien" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
   });
 });
 
@@ -691,7 +719,8 @@ describe("Expenses", () => {
     fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
     fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getAllByText("Neue Ausgabe").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Betrag")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "250,00" } });
     expect(screen.getByText("Voraussichtlich verbleibend")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
@@ -701,6 +730,62 @@ describe("Expenses", () => {
     expect(screen.queryByText("Letzte Ausgaben")).not.toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
+  });
+
+  test("root category with subcategories opens subcategory selection before amount dialog", async () => {
+    window.history.pushState({}, "", "/");
+    let summary = activeCashSummary;
+    let createPayload: { category_id: number; amount: string } | null = null;
+    const apothekeExpense: Expense = {
+      ...essenExpense,
+      id: 4,
+      category: {
+        id: apothekeCategory.id,
+        name: apothekeCategory.name,
+        icon_key: "pill",
+        color_key: "red",
+        parent_category_id: essenCategory.id,
+      },
+    };
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/cash-periods/current/summary")) {
+        return jsonResponse(summary);
+      }
+      if (url.endsWith("/cash-periods/current")) {
+        return jsonResponse(activeCashPeriod);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory, apothekeCategory]);
+      }
+      if (url.endsWith("/expenses") && options?.method === "POST") {
+        createPayload = JSON.parse(String(options.body)) as typeof createPayload;
+        summary = spentCashSummary;
+        return jsonResponse({ expense: apothekeExpense, summary }, 201);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Betrag")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Kategorie Apotheke"));
+    expect(await screen.findByLabelText("Betrag")).toBeInTheDocument();
+    expect(screen.getByText("Oberkategorie")).toBeInTheDocument();
+    expect(screen.getByText("Unterkategorie")).toBeInTheDocument();
+    expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
+    expect(screen.getByText("Apotheke")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "25,00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
+
+    expect(await screen.findByText(/Essen > Apotheke gespeichert/)).toBeInTheDocument();
+    expect(createPayload).toEqual({ category_id: apothekeCategory.id, amount: "25.00" });
   });
 
   test("category tiles are not bookable without an active remaining amount", async () => {

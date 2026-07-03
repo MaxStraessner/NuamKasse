@@ -46,11 +46,14 @@ export type CategoryColorKey = (typeof categoryColorKeys)[number];
 
 export type Category = {
   id: number;
+  user_id: number | null;
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  parent_category_id: number | null;
   sort_order: number;
   is_active: boolean;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -59,12 +62,14 @@ export type CategoryCreate = {
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  parent_category_id?: number | null;
 };
 
 export type CategoryUpdate = Partial<{
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  parent_category_id: number | null;
   is_active: boolean;
 }>;
 

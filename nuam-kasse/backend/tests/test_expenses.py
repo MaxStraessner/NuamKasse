@@ -4,7 +4,7 @@ from decimal import Decimal
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category
 from app.models.expense import Expense
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from conftest import create_test_user
 
 
@@ -12,12 +12,24 @@ def login(client, username: str, password: str = "password-123"):
     return client.post("/api/v1/auth/login", json={"username": username, "password": password})
 
 
-def create_category(db_session, *, name: str = "Essen", is_active: bool = True) -> Category:
+def create_category(
+    db_session,
+    *,
+    name: str = "Essen",
+    is_active: bool = True,
+    parent_category_id: int | None = None,
+    user_id: int | None = None,
+) -> Category:
+    owner_id = user_id
+    if owner_id is None:
+        owner_id = db_session.query(User).order_by(User.id.asc()).first().id
     category = Category(
+        user_id=owner_id,
         name=name,
         name_normalized=name.casefold(),
         icon_key="utensils",
         color_key="orange",
+        parent_category_id=parent_category_id,
         sort_order=1,
         is_active=is_active,
     )
@@ -75,7 +87,7 @@ def create_expense_row(
 def test_member_can_create_expense_and_summary_uses_real_spending(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
-    category = create_category(db_session)
+    category = create_category(db_session, user_id=member.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
     login(client, "nuam")
 
@@ -103,7 +115,8 @@ def test_member_can_create_expense_and_summary_uses_real_spending(client, db_ses
 
 def test_create_expense_requires_active_cash_period_and_active_category(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
-    inactive_category = create_category(db_session, is_active=False)
+    member = create_test_user(db_session, username="nuam", role=UserRole.member)
+    inactive_category = create_category(db_session, is_active=False, user_id=admin.id)
     login(client, "admin")
 
     missing_cash_period = client.post(
@@ -116,17 +129,42 @@ def test_create_expense_requires_active_cash_period_and_active_category(client, 
         "/api/v1/expenses",
         json={"category_id": inactive_category.id, "amount": "10.00"},
     )
+    login(client, "nuam")
+    foreign_category = client.post(
+        "/api/v1/expenses",
+        json={"category_id": inactive_category.id, "amount": "10.00"},
+    )
 
     assert missing_cash_period.status_code == 404
     assert missing_cash_period.json()["detail"]["code"] == "no_active_cash_period"
     assert missing_category.status_code == 404
     assert inactive.status_code == 409
     assert inactive.json()["detail"]["code"] == "category_inactive"
+    assert foreign_category.status_code == 404
+    assert foreign_category.json()["detail"]["code"] == "category_not_found"
+
+
+def test_create_expense_requires_subcategory_when_root_has_active_children(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    root = create_category(db_session, name="Gesundheit", user_id=admin.id)
+    child = create_category(db_session, name="Apotheke", parent_category_id=root.id, user_id=admin.id)
+    simple_root = create_category(db_session, name="Bank", user_id=admin.id)
+    create_cash_period(db_session, created_by_user_id=admin.id)
+    login(client, "admin")
+
+    blocked_root = client.post("/api/v1/expenses", json={"category_id": root.id, "amount": "10.00"})
+    child_expense = client.post("/api/v1/expenses", json={"category_id": child.id, "amount": "10.00"})
+    simple_root_expense = client.post("/api/v1/expenses", json={"category_id": simple_root.id, "amount": "10.00"})
+
+    assert blocked_root.status_code == 409
+    assert blocked_root.json()["detail"]["code"] == "category_requires_subcategory"
+    assert child_expense.status_code == 201
+    assert simple_root_expense.status_code == 201
 
 
 def test_create_expense_validates_amount_and_remaining_amount(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
-    category = create_category(db_session)
+    category = create_category(db_session, user_id=admin.id)
     create_cash_period(db_session, created_by_user_id=admin.id, opening_amount=Decimal("500.00"))
     login(client, "admin")
 
@@ -148,8 +186,14 @@ def test_create_expense_validates_amount_and_remaining_amount(client, db_session
 def test_current_expenses_are_sorted_filtered_and_hide_voided_for_members(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
-    category = create_category(db_session)
-    other_category = create_category(db_session, name="Einkauf")
+    category = create_category(db_session, user_id=member.id)
+    child_category = create_category(
+        db_session,
+        name="Baeckerei",
+        parent_category_id=category.id,
+        user_id=member.id,
+    )
+    other_category = create_category(db_session, name="Einkauf", user_id=admin.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
     first = create_expense_row(
         db_session,
@@ -157,6 +201,13 @@ def test_current_expenses_are_sorted_filtered_and_hide_voided_for_members(client
         category_id=category.id,
         created_by_user_id=member.id,
         amount=Decimal("100.00"),
+    )
+    child = create_expense_row(
+        db_session,
+        cash_period_id=cash_period.id,
+        category_id=child_category.id,
+        created_by_user_id=member.id,
+        amount=Decimal("50.00"),
     )
     second = create_expense_row(
         db_session,
@@ -177,21 +228,24 @@ def test_current_expenses_are_sorted_filtered_and_hide_voided_for_members(client
     login(client, "nuam")
     member_response = client.get("/api/v1/expenses/current?include_voided=true")
     member_filtered = client.get(f"/api/v1/expenses/current?category_id={category.id}")
+    member_foreign_filter = client.get(f"/api/v1/expenses/current?category_id={other_category.id}")
     login(client, "admin")
     admin_response = client.get("/api/v1/expenses/current?include_voided=true")
     admin_user_filter = client.get(f"/api/v1/expenses/current?created_by_user_id={member.id}")
 
-    assert [item["id"] for item in member_response.json()] == [second.id, first.id]
-    assert [item["id"] for item in member_filtered.json()] == [first.id]
-    assert [item["id"] for item in admin_response.json()] == [voided.id, second.id, first.id]
-    assert [item["created_by"]["id"] for item in admin_user_filter.json()] == [member.id]
+    assert [item["id"] for item in member_response.json()] == [second.id, child.id, first.id]
+    assert [item["id"] for item in member_filtered.json()] == [child.id, first.id]
+    assert member_foreign_filter.status_code == 404
+    assert member_foreign_filter.json()["detail"]["code"] == "category_not_found"
+    assert [item["id"] for item in admin_response.json()] == [voided.id, second.id, child.id, first.id]
+    assert [item["created_by"]["id"] for item in admin_user_filter.json()] == [member.id, member.id]
 
 
 def test_void_expense_permissions_and_summary(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
     other_member = create_test_user(db_session, username="nok", role=UserRole.member)
-    category = create_category(db_session)
+    category = create_category(db_session, user_id=member.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id, opening_amount=Decimal("1000.00"))
     own_expense = create_expense_row(
         db_session,
@@ -230,7 +284,7 @@ def test_void_expense_permissions_and_summary(client, db_session):
 
 def test_closed_cash_period_expenses_are_readable_but_not_voidable_or_editable(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
-    category = create_category(db_session)
+    category = create_category(db_session, user_id=admin.id)
     cash_period = create_cash_period(
         db_session,
         created_by_user_id=admin.id,
