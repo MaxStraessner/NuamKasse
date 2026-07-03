@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
@@ -10,6 +10,7 @@ import { PageContainer } from "../components/PageContainer";
 import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod, getCurrentCashPeriodSummary } from "../services/cashPeriodsApi";
 import { getCategories } from "../services/categoriesApi";
+import { buildCategoryTree, getActiveChildren, getCategoryPath } from "../services/categoryTree";
 import { createExpense } from "../services/expensesApi";
 import {
   decimalStringToMinorUnits,
@@ -38,6 +39,7 @@ export function HomePage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [selectedRootCategory, setSelectedRootCategory] = useState<Category | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [expenseAmount, setExpenseAmount] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
@@ -49,6 +51,12 @@ export function HomePage() {
   const enteredMinorUnits = decimalStringToMinorUnits(expenseAmount);
   const canUseServer = networkStatus.isOnline && networkStatus.isServerReachable;
   const canBook = Boolean(cashPeriod && cashSummary && remainingMinorUnits > 0 && !hasNoActiveCashPeriod && canUseServer);
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const rootCategories = categoryTree.filter((category) => category.is_active);
+  const selectedRootChildren = selectedRootCategory ? getActiveChildren(categories, selectedRootCategory.id) : [];
+  const selectedParentCategory = selectedCategory?.parent_category_id
+    ? categories.find((category) => category.id === selectedCategory.parent_category_id) ?? selectedRootCategory
+    : null;
 
   async function loadCashPeriod(silent = false) {
     if (!silent) {
@@ -132,7 +140,7 @@ export function HomePage() {
     };
   }, []);
 
-  function openExpenseDialog(category: Category) {
+  function openRootCategory(category: Category) {
     if (!canUseServer) {
       setSuccessMessage(null);
       setBookingError("Neue Buchungen sind erst wieder mit Serververbindung moeglich.");
@@ -141,7 +149,20 @@ export function HomePage() {
     if (!canBook || !category.is_active) {
       return;
     }
+    const children = getActiveChildren(categories, category.id);
+    if (children.length > 0) {
+      setSelectedRootCategory(category);
+      setSelectedCategory(null);
+      setBookingError(null);
+      setSuccessMessage(null);
+      return;
+    }
+    openExpenseDialog(category, null);
+  }
+
+  function openExpenseDialog(category: Category, rootCategory: Category | null = selectedRootCategory) {
     setSelectedCategory(category);
+    setSelectedRootCategory(rootCategory);
     setExpenseAmount("");
     setDialogError(null);
     setBookingError(null);
@@ -152,8 +173,25 @@ export function HomePage() {
     if (isSavingExpense) {
       return;
     }
+    const shouldReturnToSubcategories = Boolean(
+      selectedRootCategory
+      && selectedCategory
+      && selectedCategory.parent_category_id === selectedRootCategory.id,
+    );
     setSelectedCategory(null);
     setExpenseAmount("");
+    setDialogError(null);
+    if (!shouldReturnToSubcategories) {
+      setSelectedRootCategory(null);
+    }
+  }
+
+  function closeSubcategoryView() {
+    if (isSavingExpense) {
+      return;
+    }
+    setSelectedRootCategory(null);
+    setSelectedCategory(null);
     setDialogError(null);
   }
 
@@ -183,8 +221,9 @@ export function HomePage() {
         amount: normalizeMoneyInput(expenseAmount),
       });
       setCashSummary(response.summary);
-      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${response.expense.category.name} gespeichert.`);
+      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} fuer ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
       setSelectedCategory(null);
+      setSelectedRootCategory(null);
       setExpenseAmount("");
       setBookingError(null);
     } catch (err) {
@@ -269,37 +308,76 @@ export function HomePage() {
           </div>
         ) : null}
         {bookingError ? <p className="form-error" role="alert">{bookingError}</p> : null}
-        {!isLoadingCategories && !categoryError && categories.length === 0 ? (
+        {!isLoadingCategories && !categoryError && rootCategories.length === 0 ? (
           <p className="empty-state">
             {user?.role === "admin"
               ? "Noch keine Kategorien vorhanden. Lege in den Einstellungen eine Kategorie an."
               : "Noch keine Kategorien verfuegbar."}
           </p>
         ) : null}
-        {!isLoadingCategories && !categoryError && categories.length > 0 ? (
+        {!isLoadingCategories && !categoryError && rootCategories.length > 0 ? (
           <div className="category-grid">
-            {categories.map((category) => (
+            {rootCategories.map((category) => (
               <CategoryTile
                 category={category}
                 isDisabled={!canBook || !category.is_active}
                 key={category.id}
-                onSelect={() => openExpenseDialog(category)}
+                onSelect={() => openRootCategory(category)}
               />
             ))}
           </div>
         ) : null}
       </AppCard>
 
+      {selectedRootCategory && !selectedCategory ? (
+        <div className="dialog-backdrop" role="presentation">
+          <div aria-modal="true" className="expense-dialog" role="dialog">
+            <div className="subcategory-dialog__hero">
+              <CategoryTile category={selectedRootCategory} />
+            </div>
+            {selectedRootChildren.length === 0 ? (
+              <p className="empty-state">Fuer diese Oberkategorie gibt es noch keine aktiven Unterkategorien.</p>
+            ) : (
+              <div className="category-grid">
+                {selectedRootChildren.map((subcategory) => (
+                  <CategoryTile
+                    category={subcategory}
+                    isDisabled={!canBook || !subcategory.is_active}
+                    key={subcategory.id}
+                    onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="action-row">
+              <button className="secondary-action" onClick={closeSubcategoryView} type="button">
+                Zurueck
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {selectedCategory ? (
         <div className="dialog-backdrop" role="presentation">
           <div aria-modal="true" className="expense-dialog" role="dialog">
             <form onSubmit={(event) => void handleCreateExpense(event)}>
-              <div className="expense-dialog__category">
-                <CategoryTile category={selectedCategory} />
-                <div>
-                  <span>Neue Ausgabe</span>
-                  <strong>{selectedCategory.name}</strong>
-                </div>
+              <div className="booking-category-header">
+                <CategoryTile category={selectedCategory} showLabel={false} />
+                {selectedParentCategory ? (
+                  <div className="booking-category-pair" aria-label={getCategoryPath(categories, selectedCategory)}>
+                    <div>
+                      <span>Oberkategorie</span>
+                      <strong>{selectedParentCategory.name}</strong>
+                    </div>
+                    <div>
+                      <span>Unterkategorie</span>
+                      <strong>{selectedCategory.name}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <strong className="booking-category-single">{selectedCategory.name}</strong>
+                )}
               </div>
               <label className="amount-field">
                 <span>Betrag</span>
@@ -335,7 +413,7 @@ export function HomePage() {
                   Ausgabe speichern
                 </button>
                 <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">
-                  Abbrechen
+                  {selectedRootCategory && selectedCategory.parent_category_id === selectedRootCategory.id ? "Zurueck" : "Abbrechen"}
                 </button>
               </div>
             </form>

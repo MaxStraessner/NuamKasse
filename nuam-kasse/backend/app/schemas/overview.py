@@ -51,6 +51,7 @@ class OverviewExpenseCategory(BaseModel):
     name: str
     icon_key: str
     color_key: str
+    parent_category_id: int | None
 
     model_config = ConfigDict(from_attributes=True)
 

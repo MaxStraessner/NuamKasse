@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.user import utc_now
@@ -9,19 +9,36 @@ from app.models.user import utc_now
 
 class Category(Base):
     __tablename__ = "categories"
+    __table_args__ = (
+        CheckConstraint("parent_category_id IS NULL OR parent_category_id != id", name="ck_categories_not_self_parent"),
+        Index("ix_categories_parent_category_id", "parent_category_id"),
+        Index("ix_categories_parent_sort", "parent_category_id", "sort_order"),
+        Index("ix_categories_active_parent", "is_active", "parent_category_id"),
+        Index("ix_categories_user_id", "user_id"),
+        Index("ix_categories_user_parent", "user_id", "parent_category_id"),
+        Index("ix_categories_user_active", "user_id", "is_active"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     name_normalized: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        unique=True,
         index=True,
     )
     icon_key: Mapped[str] = mapped_column(String(40), nullable=False)
     color_key: Mapped[str] = mapped_column(String(30), nullable=False)
+    parent_category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -33,3 +50,6 @@ class Category(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+
+    parent = relationship("Category", remote_side=[id], back_populates="children")
+    children = relationship("Category", back_populates="parent")

@@ -8,6 +8,7 @@ from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category
 from app.models.expense import Expense
 from app.models.user import User, UserRole, utc_now
+from app.services.category_service import can_book_directly, get_category_by_id, get_category_filter_ids
 from app.services.cash_summary_service import get_cash_period_summary, get_spent_amount
 
 
@@ -72,13 +73,19 @@ def create_expense(
             status_code=409,
         )
 
-    category = db.get(Category, category_id)
+    category = get_category_by_id(db, category_id, user_id=created_by.id)
     if category is None:
         raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
     if not category.is_active:
         raise ExpenseServiceError(
             "Diese Kategorie ist nicht mehr verfuegbar.",
             code="category_inactive",
+            status_code=409,
+        )
+    if not can_book_directly(db, category):
+        raise ExpenseServiceError(
+            "Bitte waehle zuerst eine Unterkategorie aus.",
+            code="category_requires_subcategory",
             status_code=409,
         )
 
@@ -123,7 +130,10 @@ def list_current_expenses(
     cash_period = _get_active_cash_period_locked(db)
     query = select(Expense).where(Expense.cash_period_id == cash_period.id)
     if category_id is not None:
-        query = query.where(Expense.category_id == category_id)
+        category = get_category_by_id(db, category_id, user_id=user.id)
+        if category is None:
+            raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
+        query = query.where(Expense.category_id.in_(get_category_filter_ids(db, category)))
     if created_by_user_id is not None:
         query = query.where(Expense.created_by_user_id == created_by_user_id)
     if user.role != UserRole.admin or not include_voided:

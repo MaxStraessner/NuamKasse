@@ -6,11 +6,13 @@ import { getCategoryIcon } from "../components/categoryIconMap";
 import { PageContainer } from "../components/PageContainer";
 import {
   createCategory,
+  deleteCategory,
   getCategories,
   getCategoryCatalog,
   reorderCategories,
   updateCategory,
 } from "../services/categoriesApi";
+import { buildCategoryTree } from "../services/categoryTree";
 import type {
   Category,
   CategoryCatalog,
@@ -26,6 +28,7 @@ type CategoryForm = {
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  parent_category_id: number | null;
   is_active: boolean;
 };
 
@@ -33,6 +36,7 @@ const emptyForm: CategoryForm = {
   name: "",
   icon_key: "utensils",
   color_key: "orange",
+  parent_category_id: null,
   is_active: true,
 };
 
@@ -55,6 +59,8 @@ export function CategoryAdminPage() {
     }),
     [form],
   );
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const rootCategories = categoryTree;
 
   async function loadCategories() {
     setIsLoading(true);
@@ -87,6 +93,7 @@ export function CategoryAdminPage() {
       name: category.name,
       icon_key: isCategoryIconKey(category.icon_key) ? category.icon_key : "circle-ellipsis",
       color_key: isCategoryColorKey(category.color_key) ? category.color_key : "gray",
+      parent_category_id: category.parent_category_id,
       is_active: category.is_active,
     });
     setEditingId(category.id);
@@ -116,6 +123,7 @@ export function CategoryAdminPage() {
           name: cleanName,
           icon_key: form.icon_key,
           color_key: form.color_key,
+          parent_category_id: form.parent_category_id,
           is_active: form.is_active,
         });
         setMessage("Kategorie wurde aktualisiert.");
@@ -124,6 +132,7 @@ export function CategoryAdminPage() {
           name: cleanName,
           icon_key: form.icon_key,
           color_key: form.color_key,
+          parent_category_id: form.parent_category_id,
         });
         setMessage("Kategorie wurde angelegt.");
       }
@@ -160,23 +169,28 @@ export function CategoryAdminPage() {
     }
   }
 
-  async function moveCategory(index: number, direction: -1 | 1) {
+  async function moveCategory(siblings: Category[], index: number, direction: -1 | 1, parentCategoryId: number | null) {
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= categories.length) {
+    if (targetIndex < 0 || targetIndex >= siblings.length) {
       return;
     }
 
     const previous = categories;
-    const next = [...categories];
-    const [moved] = next.splice(index, 1);
-    next.splice(targetIndex, 0, moved);
+    const nextSiblings = [...siblings];
+    const [moved] = nextSiblings.splice(index, 1);
+    nextSiblings.splice(targetIndex, 0, moved);
+    const siblingIds = new Set(nextSiblings.map((category) => category.id));
+    const next = categories.map((category) => {
+      const nextIndex = nextSiblings.findIndex((item) => item.id === category.id);
+      return siblingIds.has(category.id) ? { ...category, sort_order: nextIndex + 1 } : category;
+    });
     setCategories(next);
     setIsSorting(true);
     setMessage(null);
     setError(null);
 
     try {
-      const saved = await reorderCategories(next.map((category) => category.id));
+      const saved = await reorderCategories(nextSiblings.map((category) => category.id), parentCategoryId);
       setCategories(saved);
       setMessage("Reihenfolge wurde gespeichert.");
     } catch (err) {
@@ -185,6 +199,84 @@ export function CategoryAdminPage() {
     } finally {
       setIsSorting(false);
     }
+  }
+
+  async function handleDeleteCategory(category: Category) {
+    const confirmed = window.confirm(
+      `Kategorie "${category.name}" dauerhaft loeschen?\n\nDas ist nur moeglich, wenn keine Buchungen oder Unterkategorien vorhanden sind.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    setMessage(null);
+    setError(null);
+    try {
+      await deleteCategory(category.id);
+      setMessage("Kategorie wurde geloescht.");
+      await loadCategories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kategorie konnte nicht geloescht werden.");
+    }
+  }
+
+  function renderCategoryCard(
+    category: Category,
+    siblings: Category[],
+    index: number,
+    parentCategoryId: number | null,
+    levelLabel: string,
+  ) {
+    return (
+      <AppCard
+        className={`category-admin-card${category.is_active ? "" : " category-admin-card--inactive"}`}
+        key={category.id}
+      >
+        <div className="category-admin-card__main">
+          <CategoryTile category={category} size="compact" isDisabled={!category.is_active} />
+          <span className={`status-pill ${category.is_active ? "status-pill--active" : ""}`}>
+            {category.is_active ? "aktiv" : "inaktiv"}
+          </span>
+          <span className="status-pill">{levelLabel}</span>
+        </div>
+
+        <div className="action-row action-row--wrap">
+          <button
+            aria-label={`Kategorie ${category.name} nach oben verschieben`}
+            className="secondary-action"
+            disabled={index === 0 || isSorting}
+            onClick={() => void moveCategory(siblings, index, -1, parentCategoryId)}
+            type="button"
+          >
+            Nach oben
+          </button>
+          <button
+            aria-label={`Kategorie ${category.name} nach unten verschieben`}
+            className="secondary-action"
+            disabled={index === siblings.length - 1 || isSorting}
+            onClick={() => void moveCategory(siblings, index, 1, parentCategoryId)}
+            type="button"
+          >
+            Nach unten
+          </button>
+        </div>
+
+        <div className="action-row">
+          <button className="secondary-action" onClick={() => startEdit(category)} type="button">
+            Bearbeiten
+          </button>
+          <button
+            className="secondary-action"
+            onClick={() => void handleActiveChange(category, !category.is_active)}
+            type="button"
+          >
+            {category.is_active ? "Deaktivieren" : "Aktivieren"}
+          </button>
+          <button className="secondary-action" onClick={() => void handleDeleteCategory(category)} type="button">
+            Loeschen
+          </button>
+        </div>
+      </AppCard>
+    );
   }
 
   return (
@@ -211,6 +303,28 @@ export function CategoryAdminPage() {
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
+          </label>
+
+          <label className="form-field">
+            <span>Ebene</span>
+            <select
+              value={form.parent_category_id ?? ""}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  parent_category_id: event.target.value ? Number(event.target.value) : null,
+                })
+              }
+            >
+              <option value="">Oberkategorie</option>
+              {rootCategories
+                .filter((category) => category.id !== editingId)
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    Unterkategorie von {category.name}
+                  </option>
+                ))}
+            </select>
           </label>
 
           <div className="form-field">
@@ -311,52 +425,25 @@ export function CategoryAdminPage() {
         {!isLoading && categories.length === 0 ? (
           <AppCard>Noch keine Kategorien vorhanden. Lege oben die erste Kategorie an.</AppCard>
         ) : null}
-        {categories.map((category, index) => (
-          <AppCard
-            className={`category-admin-card${category.is_active ? "" : " category-admin-card--inactive"}`}
-            key={category.id}
-          >
-            <div className="category-admin-card__main">
-              <CategoryTile category={category} size="compact" isDisabled={!category.is_active} />
-              <span className={`status-pill ${category.is_active ? "status-pill--active" : ""}`}>
-                {category.is_active ? "aktiv" : "inaktiv"}
-              </span>
-            </div>
-
-            <div className="action-row action-row--wrap">
-              <button
-                aria-label={`Kategorie ${category.name} nach oben verschieben`}
-                className="secondary-action"
-                disabled={index === 0 || isSorting}
-                onClick={() => void moveCategory(index, -1)}
-                type="button"
-              >
-                Nach oben
-              </button>
-              <button
-                aria-label={`Kategorie ${category.name} nach unten verschieben`}
-                className="secondary-action"
-                disabled={index === categories.length - 1 || isSorting}
-                onClick={() => void moveCategory(index, 1)}
-                type="button"
-              >
-                Nach unten
-              </button>
-            </div>
-
-            <div className="action-row">
-              <button className="secondary-action" onClick={() => startEdit(category)} type="button">
-                Bearbeiten
-              </button>
-              <button
-                className="secondary-action"
-                onClick={() => void handleActiveChange(category, !category.is_active)}
-                type="button"
-              >
-                {category.is_active ? "Deaktivieren" : "Aktivieren"}
-              </button>
-            </div>
-          </AppCard>
+        {rootCategories.map((category, index) => (
+          <div className="category-admin-group" key={category.id}>
+            {renderCategoryCard(category, rootCategories, index, null, "Oberkategorie")}
+            {category.children.length === 0 ? (
+              <AppCard>Fuer diese Oberkategorie gibt es noch keine Unterkategorien.</AppCard>
+            ) : (
+              <div className="category-admin-list category-admin-list--nested">
+                {category.children.map((subcategory, subcategoryIndex) =>
+                  renderCategoryCard(
+                    subcategory,
+                    category.children,
+                    subcategoryIndex,
+                    category.id,
+                    "Unterkategorie",
+                  ),
+                )}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </PageContainer>

@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.money import format_money
 from app.models.cash_period import CashPeriod, CashPeriodStatus
@@ -11,6 +11,7 @@ from app.models.expense import Expense
 from app.models.user import User, UserRole
 from app.services.cash_period_service import get_active_cash_period, get_cash_period_by_id
 from app.services.cash_summary_service import get_cash_period_summary
+from app.services.category_service import get_category_filter_ids
 
 PERCENT_QUANT = Decimal("0.01")
 VALID_EXPENSE_SORTS = {"created_at_desc", "created_at_asc", "amount_desc", "amount_asc"}
@@ -70,22 +71,29 @@ def _total_spending(db: Session, cash_period_id: int) -> Decimal:
 def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, object]]:
     total_spending = _total_spending(db, cash_period_id)
     total_amount = func.coalesce(func.sum(Expense.amount), Decimal("0.00"))
+    parent_category = aliased(Category)
+    root_id = func.coalesce(parent_category.id, Category.id)
+    root_name = func.coalesce(parent_category.name, Category.name)
+    root_icon = func.coalesce(parent_category.icon_key, Category.icon_key)
+    root_color = func.coalesce(parent_category.color_key, Category.color_key)
     rows = db.execute(
         select(
-            Category.id,
-            Category.name,
-            Category.icon_key,
-            Category.color_key,
+            root_id,
+            root_name,
+            root_icon,
+            root_color,
             func.count(Expense.id),
             total_amount,
         )
+        .select_from(Category)
         .join(Expense, Expense.category_id == Category.id)
+        .outerjoin(parent_category, Category.parent_category_id == parent_category.id)
         .where(
             Expense.cash_period_id == cash_period_id,
             Expense.is_voided.is_(False),
         )
-        .group_by(Category.id, Category.name, Category.icon_key, Category.color_key)
-        .order_by(total_amount.desc(), Category.name.asc())
+        .group_by(root_id, root_name, root_icon, root_color)
+        .order_by(total_amount.desc(), root_name.asc())
     ).all()
     return [
         {
@@ -173,11 +181,14 @@ def get_overview_cash_period_by_id(db: Session, cash_period_id: int) -> CashPeri
 def _validate_filter_entities(
     db: Session,
     *,
+    user: User,
     category_id: int | None,
     created_by_user_id: int | None,
 ) -> None:
-    if category_id is not None and db.get(Category, category_id) is None:
-        raise OverviewServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if category is None or category.user_id != user.id:
+            raise OverviewServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
     if created_by_user_id is not None and db.get(User, created_by_user_id) is None:
         raise OverviewServiceError("Benutzer nicht gefunden.", code="user_not_found", status_code=404)
 
@@ -187,15 +198,15 @@ def _apply_expense_filters(
     *,
     cash_period_id: int,
     user: User,
-    category_id: int | None,
+    category_ids: list[int] | None,
     created_by_user_id: int | None,
     date_from: date | None,
     date_to: date | None,
     include_voided: bool,
 ) -> Select[tuple[Expense]]:
     query = query.where(Expense.cash_period_id == cash_period_id)
-    if category_id is not None:
-        query = query.where(Expense.category_id == category_id)
+    if category_ids:
+        query = query.where(Expense.category_id.in_(category_ids))
     if created_by_user_id is not None:
         query = query.where(Expense.created_by_user_id == created_by_user_id)
     if date_from is not None:
@@ -244,13 +255,18 @@ def list_cash_period_expenses(
     if sort not in VALID_EXPENSE_SORTS:
         raise OverviewServiceError("Ungültige Sortierung.", code="invalid_sort")
 
-    _validate_filter_entities(db, category_id=category_id, created_by_user_id=created_by_user_id)
+    _validate_filter_entities(db, user=user, category_id=category_id, created_by_user_id=created_by_user_id)
+    category_ids = None
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if category is not None and category.user_id == user.id:
+            category_ids = get_category_filter_ids(db, category)
     effective_include_voided = include_voided and user.role == UserRole.admin
     filtered = _apply_expense_filters(
         select(Expense),
         cash_period_id=cash_period.id,
         user=user,
-        category_id=category_id,
+        category_ids=category_ids,
         created_by_user_id=created_by_user_id,
         date_from=date_from,
         date_to=date_to,

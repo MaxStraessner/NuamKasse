@@ -40,7 +40,13 @@ export function SettingsPage() {
 
       <AppCard>
         <Link className="primary-link" to="/change-password">
-          Eigenes Passwort ändern
+          Eigenes Passwort aendern
+        </Link>
+      </AppCard>
+
+      <AppCard>
+        <Link className="primary-link" to="/settings/categories">
+          Kategorieverwaltung
         </Link>
       </AppCard>
 
@@ -49,11 +55,6 @@ export function SettingsPage() {
           <AppCard>
             <Link className="primary-link" to="/settings/cash-periods">
               Kassenverwaltung
-            </Link>
-          </AppCard>
-          <AppCard>
-            <Link className="primary-link" to="/settings/categories">
-              Kategorieverwaltung
             </Link>
           </AppCard>
           <AppCard>

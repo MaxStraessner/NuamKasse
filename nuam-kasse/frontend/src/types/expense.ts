@@ -6,6 +6,7 @@ export type ExpenseCategory = {
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  parent_category_id: number | null;
 };
 
 export type ExpenseUser = {

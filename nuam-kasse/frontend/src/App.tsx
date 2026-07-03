@@ -47,15 +47,15 @@ const router = createBrowserRouter([
             element: <SettingsPage />,
           },
           {
+            path: "settings/categories",
+            element: <CategoryAdminPage />,
+          },
+          {
             element: <AdminRoute />,
             children: [
               {
                 path: "settings/users",
                 element: <UserAdminPage />,
-              },
-              {
-                path: "settings/categories",
-                element: <CategoryAdminPage />,
               },
               {
                 path: "settings/cash-periods",

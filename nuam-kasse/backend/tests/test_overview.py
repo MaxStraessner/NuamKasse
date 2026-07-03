@@ -43,15 +43,19 @@ def create_category(
     *,
     name: str,
     sort_order: int,
+    user_id: int,
     icon_key: str = "utensils",
     color_key: str = "orange",
     is_active: bool = True,
+    parent_category_id: int | None = None,
 ) -> Category:
     category = Category(
+        user_id=user_id,
         name=name,
         name_normalized=name.casefold(),
         icon_key=icon_key,
         color_key=color_key,
+        parent_category_id=parent_category_id,
         sort_order=sort_order,
         is_active=is_active,
     )
@@ -97,9 +101,9 @@ def seed_overview_data(db):
     other.is_active = False
     db.commit()
     cash_period = create_cash_period(db, created_by_user_id=admin.id)
-    food = create_category(db, name="Essen", sort_order=1)
-    bank = create_category(db, name="Bank", sort_order=2, icon_key="landmark", color_key="blue", is_active=False)
-    unused = create_category(db, name="Leer", sort_order=3)
+    food = create_category(db, name="Essen", sort_order=1, user_id=member.id)
+    bank = create_category(db, name="Bank", sort_order=2, icon_key="landmark", color_key="blue", is_active=False, user_id=other.id)
+    unused = create_category(db, name="Leer", sort_order=3, user_id=member.id)
     first = create_expense(
         db,
         cash_period_id=cash_period.id,
@@ -187,6 +191,68 @@ def test_current_overview_aggregates_active_period_and_hides_voided_for_member(c
     assert "Doppelt" not in response.text
 
 
+def test_overview_aggregates_and_filters_root_category_with_subcategories(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    member = create_test_user(db_session, username="nuam", role=UserRole.member)
+    cash_period = create_cash_period(db_session, created_by_user_id=admin.id, opening_amount=Decimal("1000.00"))
+    health = create_category(
+        db_session,
+        name="Gesundheit",
+        sort_order=1,
+        user_id=member.id,
+        icon_key="heart-pulse",
+        color_key="red",
+    )
+    pharmacy = create_category(
+        db_session,
+        name="Apotheke",
+        sort_order=1,
+        user_id=member.id,
+        icon_key="pill",
+        color_key="red",
+        parent_category_id=health.id,
+    )
+    create_expense(
+        db_session,
+        cash_period_id=cash_period.id,
+        category_id=health.id,
+        created_by_user_id=member.id,
+        amount=Decimal("40.00"),
+        created_at=datetime(2026, 7, 2, 8, 0, tzinfo=timezone.utc),
+    )
+    child_expense = create_expense(
+        db_session,
+        cash_period_id=cash_period.id,
+        category_id=pharmacy.id,
+        created_by_user_id=member.id,
+        amount=Decimal("60.00"),
+        created_at=datetime(2026, 7, 3, 8, 0, tzinfo=timezone.utc),
+    )
+    login(client, "nuam")
+
+    overview = client.get("/api/v1/overview/current")
+    filtered_root = client.get(f"/api/v1/overview/cash-periods/{cash_period.id}/expenses?category_id={health.id}")
+    filtered_child = client.get(f"/api/v1/overview/cash-periods/{cash_period.id}/expenses?category_id={pharmacy.id}")
+
+    assert overview.status_code == 200
+    assert overview.json()["categories"] == [
+        {
+            "category_id": health.id,
+            "category_name": "Gesundheit",
+            "icon_key": "heart-pulse",
+            "color_key": "red",
+            "expense_count": 2,
+            "total_amount": "100.00",
+            "percentage_of_spending": "100.00",
+        }
+    ]
+    assert filtered_root.status_code == 200
+    assert filtered_root.json()["total"] == 2
+    assert filtered_child.status_code == 200
+    assert filtered_child.json()["total"] == 1
+    assert filtered_child.json()["items"][0]["id"] == child_expense.id
+
+
 def test_overview_current_requires_login_completed_password_and_active_period(client, db_session):
     response = client.get("/api/v1/overview/current")
     assert response.status_code == 401
@@ -214,7 +280,7 @@ def test_admin_can_read_historical_overview_and_member_cannot(client, db_session
         status=CashPeriodStatus.closed,
         opening_amount=Decimal("500.00"),
     )
-    category = create_category(db_session, name="Historisch", sort_order=1, is_active=False)
+    category = create_category(db_session, name="Historisch", sort_order=1, is_active=False, user_id=member.id)
     create_expense(
         db_session,
         cash_period_id=closed.id,
@@ -245,9 +311,15 @@ def test_expense_list_filters_sorting_pagination_and_admin_voided_access(client,
         f"/api/v1/overview/cash-periods/{cash_period.id}/expenses"
         f"?include_voided=true&category_id={food.id}&limit=10"
     )
+    foreign_category = client.get(
+        f"/api/v1/overview/cash-periods/{cash_period.id}/expenses"
+        f"?category_id={bank.id}"
+    )
     assert member_list.status_code == 200
     assert member_list.json()["total"] == 1
     assert [item["id"] for item in member_list.json()["items"]] == [first.id]
+    assert foreign_category.status_code == 404
+    assert foreign_category.json()["detail"]["code"] == "category_not_found"
 
     login(client, "admin")
     admin_list = client.get(
