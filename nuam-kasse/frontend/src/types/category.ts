@@ -54,6 +54,9 @@ export type Category = {
   sort_order: number;
   is_active: boolean;
   archived_at: string | null;
+  has_custom_image?: boolean;
+  image_url?: string | null;
+  image_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 };

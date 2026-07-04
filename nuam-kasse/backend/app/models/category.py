@@ -32,6 +32,14 @@ class Category(Base):
     )
     icon_key: Mapped[str] = mapped_column(String(40), nullable=False)
     color_key: Mapped[str] = mapped_column(String(30), nullable=False)
+    image_path: Mapped[str] = mapped_column(String(500), nullable=True)
+    image_preview_path: Mapped[str] = mapped_column(String(500), nullable=True)
+    image_original_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    image_mime_type: Mapped[str] = mapped_column(String(80), nullable=True)
+    image_size: Mapped[int] = mapped_column(Integer, nullable=True)
+    image_width: Mapped[int] = mapped_column(Integer, nullable=True)
+    image_height: Mapped[int] = mapped_column(Integer, nullable=True)
+    image_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     parent_category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id", ondelete="RESTRICT"),
         nullable=True,

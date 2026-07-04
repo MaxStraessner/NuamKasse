@@ -39,6 +39,8 @@ def settings(tmp_path) -> Settings:
         session_ttl_hours=168,
         session_cookie_secure=False,
         session_cookie_samesite="lax",
+        category_image_storage_path=str(tmp_path / "uploads" / "category-images"),
+        category_image_max_bytes=5 * 1024 * 1024,
     )
 
 

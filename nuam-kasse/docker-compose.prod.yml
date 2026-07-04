@@ -39,6 +39,8 @@ services:
       SESSION_COOKIE_SECURE: "true"
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-}
+      CATEGORY_IMAGE_STORAGE_PATH: ${CATEGORY_IMAGE_STORAGE_PATH:-/app/uploads/category-images}
+      CATEGORY_IMAGE_MAX_BYTES: ${CATEGORY_IMAGE_MAX_BYTES:-5242880}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       db:
@@ -64,6 +66,10 @@ services:
       SESSION_COOKIE_SECURE: "true"
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-}
+      CATEGORY_IMAGE_STORAGE_PATH: ${CATEGORY_IMAGE_STORAGE_PATH:-/app/uploads/category-images}
+      CATEGORY_IMAGE_MAX_BYTES: ${CATEGORY_IMAGE_MAX_BYTES:-5242880}
+    volumes:
+      - nuam_kasse_category_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -109,6 +115,8 @@ volumes:
     name: nuam_kasse_postgres_data
   nuam_kasse_backups:
     name: nuam_kasse_backups
+  nuam_kasse_category_uploads:
+    name: nuam_kasse_category_uploads
 
 networks:
   nuam_kasse_internal:

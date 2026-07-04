@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import require_password_change_completed
+from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.category import Category
 from app.models.user import User
@@ -21,6 +23,12 @@ from app.services.category_service import (
     list_categories,
     reorder_categories,
     update_category,
+)
+from app.services.category_image_service import (
+    CategoryImageError,
+    get_category_preview_path,
+    remove_category_image,
+    replace_category_image,
 )
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -120,10 +128,11 @@ def delete_category_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_password_change_completed),
+    settings: Settings = Depends(get_settings),
 ) -> None:
     category = _get_category(db, category_id, user)
     try:
-        delete_category(db, category=category)
+        delete_category(db, category=category, settings=settings)
     except CategoryServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -141,3 +150,60 @@ def update_category_endpoint(
         return update_category(db, category, **update_data)
     except CategoryServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{category_id}/image", response_model=CategoryRead)
+async def upload_category_image_endpoint(
+    category_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+    settings: Settings = Depends(get_settings),
+) -> Category:
+    category = _get_category(db, category_id, user)
+    content = await image.read(settings.category_image_max_bytes + 1)
+    try:
+        return replace_category_image(
+            db,
+            category=category,
+            content=content,
+            original_name=image.filename,
+            settings=settings,
+        )
+    except CategoryImageError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.get("/{category_id}/image")
+def read_category_image_endpoint(
+    category_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    category = _get_category(db, category_id, user)
+    path = get_category_preview_path(category, settings)
+    if path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bild nicht gefunden.",
+        )
+    return FileResponse(
+        path,
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "private, max-age=86400",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete("/{category_id}/image", response_model=CategoryRead)
+def delete_category_image_endpoint(
+    category_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+    settings: Settings = Depends(get_settings),
+) -> Category:
+    category = _get_category(db, category_id, user)
+    return remove_category_image(db, category=category, settings=settings)

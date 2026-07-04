@@ -9,9 +9,11 @@ from app.core.category_icons import (
     CATEGORY_ICONS,
     is_valid_category_icon,
 )
+from app.core.config import Settings
 from app.models.category import Category
 from app.models.expense import Expense
 from app.models.user import User, utc_now
+from app.services.category_image_service import delete_category_image_paths
 
 
 class CategoryServiceError(ValueError):
@@ -396,7 +398,7 @@ def reorder_categories(
     )))
 
 
-def delete_category(db: Session, *, category: Category) -> None:
+def delete_category(db: Session, *, category: Category, settings: Settings | None = None) -> None:
     expense_count = int(
         db.scalar(select(func.count(Expense.id)).where(Expense.category_id == category.id)) or 0
     )
@@ -412,8 +414,11 @@ def delete_category(db: Session, *, category: Category) -> None:
     )
     if child_count:
         raise CategoryServiceError("Oberkategorien mit Unterkategorien koennen nicht geloescht werden.")
+    image_path = category.image_path
+    image_preview_path = category.image_preview_path
     db.delete(category)
     db.commit()
+    delete_category_image_paths(image_path, image_preview_path, settings)
 
 
 def get_category_catalog() -> dict[str, object]:

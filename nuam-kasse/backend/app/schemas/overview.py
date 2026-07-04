@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 
 from app.core.money import format_money
 from app.models.cash_period import CashPeriodStatus
@@ -33,9 +33,24 @@ class OverviewCategorySummary(BaseModel):
     category_name: str
     icon_key: str
     color_key: str
+    image_updated_at: datetime | None = None
+    image_preview_path: str | None = Field(default=None, exclude=True)
     expense_count: int
     total_amount: str
     percentage_of_spending: str
+
+    @computed_field
+    @property
+    def has_custom_image(self) -> bool:
+        return bool(self.image_preview_path and self.image_updated_at)
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if not self.has_custom_image:
+            return None
+        version = self.image_updated_at.isoformat()
+        return f"/api/v1/categories/{self.category_id}/image?v={version}"
 
 
 class OverviewUserSummary(BaseModel):
@@ -52,6 +67,21 @@ class OverviewExpenseCategory(BaseModel):
     icon_key: str
     color_key: str
     parent_category_id: int | None
+    image_updated_at: datetime | None = None
+    image_preview_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def has_custom_image(self) -> bool:
+        return bool(self.image_preview_path and self.image_updated_at)
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if not self.has_custom_image:
+            return None
+        version = self.image_updated_at.isoformat()
+        return f"/api/v1/categories/{self.id}/image?v={version}"
 
     model_config = ConfigDict(from_attributes=True)
 

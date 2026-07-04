@@ -683,6 +683,174 @@ describe("Categories", () => {
     expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
   });
+
+  test("category image management previews, uploads, replaces, and removes images", async () => {
+    window.history.pushState({}, "", "/settings/categories");
+    const createObjectUrlSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:local-preview");
+    const revokeObjectUrlSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    type TestCategoryWithImage = (typeof essenCategory | typeof apothekeCategory) & {
+      has_custom_image: boolean;
+      image_url: string | null;
+      image_updated_at: string | null;
+    };
+    let categories: TestCategoryWithImage[] = [
+      { ...essenCategory, has_custom_image: false, image_url: null, image_updated_at: null },
+      { ...apothekeCategory, has_custom_image: false, image_url: null, image_updated_at: null },
+    ];
+    const uploadBodies: BodyInit[] = [];
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        naturalWidth = 32;
+        naturalHeight = 18;
+        width = 32;
+        height = 18;
+
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function toBlob(callback) {
+      callback(new Blob(["cropped"], { type: "image/webp" }));
+    });
+
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/categories/catalog")) {
+        return jsonResponse(categoryCatalog);
+      }
+      if (url.includes("/categories?include_inactive=true")) {
+        return jsonResponse(categories);
+      }
+      if (url.endsWith("/categories") && (!options?.method || options.method === "GET")) {
+        return jsonResponse(categories.filter((category) => category.is_active));
+      }
+      if (url.endsWith("/categories/1/image") && options?.method === "POST") {
+        uploadBodies.push(options.body as BodyInit);
+        const version = uploadBodies.length;
+        categories = categories.map((category) =>
+          category.id === essenCategory.id
+            ? {
+                ...category,
+                has_custom_image: true,
+                image_url: `/api/v1/categories/1/image?v=${version}`,
+                image_updated_at: `2026-07-04T12:00:0${version}Z`,
+              }
+            : category,
+        );
+        return jsonResponse(categories[0]);
+      }
+      if (url.endsWith("/categories/1/image") && options?.method === "DELETE") {
+        categories = categories.map((category) =>
+          category.id === essenCategory.id
+            ? { ...category, has_custom_image: false, image_url: null, image_updated_at: null }
+            : category,
+        );
+        return jsonResponse(categories[0]);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    const fileInput = screen.getByLabelText("Bilddatei fuer Essen auswaehlen");
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["root"], "essen.png", { type: "image/png" })] },
+    });
+    expect(screen.getByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Ausgewaehltes Bild fuer Essen" })).toHaveAttribute(
+      "src",
+      "blob:local-preview",
+    );
+    fireEvent.change(screen.getByLabelText("Zoom fuer Bildausschnitt"), { target: { value: "1.6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ausschnitt uebernehmen" }));
+    expect(await screen.findByText("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Bild der Kategorie Essen" })).toHaveAttribute("src", "blob:local-preview");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Bild hochladen" })[0]);
+    expect(await screen.findByText("Bild wurde hochgeladen.")).toBeInTheDocument();
+    expect(uploadBodies[0]).toBeInstanceOf(FormData);
+    expect((uploadBodies[0] as FormData).get("image")).toMatchObject({
+      name: "essen-ausschnitt.webp",
+      type: "image/webp",
+    });
+    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(2);
+    screen.getAllByRole("img", { name: "Bild der Kategorie Essen" }).forEach((image) => {
+      expect(image).toHaveAttribute("src", "/api/v1/categories/1/image?v=1");
+    });
+
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["root-replaced"], "essen.webp", { type: "image/webp" })] },
+    });
+    expect(screen.getByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ausschnitt uebernehmen" }));
+    await screen.findByText("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.");
+    fireEvent.click(screen.getByRole("button", { name: "Bild ersetzen" }));
+    expect(await screen.findByText("Bild wurde ersetzt.")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(2);
+    screen.getAllByRole("img", { name: "Bild der Kategorie Essen" }).forEach((image) => {
+      expect(image).toHaveAttribute("src", "/api/v1/categories/1/image?v=2");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Bild entfernen" }));
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Eigenes Bild entfernen?\n\nAnschliessend wird wieder das Standard Icon dieser Kategorie angezeigt.",
+    );
+    expect(await screen.findByText("Eigenes Bild wurde entfernt.")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Bild der Kategorie Essen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Bild der Kategorie Apotheke" })).not.toBeInTheDocument();
+    expect(createObjectUrlSpy).toHaveBeenCalled();
+    expect(revokeObjectUrlSpy).toHaveBeenCalled();
+  });
+
+  test("category image management rejects unsupported and oversized local files", async () => {
+    window.history.pushState({}, "", "/settings/categories");
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(memberUser);
+      }
+      if (url.endsWith("/categories/catalog")) {
+        return jsonResponse(categoryCatalog);
+      }
+      if (url.includes("/categories?include_inactive=true")) {
+        return jsonResponse([essenCategory]);
+      }
+      if (url.endsWith("/categories")) {
+        return jsonResponse([essenCategory]);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    const fileInput = screen.getByLabelText("Bilddatei fuer Essen auswaehlen");
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["<svg></svg>"], "bad.svg", { type: "image/svg+xml" })] },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Dieses Dateiformat wird nicht unterstuetzt. Erlaubt sind PNG, JPG, JPEG und WEBP.",
+    );
+
+    fireEvent.change(fileInput, {
+      target: { files: [new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.jpg", { type: "image/jpeg" })] },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Das ausgewaehlte Bild ist zu gross. Bitte verwende eine Datei mit hoechstens 5 MB.",
+    );
+    expect(screen.getAllByRole("button", { name: "Bild hochladen" })[0]).toBeDisabled();
+  });
 });
 
 describe("Expenses", () => {

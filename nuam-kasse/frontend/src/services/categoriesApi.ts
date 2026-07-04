@@ -41,6 +41,21 @@ export function updateCategory(categoryId: number, payload: CategoryUpdate): Pro
   });
 }
 
+export function uploadCategoryImage(categoryId: number, file: File): Promise<Category> {
+  const body = new FormData();
+  body.append("image", file);
+  return apiRequest<Category>(`/categories/${categoryId}/image`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function deleteCategoryImage(categoryId: number): Promise<Category> {
+  return apiRequest<Category>(`/categories/${categoryId}/image`, {
+    method: "DELETE",
+  });
+}
+
 export function archiveCategory(categoryId: number): Promise<Category> {
   return apiRequest<Category>(`/categories/${categoryId}/archive`, {
     method: "POST",

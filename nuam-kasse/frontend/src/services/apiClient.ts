@@ -22,14 +22,21 @@ export async function apiRequest<TResponse>(
   options: ApiRequestOptions = {},
 ): Promise<TResponse> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const body = options.body;
+  const isFormData = body instanceof FormData;
+  const requestBody: BodyInit | undefined = isFormData
+    ? body
+    : body == null
+      ? undefined
+      : JSON.stringify(body);
   const response = await fetch(`${apiBaseUrl}${normalizedPath}`, {
     method: options.method ?? "GET",
     credentials: "include",
     headers: {
       Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(body != null && !isFormData ? { "Content-Type": "application/json" } : {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: requestBody,
   });
 
   if (!response.ok) {

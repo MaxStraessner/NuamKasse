@@ -72,6 +72,7 @@ function categoryAsTile(category: CashPeriodOverview["categories"][number]) {
     name: category.category_name,
     icon_key: category.icon_key,
     color_key: category.color_key,
+    image_url: category.image_url,
   };
 }
 

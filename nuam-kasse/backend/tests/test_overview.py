@@ -154,18 +154,24 @@ def test_current_overview_aggregates_active_period_and_hides_voided_for_member(c
             "category_name": "Essen",
             "icon_key": "utensils",
             "color_key": "orange",
+            "image_updated_at": None,
             "expense_count": 1,
             "total_amount": "250.00",
             "percentage_of_spending": "62.50",
+            "has_custom_image": False,
+            "image_url": None,
         },
         {
             "category_id": bank.id,
             "category_name": "Bank",
             "icon_key": "landmark",
             "color_key": "blue",
+            "image_updated_at": None,
             "expense_count": 1,
             "total_amount": "150.00",
             "percentage_of_spending": "37.50",
+            "has_custom_image": False,
+            "image_url": None,
         },
     ]
     assert unused.id not in [item["category_id"] for item in data["categories"]]
@@ -241,9 +247,12 @@ def test_overview_aggregates_and_filters_root_category_with_subcategories(client
             "category_name": "Gesundheit",
             "icon_key": "heart-pulse",
             "color_key": "red",
+            "image_updated_at": None,
             "expense_count": 2,
             "total_amount": "100.00",
             "percentage_of_spending": "100.00",
+            "has_custom_image": False,
+            "image_url": None,
         }
     ]
     assert filtered_root.status_code == 200
