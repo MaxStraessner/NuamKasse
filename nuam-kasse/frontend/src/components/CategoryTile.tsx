@@ -1,11 +1,12 @@
 import { isCategoryColorKey } from "../types/category";
-import { getCategoryIcon } from "./categoryIconMap";
+import { CategoryVisual } from "./CategoryVisual";
 
 type CategoryTileProps = {
   category: {
     name: string;
     icon_key: string;
     color_key: string;
+    image_url?: string | null;
   };
   size?: "regular" | "compact";
   isDisabled?: boolean;
@@ -20,14 +21,11 @@ export function CategoryTile({
   showLabel = true,
   onSelect,
 }: CategoryTileProps) {
-  const Icon = getCategoryIcon(category.icon_key);
   const colorKey = isCategoryColorKey(category.color_key) ? category.color_key : "gray";
   const className = `category-tile category-tile--${size}${showLabel ? "" : " category-tile--icon-only"}${isDisabled ? " category-tile--disabled" : ""}`;
   const content = (
     <>
-      <span className="category-tile__icon" aria-hidden="true">
-        <Icon strokeWidth={2.35} />
-      </span>
+      <CategoryVisual icon={category.icon_key} imageUrl={category.image_url} name={category.name} />
       {showLabel ? <strong>{category.name}</strong> : null}
     </>
   );
@@ -38,6 +36,7 @@ export function CategoryTile({
         aria-label={`Kategorie ${category.name}`}
         className={className}
         data-category-color={colorKey}
+        data-has-custom-image={category.image_url ? "true" : "false"}
         disabled={isDisabled}
         onClick={onSelect}
         type="button"
@@ -52,6 +51,7 @@ export function CategoryTile({
       aria-label={`Kategorie ${category.name}`}
       className={className}
       data-category-color={colorKey}
+      data-has-custom-image={category.image_url ? "true" : "false"}
       role="group"
     >
       {content}

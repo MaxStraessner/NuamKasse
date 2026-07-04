@@ -24,6 +24,9 @@ export type CategorySummary = {
   category_name: string;
   icon_key: string;
   color_key: string;
+  has_custom_image?: boolean;
+  image_url?: string | null;
+  image_updated_at?: string | null;
   expense_count: number;
   total_amount: string;
   percentage_of_spending: string;
@@ -48,6 +51,9 @@ export type OverviewExpenseCategory = {
   icon_key: string;
   color_key: string;
   parent_category_id: number | null;
+  has_custom_image?: boolean;
+  image_url?: string | null;
+  image_updated_at?: string | null;
 };
 
 export type OverviewExpense = {

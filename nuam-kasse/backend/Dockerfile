@@ -16,6 +16,8 @@ COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
 
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
+
 USER app
 
 EXPOSE 8000

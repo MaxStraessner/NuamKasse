@@ -29,9 +29,13 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nuam_app}:${POSTGRES_PASSWORD:-nuam_local_dev_password}@db:5432/${POSTGRES_DB:-nuam_kasse}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      CATEGORY_IMAGE_STORAGE_PATH: ${CATEGORY_IMAGE_STORAGE_PATH:-/app/uploads/category-images}
+      CATEGORY_IMAGE_MAX_BYTES: ${CATEGORY_IMAGE_MAX_BYTES:-5242880}
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - category_uploads:/app/uploads
     ports:
       - "8000:8000"
     healthcheck:
@@ -72,6 +76,7 @@ services:
 
 volumes:
   postgres_data:
+  category_uploads:
 
 networks:
   nuam_internal:

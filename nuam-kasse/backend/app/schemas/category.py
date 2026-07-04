@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class CategoryCatalogItem(BaseModel):
@@ -39,8 +39,24 @@ class CategoryRead(BaseModel):
     sort_order: int
     is_active: bool
     archived_at: datetime | None
+    image_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def has_custom_image(self) -> bool:
+        return bool(getattr(self, "image_preview_path", None) and self.image_updated_at)
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if not self.has_custom_image:
+            return None
+        version = self.image_updated_at.isoformat()
+        return f"/api/v1/categories/{self.id}/image?v={version}"
+
+    image_preview_path: str | None = Field(default=None, exclude=True)
 
     model_config = ConfigDict(from_attributes=True)
 

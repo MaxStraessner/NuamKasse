@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 
 from app.core.money import format_money
 from app.schemas.cash_period import CashPeriodSummary
@@ -13,6 +13,21 @@ class ExpenseCategoryRead(BaseModel):
     icon_key: str
     color_key: str
     parent_category_id: int | None
+    image_updated_at: datetime | None = None
+    image_preview_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def has_custom_image(self) -> bool:
+        return bool(self.image_preview_path and self.image_updated_at)
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if not self.has_custom_image:
+            return None
+        version = self.image_updated_at.isoformat()
+        return f"/api/v1/categories/{self.id}/image?v={version}"
 
     model_config = ConfigDict(from_attributes=True)
 

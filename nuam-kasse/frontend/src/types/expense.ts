@@ -7,6 +7,9 @@ export type ExpenseCategory = {
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
   parent_category_id: number | null;
+  has_custom_image?: boolean;
+  image_url?: string | null;
+  image_updated_at?: string | null;
 };
 
 export type ExpenseUser = {

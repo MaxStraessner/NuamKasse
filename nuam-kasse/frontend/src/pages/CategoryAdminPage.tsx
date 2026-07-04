@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppCard } from "../components/AppCard";
 import { CategoryTile } from "../components/CategoryTile";
@@ -6,11 +6,13 @@ import { getCategoryIcon } from "../components/categoryIconMap";
 import { PageContainer } from "../components/PageContainer";
 import {
   createCategory,
+  deleteCategoryImage,
   deleteCategory,
   getCategories,
   getCategoryCatalog,
   reorderCategories,
   updateCategory,
+  uploadCategoryImage,
 } from "../services/categoriesApi";
 import { buildCategoryTree } from "../services/categoryTree";
 import type {
@@ -39,6 +41,373 @@ const emptyForm: CategoryForm = {
   parent_category_id: null,
   is_active: true,
 };
+
+const allowedImageTypes = ["image/png", "image/jpeg", "image/webp"];
+const maxImageBytes = 5 * 1024 * 1024;
+const cropOutputSize = 512;
+
+type ImageCrop = {
+  positionX: number;
+  positionY: number;
+  zoom: number;
+};
+
+type PendingCrop = {
+  file: File;
+  sourceUrl: string;
+  crop: ImageCrop;
+};
+
+const defaultCrop: ImageCrop = {
+  positionX: 50,
+  positionY: 50,
+  zoom: 1,
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function loadCropImage(sourceUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Das Bild konnte nicht fuer den Ausschnitt geladen werden."));
+    image.src = sourceUrl;
+  });
+}
+
+async function createCroppedImageFile(file: File, sourceUrl: string, crop: ImageCrop): Promise<File> {
+  const image = await loadCropImage(sourceUrl);
+  const naturalWidth = image.naturalWidth || image.width;
+  const naturalHeight = image.naturalHeight || image.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = cropOutputSize;
+  canvas.height = cropOutputSize;
+  const context = canvas.getContext("2d");
+  if (!context || naturalWidth <= 0 || naturalHeight <= 0) {
+    throw new Error("Der Bildausschnitt konnte nicht erzeugt werden.");
+  }
+
+  const sourceSize = Math.max(1, Math.min(naturalWidth, naturalHeight) / crop.zoom);
+  const centerX = (naturalWidth * crop.positionX) / 100;
+  const centerY = (naturalHeight * crop.positionY) / 100;
+  const sourceX = clamp(centerX - sourceSize / 2, 0, Math.max(0, naturalWidth - sourceSize));
+  const sourceY = clamp(centerY - sourceSize / 2, 0, Math.max(0, naturalHeight - sourceSize));
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceSize,
+    sourceSize,
+    0,
+    0,
+    cropOutputSize,
+    cropOutputSize,
+  );
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (nextBlob) => {
+        if (nextBlob) {
+          resolve(nextBlob);
+        } else {
+          reject(new Error("Der Bildausschnitt konnte nicht gespeichert werden."));
+        }
+      },
+      "image/webp",
+      0.9,
+    );
+  });
+
+  const cleanName = file.name.replace(/\.[^.]+$/, "") || "kategorie";
+  return new File([blob], `${cleanName}-ausschnitt.webp`, { type: "image/webp" });
+}
+
+type CategoryImageCropDialogProps = {
+  pendingCrop: PendingCrop;
+  categoryName: string;
+  isProcessing: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onCropChange: (crop: ImageCrop) => void;
+};
+
+function CategoryImageCropDialog({
+  pendingCrop,
+  categoryName,
+  isProcessing,
+  onCancel,
+  onConfirm,
+  onCropChange,
+}: CategoryImageCropDialogProps) {
+  const { crop, sourceUrl } = pendingCrop;
+
+  return (
+    <div className="crop-dialog-backdrop" role="presentation">
+      <div
+        aria-label={`Bildausschnitt fuer ${categoryName} waehlen`}
+        aria-modal="true"
+        className="crop-dialog"
+        role="dialog"
+      >
+        <div className="crop-dialog__header">
+          <span>Bildausschnitt waehlen</span>
+          <small>Der runde Bereich wird spaeter als Kategorie-Bild angezeigt.</small>
+        </div>
+
+        <div className="crop-dialog__stage">
+          <div className="crop-dialog__circle" aria-label="Runder Bildausschnitt">
+            <img
+              alt={`Ausgewaehltes Bild fuer ${categoryName}`}
+              src={sourceUrl}
+              style={{
+                objectPosition: `${crop.positionX}% ${crop.positionY}%`,
+                transform: `scale(${crop.zoom})`,
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="crop-dialog__controls">
+          <label>
+            <span>Zoom</span>
+            <input
+              aria-label="Zoom fuer Bildausschnitt"
+              max="3"
+              min="1"
+              onChange={(event) => onCropChange({ ...crop, zoom: Number(event.target.value) })}
+              step="0.05"
+              type="range"
+              value={crop.zoom}
+            />
+          </label>
+          <label>
+            <span>Horizontal</span>
+            <input
+              aria-label="Bildausschnitt horizontal verschieben"
+              max="100"
+              min="0"
+              onChange={(event) => onCropChange({ ...crop, positionX: Number(event.target.value) })}
+              step="1"
+              type="range"
+              value={crop.positionX}
+            />
+          </label>
+          <label>
+            <span>Vertikal</span>
+            <input
+              aria-label="Bildausschnitt vertikal verschieben"
+              max="100"
+              min="0"
+              onChange={(event) => onCropChange({ ...crop, positionY: Number(event.target.value) })}
+              step="1"
+              type="range"
+              value={crop.positionY}
+            />
+          </label>
+        </div>
+
+        <div className="action-row action-row--wrap">
+          <button className="primary-action" disabled={isProcessing} onClick={onConfirm} type="button">
+            {isProcessing ? "Ausschnitt wird erstellt..." : "Ausschnitt uebernehmen"}
+          </button>
+          <button className="secondary-action" disabled={isProcessing} onClick={onCancel} type="button">
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type CategoryImageControlProps = {
+  category: Category;
+  onCategoryUpdated: (category: Category) => void;
+};
+
+function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageControlProps) {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
+  const pendingCropUrlRef = useRef<string | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return undefined;
+    }
+    const nextPreviewUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(nextPreviewUrl);
+    return () => URL.revokeObjectURL(nextPreviewUrl);
+  }, [selectedFile]);
+
+  useEffect(() => () => {
+    if (pendingCropUrlRef.current) {
+      URL.revokeObjectURL(pendingCropUrlRef.current);
+    }
+  }, []);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setMessage(null);
+    setError(null);
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    if (!allowedImageTypes.includes(file.type)) {
+      setSelectedFile(null);
+      setError("Dieses Dateiformat wird nicht unterstuetzt. Erlaubt sind PNG, JPG, JPEG und WEBP.");
+      return;
+    }
+    if (file.size > maxImageBytes) {
+      setSelectedFile(null);
+      setError("Das ausgewaehlte Bild ist zu gross. Bitte verwende eine Datei mit hoechstens 5 MB.");
+      return;
+    }
+    if (pendingCrop) {
+      URL.revokeObjectURL(pendingCrop.sourceUrl);
+    }
+    setSelectedFile(null);
+    const sourceUrl = URL.createObjectURL(file);
+    pendingCropUrlRef.current = sourceUrl;
+    setPendingCrop({
+      file,
+      sourceUrl,
+      crop: defaultCrop,
+    });
+  }
+
+  function handleCancelCrop() {
+    if (pendingCrop) {
+      URL.revokeObjectURL(pendingCrop.sourceUrl);
+    }
+    pendingCropUrlRef.current = null;
+    setPendingCrop(null);
+  }
+
+  async function handleConfirmCrop() {
+    if (!pendingCrop) {
+      return;
+    }
+    setIsCropping(true);
+    setError(null);
+    try {
+      const croppedFile = await createCroppedImageFile(pendingCrop.file, pendingCrop.sourceUrl, pendingCrop.crop);
+      URL.revokeObjectURL(pendingCrop.sourceUrl);
+      pendingCropUrlRef.current = null;
+      setPendingCrop(null);
+      setSelectedFile(croppedFile);
+      setMessage("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Der Bildausschnitt konnte nicht erstellt werden.");
+    } finally {
+      setIsCropping(false);
+    }
+  }
+
+  async function handleUpload() {
+    if (!selectedFile) {
+      setError("Bitte waehle zuerst ein Bild aus.");
+      return;
+    }
+    setIsUploading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const updated = await uploadCategoryImage(category.id, selectedFile);
+      onCategoryUpdated(updated);
+      setSelectedFile(null);
+      setMessage(category.has_custom_image ? "Bild wurde ersetzt." : "Bild wurde hochgeladen.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Das Bild konnte nicht hochgeladen werden.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      "Eigenes Bild entfernen?\n\nAnschliessend wird wieder das Standard Icon dieser Kategorie angezeigt.",
+    );
+    if (!confirmed) {
+      return;
+    }
+    setIsDeleting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const updated = await deleteCategoryImage(category.id);
+      onCategoryUpdated(updated);
+      setSelectedFile(null);
+      setMessage("Eigenes Bild wurde entfernt.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Das Bild konnte nicht geloescht werden.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const isBusy = isUploading || isDeleting || isCropping;
+  const displayCategory = previewUrl
+    ? { ...category, image_url: previewUrl }
+    : category;
+
+  return (
+    <div className="category-image-control">
+      <div>
+        <span>Eigenes Bild</span>
+        <small>PNG, JPG, JPEG oder WEBP bis 5 MB. Ohne eigenes Bild wird weiterhin das ausgewaehlte Icon verwendet.</small>
+      </div>
+      <div className="category-image-control__preview">
+        <CategoryTile category={displayCategory} size="compact" />
+      </div>
+      <input
+        aria-label={`Bilddatei fuer ${category.name} auswaehlen`}
+        accept="image/png,image/jpeg,image/webp"
+        className="category-image-control__input"
+        disabled={isBusy}
+        onChange={handleFileChange}
+        type="file"
+      />
+      <div className="action-row action-row--wrap">
+        <button
+          className="primary-action"
+          disabled={!selectedFile || isBusy}
+          onClick={() => void handleUpload()}
+          type="button"
+        >
+          {category.has_custom_image ? "Bild ersetzen" : "Bild hochladen"}
+        </button>
+        {category.has_custom_image ? (
+          <button className="secondary-action" disabled={isBusy} onClick={() => void handleDelete()} type="button">
+            Bild entfernen
+          </button>
+        ) : null}
+      </div>
+      {isUploading ? <p className="form-success" role="status">Bild wird hochgeladen...</p> : null}
+      {message ? <p className="form-success" role="status">{message}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {pendingCrop ? (
+        <CategoryImageCropDialog
+          categoryName={category.name}
+          isProcessing={isCropping}
+          onCancel={handleCancelCrop}
+          onConfirm={() => void handleConfirmCrop()}
+          onCropChange={(crop) => setPendingCrop((current) => (current ? { ...current, crop } : current))}
+          pendingCrop={pendingCrop}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 export function CategoryAdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -219,6 +588,10 @@ export function CategoryAdminPage() {
     }
   }
 
+  function handleCategoryUpdated(updated: Category) {
+    setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+  }
+
   function renderCategoryCard(
     category: Category,
     siblings: Category[],
@@ -275,6 +648,8 @@ export function CategoryAdminPage() {
             Loeschen
           </button>
         </div>
+
+        <CategoryImageControl category={category} onCategoryUpdated={handleCategoryUpdated} />
       </AppCard>
     );
   }

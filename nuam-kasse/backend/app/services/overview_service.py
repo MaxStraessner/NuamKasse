@@ -76,12 +76,16 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
     root_name = func.coalesce(parent_category.name, Category.name)
     root_icon = func.coalesce(parent_category.icon_key, Category.icon_key)
     root_color = func.coalesce(parent_category.color_key, Category.color_key)
+    root_image_preview_path = func.coalesce(parent_category.image_preview_path, Category.image_preview_path)
+    root_image_updated_at = func.coalesce(parent_category.image_updated_at, Category.image_updated_at)
     rows = db.execute(
         select(
             root_id,
             root_name,
             root_icon,
             root_color,
+            root_image_preview_path,
+            root_image_updated_at,
             func.count(Expense.id),
             total_amount,
         )
@@ -92,7 +96,7 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
             Expense.cash_period_id == cash_period_id,
             Expense.is_voided.is_(False),
         )
-        .group_by(root_id, root_name, root_icon, root_color)
+        .group_by(root_id, root_name, root_icon, root_color, root_image_preview_path, root_image_updated_at)
         .order_by(total_amount.desc(), root_name.asc())
     ).all()
     return [
@@ -101,11 +105,13 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
             "category_name": name,
             "icon_key": icon_key,
             "color_key": color_key,
+            "image_preview_path": image_preview_path,
+            "image_updated_at": image_updated_at,
             "expense_count": int(expense_count),
             "total_amount": format_money(amount),
             "percentage_of_spending": _percentage(amount, total_spending),
         }
-        for category_id, name, icon_key, color_key, expense_count, amount in rows
+        for category_id, name, icon_key, color_key, image_preview_path, image_updated_at, expense_count, amount in rows
     ]
 
 

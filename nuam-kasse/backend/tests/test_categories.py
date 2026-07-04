@@ -1,6 +1,11 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
+from pathlib import Path
 
+from PIL import Image
+
+from app.core.config import Settings
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category
 from app.models.expense import Expense
@@ -45,6 +50,19 @@ def create_test_category(
     db_session.commit()
     db_session.refresh(category)
     return category
+
+
+def image_bytes(format_name: str = "PNG", size: tuple[int, int] = (12, 8)) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", size, "#336699").save(buffer, format=format_name)
+    return buffer.getvalue()
+
+
+def upload_image(client, category_id: int, content: bytes | None = None, filename: str = "category.png", mime: str = "image/png"):
+    return client.post(
+        f"/api/v1/categories/{category_id}/image",
+        files={"image": (filename, content if content is not None else image_bytes(), mime)},
+    )
 
 
 def test_member_can_list_active_categories_sorted(client, db_session):
@@ -444,3 +462,93 @@ def test_seed_default_categories_is_idempotent_and_does_not_overwrite(client, db
     assert second_existing == 1
     assert existing.icon_key == "coffee"
     assert db_session.query(Category).count() == 1
+
+
+def test_user_can_upload_root_and_subcategory_images(client, db_session, settings: Settings):
+    user = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    root = create_test_category(db_session, name="Gesundheit", icon_key="heart-pulse", color_key="red", user_id=user.id)
+    child = create_test_category(
+        db_session,
+        name="Apotheke",
+        icon_key="pill",
+        color_key="red",
+        parent_category_id=root.id,
+        user_id=user.id,
+    )
+    login(client, "nuam", "member-pass")
+
+    root_upload = upload_image(client, root.id)
+    child_upload = upload_image(client, child.id, filename="apotheke.webp", content=image_bytes("WEBP"), mime="image/webp")
+
+    assert root_upload.status_code == 200
+    assert root_upload.json()["has_custom_image"] is True
+    assert root_upload.json()["image_url"].startswith(f"/api/v1/categories/{root.id}/image?v=")
+    assert root_upload.json()["icon_key"] == "heart-pulse"
+    assert child_upload.status_code == 200
+    assert child_upload.json()["image_url"].startswith(f"/api/v1/categories/{child.id}/image?v=")
+    assert child_upload.json()["image_url"] != root_upload.json()["image_url"]
+    assert len(list(Path(settings.category_image_storage_path).rglob("*.*"))) == 4
+
+
+def test_category_image_can_be_read_replaced_and_deleted(client, db_session):
+    create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    category = create_test_category(db_session, name="Essen")
+    login(client, "nuam", "member-pass")
+
+    uploaded = upload_image(client, category.id)
+    image = client.get(f"/api/v1/categories/{category.id}/image")
+    first_url = uploaded.json()["image_url"]
+    replaced = upload_image(client, category.id, content=image_bytes("JPEG"), filename="new.jpg", mime="image/jpeg")
+    deleted = client.delete(f"/api/v1/categories/{category.id}/image")
+    missing = client.get(f"/api/v1/categories/{category.id}/image")
+
+    assert uploaded.status_code == 200
+    assert image.status_code == 200
+    assert image.headers["content-type"].startswith("image/webp")
+    assert replaced.status_code == 200
+    assert replaced.json()["image_url"] != first_url
+    assert deleted.status_code == 200
+    assert deleted.json()["has_custom_image"] is False
+    assert deleted.json()["image_url"] is None
+    assert category.icon_key == "utensils"
+    assert missing.status_code == 404
+
+
+def test_category_image_upload_rejects_invalid_too_large_and_foreign_files(client, db_session, settings: Settings):
+    owner = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    other = create_test_user(db_session, username="other", password="other-pass", role=UserRole.member)
+    own = create_test_category(db_session, name="Eigen", user_id=owner.id)
+    foreign = create_test_category(db_session, name="Fremd", user_id=other.id)
+    login(client, "nuam", "member-pass")
+
+    invalid = upload_image(client, own.id, content=b"<svg></svg>", filename="bad.svg", mime="image/svg+xml")
+    too_large = upload_image(client, own.id, content=b"x" * (settings.category_image_max_bytes + 1))
+    foreign_upload = upload_image(client, foreign.id)
+    foreign_read = client.get(f"/api/v1/categories/{foreign.id}/image")
+
+    assert invalid.status_code == 400
+    assert too_large.status_code == 400
+    assert foreign_upload.status_code == 404
+    assert foreign_read.status_code == 404
+
+
+def test_missing_category_image_file_returns_404_and_category_delete_removes_files(client, db_session, settings: Settings):
+    create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    missing_file_category = create_test_category(db_session, name="Fehlt")
+    deletable = create_test_category(db_session, name="Leer", sort_order=2)
+    login(client, "nuam", "member-pass")
+
+    upload_image(client, missing_file_category.id)
+    db_session.refresh(missing_file_category)
+    preview_path = Path(settings.category_image_storage_path) / missing_file_category.image_preview_path
+    preview_path.unlink()
+    missing_response = client.get(f"/api/v1/categories/{missing_file_category.id}/image")
+
+    upload_image(client, deletable.id)
+    db_session.refresh(deletable)
+    image_path = Path(settings.category_image_storage_path) / deletable.image_path
+    delete_response = client.delete(f"/api/v1/categories/{deletable.id}")
+
+    assert missing_response.status_code == 404
+    assert delete_response.status_code == 204
+    assert not image_path.exists()

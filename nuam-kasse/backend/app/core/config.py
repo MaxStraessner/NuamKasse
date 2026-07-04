@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     session_ttl_hours: int = Field(default=168, alias="SESSION_TTL_HOURS")
     session_cookie_secure: bool = Field(default=False, alias="SESSION_COOKIE_SECURE")
     session_cookie_samesite: str = Field(default="lax", alias="SESSION_COOKIE_SAMESITE")
+    category_image_storage_path: str = Field(default="/app/uploads/category-images", alias="CATEGORY_IMAGE_STORAGE_PATH")
+    category_image_max_bytes: int = Field(default=5 * 1024 * 1024, alias="CATEGORY_IMAGE_MAX_BYTES")
+    category_image_preview_max_px: int = Field(default=1024, alias="CATEGORY_IMAGE_PREVIEW_MAX_PX")
+    category_image_max_pixels: int = Field(default=48_000_000, alias="CATEGORY_IMAGE_MAX_PIXELS")
 
     @field_validator("debug", mode="before")
     @classmethod
