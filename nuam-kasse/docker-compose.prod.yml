@@ -22,14 +22,14 @@ services:
       - nuam_kasse_internal
 
   migrate:
-    image: nuam-kasse-backend:${APP_VERSION:-0.6.0}
+    image: nuam-kasse-backend:${APP_VERSION:-0.6.1}
     build:
       context: ./backend
     container_name: nuam-kasse-migrate
     restart: "no"
     environment:
       APP_NAME: ${APP_NAME:-Nuam Kasse}
-      APP_VERSION: ${APP_VERSION:-0.6.0}
+      APP_VERSION: ${APP_VERSION:-0.6.1}
       APP_ENV: production
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
@@ -49,14 +49,14 @@ services:
       - nuam_kasse_internal
 
   backend:
-    image: nuam-kasse-backend:${APP_VERSION:-0.6.0}
+    image: nuam-kasse-backend:${APP_VERSION:-0.6.1}
     build:
       context: ./backend
     container_name: nuam-kasse-backend
     restart: unless-stopped
     environment:
       APP_NAME: ${APP_NAME:-Nuam Kasse}
-      APP_VERSION: ${APP_VERSION:-0.6.0}
+      APP_VERSION: ${APP_VERSION:-0.6.1}
       APP_ENV: production
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
@@ -89,12 +89,12 @@ services:
       - nuam_kasse_internal
 
   frontend:
-    image: nuam-kasse-frontend:${APP_VERSION:-0.6.0}
+    image: nuam-kasse-frontend:${APP_VERSION:-0.6.1}
     build:
       context: ./frontend
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
-        VITE_APP_VERSION: ${VITE_APP_VERSION:-0.6.0}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-0.6.1}
     container_name: nuam-kasse-frontend
     restart: unless-stopped
     depends_on:
