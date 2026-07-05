@@ -409,25 +409,226 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
   );
 }
 
+type CategoryFormDialogProps = {
+  mode: "create" | "edit";
+  category: Category | null;
+  catalog: CategoryCatalog;
+  form: CategoryForm;
+  rootCategories: Category[];
+  isSaving: boolean;
+  onCancel: () => void;
+  onCategoryUpdated: (category: Category) => void;
+  onFormChange: (form: CategoryForm) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+function CategoryFormDialog({
+  mode,
+  category,
+  catalog,
+  form,
+  rootCategories,
+  isSaving,
+  onCancel,
+  onCategoryUpdated,
+  onFormChange,
+  onSubmit,
+}: CategoryFormDialogProps) {
+  const previewCategory = {
+    name: form.name.trim() || "Neue Kategorie",
+    icon_key: form.icon_key,
+    color_key: form.color_key,
+    image_url: category?.image_url ?? null,
+  };
+  const title = mode === "edit" ? "Kategorie bearbeiten" : "Neue Kategorie";
+
+  return (
+    <div className="dialog-backdrop category-dialog-backdrop" role="presentation">
+      <div aria-label={title} aria-modal="true" className="category-dialog" role="dialog">
+        <form className="stack-form" onSubmit={(event) => onSubmit(event)}>
+          <div className="card-heading">
+            <span>{title}</span>
+            <small>{mode === "edit" ? category?.name : "Stammdaten"}</small>
+          </div>
+
+          <label className="form-field">
+            <span>Kategoriename</span>
+            <input
+              maxLength={50}
+              required
+              value={form.name}
+              onChange={(event) => onFormChange({ ...form, name: event.target.value })}
+            />
+          </label>
+
+          <label className="form-field">
+            <span>Ebene</span>
+            <select
+              value={form.parent_category_id ?? ""}
+              onChange={(event) =>
+                onFormChange({
+                  ...form,
+                  parent_category_id: event.target.value ? Number(event.target.value) : null,
+                })
+              }
+            >
+              <option value="">Oberkategorie</option>
+              {rootCategories
+                .filter((rootCategory) => rootCategory.id !== category?.id)
+                .map((rootCategory) => (
+                  <option key={rootCategory.id} value={rootCategory.id}>
+                    Unterkategorie von {rootCategory.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          <div className="form-field">
+            <span>Symbolauswahl</span>
+            <div className="catalog-grid">
+              {catalog.icons.map((icon) => {
+                if (!isCategoryIconKey(icon.key)) {
+                  return null;
+                }
+                const iconKey: CategoryIconKey = icon.key;
+                const Icon = getCategoryIcon(iconKey);
+                const selected = form.icon_key === iconKey;
+                return (
+                  <button
+                    aria-label={`Symbol ${icon.label}`}
+                    aria-pressed={selected}
+                    className={`catalog-choice${selected ? " catalog-choice--selected" : ""}`}
+                    key={iconKey}
+                    onClick={() => onFormChange({ ...form, icon_key: iconKey })}
+                    type="button"
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{icon.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="form-field">
+            <span>Farbauswahl</span>
+            <div className="color-choice-grid">
+              {catalog.colors.map((color) => {
+                if (!isCategoryColorKey(color.key)) {
+                  return null;
+                }
+                const colorKey: CategoryColorKey = color.key;
+                const selected = form.color_key === colorKey;
+                return (
+                  <button
+                    aria-label={`Farbe ${color.label}`}
+                    aria-pressed={selected}
+                    className={`color-choice${selected ? " color-choice--selected" : ""}`}
+                    data-category-color={colorKey}
+                    key={colorKey}
+                    onClick={() => onFormChange({ ...form, color_key: colorKey })}
+                    type="button"
+                  >
+                    <span aria-hidden="true" />
+                    <strong>{color.label}</strong>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="form-field">
+            <span>Vorschau</span>
+            <CategoryTile category={previewCategory} />
+          </div>
+
+          {mode === "edit" ? (
+            <label className="toggle-row">
+              <input
+                checked={form.is_active}
+                onChange={(event) => onFormChange({ ...form, is_active: event.target.checked })}
+                type="checkbox"
+              />
+              <span>Kategorie ist aktiv</span>
+            </label>
+          ) : null}
+
+          <div className="action-row action-row--wrap">
+            <button className="primary-action" disabled={isSaving} type="submit">
+              {mode === "edit" ? "Kategorie speichern" : "Kategorie anlegen"}
+            </button>
+            <button className="secondary-action" disabled={isSaving} onClick={onCancel} type="button">
+              Abbrechen
+            </button>
+          </div>
+        </form>
+
+        {mode === "edit" && category ? (
+          <CategoryImageControl category={category} onCategoryUpdated={onCategoryUpdated} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+type ConfirmDeleteDialogProps = {
+  category: Category;
+  subcategoryCount: number;
+  isDeleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function ConfirmDeleteDialog({
+  category,
+  subcategoryCount,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: ConfirmDeleteDialogProps) {
+  return (
+    <div className="dialog-backdrop category-dialog-backdrop" role="presentation">
+      <div aria-label={`Kategorie ${category.name} loeschen`} aria-modal="true" className="category-confirm-dialog" role="dialog">
+        <div className="card-heading">
+          <span>Kategorie loeschen?</span>
+          <small>{category.name}</small>
+        </div>
+        <p className="category-confirm-dialog__copy">
+          Die Kategorie "{category.name}" wird dauerhaft geloescht. Diese Aktion soll nicht unbeabsichtigt ausgefuehrt werden.
+        </p>
+        <p className="category-confirm-dialog__copy">
+          {subcategoryCount > 0
+            ? `${subcategoryCount} Unterkategorie${subcategoryCount === 1 ? "" : "n"} sind betroffen. Wenn die bestehende Logik das Loeschen verhindert, bleibt die Kategorie erhalten.`
+            : "Es sind keine Unterkategorien betroffen."}
+        </p>
+        <div className="action-row action-row--wrap">
+          <button className="primary-action category-danger-action" disabled={isDeleting} onClick={onConfirm} type="button">
+            {isDeleting ? "Wird geloescht..." : "Kategorie loeschen"}
+          </button>
+          <button className="secondary-action" disabled={isDeleting} onClick={onCancel} type="button">
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CategoryAdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [catalog, setCatalog] = useState<CategoryCatalog>({ icons: [], colors: [] });
   const [form, setForm] = useState<CategoryForm>(emptyForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const previewCategory = useMemo(
-    () => ({
-      name: form.name.trim() || "Neue Kategorie",
-      icon_key: form.icon_key,
-      color_key: form.color_key,
-    }),
-    [form],
-  );
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const rootCategories = categoryTree;
 
@@ -452,9 +653,18 @@ export function CategoryAdminPage() {
     void loadCategories();
   }, []);
 
-  function resetForm() {
+  function closeDialog() {
+    setDialogMode(null);
+    setEditingCategory(null);
     setForm(emptyForm);
-    setEditingId(null);
+  }
+
+  function startCreate() {
+    setForm(emptyForm);
+    setEditingCategory(null);
+    setDialogMode("create");
+    setMessage(null);
+    setError(null);
   }
 
   function startEdit(category: Category) {
@@ -465,9 +675,22 @@ export function CategoryAdminPage() {
       parent_category_id: category.parent_category_id,
       is_active: category.is_active,
     });
-    setEditingId(category.id);
+    setEditingCategory(category);
+    setDialogMode("edit");
     setMessage(null);
     setError(null);
+  }
+
+  function toggleCategory(categoryId: number) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -487,8 +710,8 @@ export function CategoryAdminPage() {
 
     setIsSaving(true);
     try {
-      if (editingId) {
-        await updateCategory(editingId, {
+      if (dialogMode === "edit" && editingCategory) {
+        await updateCategory(editingCategory.id, {
           name: cleanName,
           icon_key: form.icon_key,
           color_key: form.color_key,
@@ -497,15 +720,18 @@ export function CategoryAdminPage() {
         });
         setMessage("Kategorie wurde aktualisiert.");
       } else {
-        await createCategory({
+        const created = await createCategory({
           name: cleanName,
           icon_key: form.icon_key,
           color_key: form.color_key,
           parent_category_id: form.parent_category_id,
         });
+        if (created.parent_category_id) {
+          setExpandedIds((current) => new Set(current).add(created.parent_category_id!));
+        }
         setMessage("Kategorie wurde angelegt.");
       }
-      resetForm();
+      closeDialog();
       await loadCategories();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kategorie konnte nicht gespeichert werden.");
@@ -530,7 +756,8 @@ export function CategoryAdminPage() {
       const updated = await updateCategory(category.id, { is_active: isActive });
       setCategories((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMessage(isActive ? "Kategorie wurde wieder aktiviert." : "Kategorie wurde deaktiviert.");
-      if (editingId === category.id) {
+      if (editingCategory?.id === category.id) {
+        setEditingCategory(updated);
         setForm((current) => ({ ...current, is_active: isActive }));
       }
     } catch (err) {
@@ -570,87 +797,90 @@ export function CategoryAdminPage() {
     }
   }
 
-  async function handleDeleteCategory(category: Category) {
-    const confirmed = window.confirm(
-      `Kategorie "${category.name}" dauerhaft loeschen?\n\nDas ist nur moeglich, wenn keine Buchungen oder Unterkategorien vorhanden sind.`,
-    );
-    if (!confirmed) {
+  async function handleConfirmDeleteCategory() {
+    if (!deleteTarget) {
       return;
     }
+    setIsDeleting(true);
     setMessage(null);
     setError(null);
     try {
-      await deleteCategory(category.id);
+      await deleteCategory(deleteTarget.id);
+      setDeleteTarget(null);
       setMessage("Kategorie wurde geloescht.");
       await loadCategories();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kategorie konnte nicht geloescht werden.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
   function handleCategoryUpdated(updated: Category) {
     setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+    if (editingCategory?.id === updated.id) {
+      setEditingCategory(updated);
+    }
   }
 
-  function renderCategoryCard(
+  function getSubcategoryCount(category: Category) {
+    return categories.filter((item) => item.parent_category_id === category.id).length;
+  }
+
+  function renderCategoryActions(
     category: Category,
     siblings: Category[],
     index: number,
     parentCategoryId: number | null,
-    levelLabel: string,
   ) {
     return (
-      <AppCard
-        className={`category-admin-card${category.is_active ? "" : " category-admin-card--inactive"}`}
-        key={category.id}
-      >
-        <div className="category-admin-card__main">
-          <CategoryTile category={category} size="compact" isDisabled={!category.is_active} />
-          <span className={`status-pill ${category.is_active ? "status-pill--active" : ""}`}>
-            {category.is_active ? "aktiv" : "inaktiv"}
+      <div className="category-actions">
+        <button
+          aria-label={`Kategorie ${category.name} nach oben verschieben`}
+          className="secondary-action"
+          disabled={index === 0 || isSorting}
+          onClick={() => void moveCategory(siblings, index, -1, parentCategoryId)}
+          type="button"
+        >
+          Nach oben
+        </button>
+        <button
+          aria-label={`Kategorie ${category.name} nach unten verschieben`}
+          className="secondary-action"
+          disabled={index === siblings.length - 1 || isSorting}
+          onClick={() => void moveCategory(siblings, index, 1, parentCategoryId)}
+          type="button"
+        >
+          Nach unten
+        </button>
+        <button className="secondary-action" onClick={() => startEdit(category)} type="button">
+          Bearbeiten
+        </button>
+        <button
+          className="secondary-action"
+          onClick={() => void handleActiveChange(category, !category.is_active)}
+          type="button"
+        >
+          {category.is_active ? "Deaktivieren" : "Aktivieren"}
+        </button>
+        <button className="secondary-action" onClick={() => setDeleteTarget(category)} type="button">
+          Loeschen
+        </button>
+      </div>
+    );
+  }
+
+  function renderSubcategoryRow(subcategory: Category, siblings: Category[], index: number, parentCategoryId: number) {
+    return (
+      <div className={`subcategory-row${subcategory.is_active ? "" : " subcategory-row--inactive"}`} key={subcategory.id}>
+        <div className="subcategory-row__summary">
+          <CategoryTile category={subcategory} size="compact" isDisabled={!subcategory.is_active} />
+          <span className={`status-pill ${subcategory.is_active ? "status-pill--active" : ""}`}>
+            {subcategory.is_active ? "aktiv" : "inaktiv"}
           </span>
-          <span className="status-pill">{levelLabel}</span>
         </div>
-
-        <div className="action-row action-row--wrap">
-          <button
-            aria-label={`Kategorie ${category.name} nach oben verschieben`}
-            className="secondary-action"
-            disabled={index === 0 || isSorting}
-            onClick={() => void moveCategory(siblings, index, -1, parentCategoryId)}
-            type="button"
-          >
-            Nach oben
-          </button>
-          <button
-            aria-label={`Kategorie ${category.name} nach unten verschieben`}
-            className="secondary-action"
-            disabled={index === siblings.length - 1 || isSorting}
-            onClick={() => void moveCategory(siblings, index, 1, parentCategoryId)}
-            type="button"
-          >
-            Nach unten
-          </button>
-        </div>
-
-        <div className="action-row">
-          <button className="secondary-action" onClick={() => startEdit(category)} type="button">
-            Bearbeiten
-          </button>
-          <button
-            className="secondary-action"
-            onClick={() => void handleActiveChange(category, !category.is_active)}
-            type="button"
-          >
-            {category.is_active ? "Deaktivieren" : "Aktivieren"}
-          </button>
-          <button className="secondary-action" onClick={() => void handleDeleteCategory(category)} type="button">
-            Loeschen
-          </button>
-        </div>
-
-        <CategoryImageControl category={category} onCategoryUpdated={handleCategoryUpdated} />
-      </AppCard>
+        {renderCategoryActions(subcategory, siblings, index, parentCategoryId)}
+      </div>
     );
   }
 
@@ -663,126 +893,10 @@ export function CategoryAdminPage() {
         </div>
       </header>
 
-      <AppCard>
-        <form className="stack-form" onSubmit={(event) => void handleSubmit(event)}>
-          <div className="card-heading">
-            <span>{editingId ? "Kategorie bearbeiten" : "Neue Kategorie"}</span>
-            <small>Stammdaten</small>
-          </div>
-
-          <label className="form-field">
-            <span>Kategoriename</span>
-            <input
-              maxLength={50}
-              required
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </label>
-
-          <label className="form-field">
-            <span>Ebene</span>
-            <select
-              value={form.parent_category_id ?? ""}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  parent_category_id: event.target.value ? Number(event.target.value) : null,
-                })
-              }
-            >
-              <option value="">Oberkategorie</option>
-              {rootCategories
-                .filter((category) => category.id !== editingId)
-                .map((category) => (
-                  <option key={category.id} value={category.id}>
-                    Unterkategorie von {category.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-
-          <div className="form-field">
-            <span>Symbolauswahl</span>
-            <div className="catalog-grid">
-              {catalog.icons.map((icon) => {
-                if (!isCategoryIconKey(icon.key)) {
-                  return null;
-                }
-                const iconKey: CategoryIconKey = icon.key;
-                const Icon = getCategoryIcon(iconKey);
-                const selected = form.icon_key === iconKey;
-                return (
-                  <button
-                    aria-label={`Symbol ${icon.label}`}
-                    aria-pressed={selected}
-                    className={`catalog-choice${selected ? " catalog-choice--selected" : ""}`}
-                    key={iconKey}
-                    onClick={() => setForm({ ...form, icon_key: iconKey })}
-                    type="button"
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{icon.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="form-field">
-            <span>Farbauswahl</span>
-            <div className="color-choice-grid">
-              {catalog.colors.map((color) => {
-                if (!isCategoryColorKey(color.key)) {
-                  return null;
-                }
-                const colorKey: CategoryColorKey = color.key;
-                const selected = form.color_key === colorKey;
-                return (
-                  <button
-                    aria-label={`Farbe ${color.label}`}
-                    aria-pressed={selected}
-                    className={`color-choice${selected ? " color-choice--selected" : ""}`}
-                    data-category-color={colorKey}
-                    key={colorKey}
-                    onClick={() => setForm({ ...form, color_key: colorKey })}
-                    type="button"
-                  >
-                    <span aria-hidden="true" />
-                    <strong>{color.label}</strong>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="form-field">
-            <span>Vorschau</span>
-            <CategoryTile category={previewCategory} />
-          </div>
-
-          {editingId ? (
-            <label className="toggle-row">
-              <input
-                checked={form.is_active}
-                onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
-                type="checkbox"
-              />
-              <span>Kategorie ist aktiv</span>
-            </label>
-          ) : null}
-
-          <div className="action-row">
-            <button className="primary-action" disabled={isSaving} type="submit">
-              {editingId ? "Kategorie speichern" : "Kategorie anlegen"}
-            </button>
-            {editingId ? (
-              <button className="secondary-action" onClick={resetForm} type="button">
-                Abbrechen
-              </button>
-            ) : null}
-          </div>
-        </form>
+      <AppCard className="category-create-panel">
+        <button className="primary-action" onClick={startCreate} type="button">
+          Neue Kategorie erstellen
+        </button>
       </AppCard>
 
       {message ? <p className="form-success" role="status">{message}</p> : null}
@@ -798,29 +912,79 @@ export function CategoryAdminPage() {
       <div className="category-admin-list" aria-live="polite">
         {isLoading ? <AppCard>Kategorien werden geladen</AppCard> : null}
         {!isLoading && categories.length === 0 ? (
-          <AppCard>Noch keine Kategorien vorhanden. Lege oben die erste Kategorie an.</AppCard>
+          <AppCard>Noch keine Kategorien vorhanden. Erstelle deine erste Kategorie.</AppCard>
         ) : null}
-        {rootCategories.map((category, index) => (
-          <div className="category-admin-group" key={category.id}>
-            {renderCategoryCard(category, rootCategories, index, null, "Oberkategorie")}
-            {category.children.length === 0 ? (
-              <AppCard>Fuer diese Oberkategorie gibt es noch keine Unterkategorien.</AppCard>
-            ) : (
-              <div className="category-admin-list category-admin-list--nested">
-                {category.children.map((subcategory, subcategoryIndex) =>
-                  renderCategoryCard(
-                    subcategory,
-                    category.children,
-                    subcategoryIndex,
-                    category.id,
-                    "Unterkategorie",
-                  ),
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+        {rootCategories.map((category, index) => {
+          const isExpanded = expandedIds.has(category.id);
+          const panelId = `category-panel-${category.id}`;
+          return (
+            <AppCard
+              className={`category-accordion-item${category.is_active ? "" : " category-accordion-item--inactive"}`}
+              key={category.id}
+            >
+              <button
+                aria-controls={panelId}
+                aria-expanded={isExpanded}
+                className="category-accordion-item__header"
+                onClick={() => toggleCategory(category.id)}
+                type="button"
+              >
+                <CategoryTile category={category} size="compact" isDisabled={!category.is_active} />
+                <span className="category-accordion-item__meta">
+                  <strong>{category.children.length}</strong>
+                  <small>Unterkategorie{category.children.length === 1 ? "" : "n"}</small>
+                </span>
+                <span className={`status-pill ${category.is_active ? "status-pill--active" : ""}`}>
+                  {category.is_active ? "aktiv" : "inaktiv"}
+                </span>
+                <span className="category-accordion-item__chevron" aria-hidden="true">
+                  {isExpanded ? "v" : ">"}
+                </span>
+              </button>
+
+              {isExpanded ? (
+                <div className="category-accordion-item__panel" id={panelId}>
+                  {renderCategoryActions(category, rootCategories, index, null)}
+                  {category.children.length === 0 ? (
+                    <p className="category-empty-note">Noch keine Unterkategorien.</p>
+                  ) : (
+                    <div className="subcategory-list">
+                      {category.children.map((subcategory, subcategoryIndex) =>
+                        renderSubcategoryRow(subcategory, category.children, subcategoryIndex, category.id),
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </AppCard>
+          );
+        })}
       </div>
+
+      {dialogMode ? (
+        <CategoryFormDialog
+          catalog={catalog}
+          category={editingCategory}
+          form={form}
+          isSaving={isSaving}
+          mode={dialogMode}
+          onCancel={closeDialog}
+          onCategoryUpdated={handleCategoryUpdated}
+          onFormChange={setForm}
+          onSubmit={(event) => void handleSubmit(event)}
+          rootCategories={rootCategories}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <ConfirmDeleteDialog
+          category={deleteTarget}
+          isDeleting={isDeleting}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void handleConfirmDeleteCategory()}
+          subcategoryCount={getSubcategoryCount(deleteTarget)}
+        />
+      ) : null}
     </PageContainer>
   );
 }
