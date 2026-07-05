@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { App } from "../src/App";
@@ -592,12 +592,16 @@ describe("Categories", () => {
     fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
     fireEvent.click(await screen.findByRole("link", { name: "Kategorieverwaltung" }));
     expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Kategoriename")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Neue Kategorie erstellen" }));
+    expect(screen.getByRole("dialog", { name: "Neue Kategorie" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Kategoriename"), { target: { value: "Einkauf" } });
     fireEvent.click(screen.getByRole("button", { name: "Symbol Einkauf" }));
     fireEvent.click(screen.getByRole("button", { name: "Farbe Grün" }));
     fireEvent.click(screen.getByRole("button", { name: "Kategorie anlegen" }));
 
     expect(await screen.findByText("Kategorie wurde angelegt.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Neue Kategorie" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Einkauf").length).toBeGreaterThan(0);
   });
 
@@ -633,6 +637,10 @@ describe("Categories", () => {
         }));
         return jsonResponse(categories);
       }
+      if (url.includes("/categories/2") && options?.method === "DELETE") {
+        categories = categories.filter((category) => category.id !== 2);
+        return jsonResponse({});
+      }
       return jsonResponse({});
     });
 
@@ -641,12 +649,16 @@ describe("Categories", () => {
     fireEvent.click(await screen.findByRole("link", { name: /Einstellungen/i }));
     fireEvent.click(await screen.findByRole("link", { name: "Kategorieverwaltung" }));
     await screen.findByRole("heading", { name: "Kategorien" });
+    expect(screen.queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Kategorie Essen/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Bearbeiten" }));
+    expect(screen.getByRole("dialog", { name: "Kategorie bearbeiten" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Kategoriename"), { target: { value: "Lebensmittel" } });
     fireEvent.click(screen.getByRole("button", { name: "Farbe Grün" }));
     fireEvent.click(screen.getByRole("button", { name: "Kategorie speichern" }));
     expect(await screen.findByText("Kategorie wurde aktualisiert.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Kategorie bearbeiten" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Lebensmittel").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Deaktivieren" })[0]);
@@ -656,8 +668,16 @@ describe("Categories", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Aktivieren" })[0]);
     expect(await screen.findByText("Kategorie wurde wieder aktiviert.")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /Kategorie Bank/ }));
     fireEvent.click(screen.getByRole("button", { name: "Kategorie Bank nach oben verschieben" }));
     expect(await screen.findByText("Reihenfolge wurde gespeichert.")).toBeInTheDocument();
+
+    const deleteButtons = screen.getAllByRole("button", { name: "Loeschen" });
+    fireEvent.click(deleteButtons[0]);
+    expect(screen.getByRole("dialog", { name: "Kategorie Bank loeschen" })).toBeInTheDocument();
+    expect(screen.getByText(/Es sind keine Unterkategorien betroffen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kategorie loeschen" }));
+    expect(await screen.findByText("Kategorie wurde geloescht.")).toBeInTheDocument();
   });
 
   test("member can directly open own category management", async () => {
@@ -763,6 +783,11 @@ describe("Categories", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    const essenAccordion = screen.getByRole("button", { name: /Kategorie Essen/ }).closest("section");
+    expect(essenAccordion).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Kategorie Essen/ }));
+    fireEvent.click(within(essenAccordion!).getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.getByRole("dialog", { name: "Kategorie bearbeiten" })).toBeInTheDocument();
     const fileInput = screen.getByLabelText("Bilddatei fuer Essen auswaehlen");
     fireEvent.change(fileInput, {
       target: { files: [new File(["root"], "essen.png", { type: "image/png" })] },
@@ -785,7 +810,7 @@ describe("Categories", () => {
       name: "essen-ausschnitt.webp",
       type: "image/webp",
     });
-    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(3);
     screen.getAllByRole("img", { name: "Bild der Kategorie Essen" }).forEach((image) => {
       expect(image).toHaveAttribute("src", "/api/v1/categories/1/image?v=1");
     });
@@ -798,7 +823,7 @@ describe("Categories", () => {
     await screen.findByText("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.");
     fireEvent.click(screen.getByRole("button", { name: "Bild ersetzen" }));
     expect(await screen.findByText("Bild wurde ersetzt.")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Bild der Kategorie Essen" })).toHaveLength(3);
     screen.getAllByRole("img", { name: "Bild der Kategorie Essen" }).forEach((image) => {
       expect(image).toHaveAttribute("src", "/api/v1/categories/1/image?v=2");
     });
@@ -835,6 +860,11 @@ describe("Categories", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Kategorien" })).toBeInTheDocument();
+    const essenAccordion = screen.getByRole("button", { name: /Kategorie Essen/ }).closest("section");
+    expect(essenAccordion).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Kategorie Essen/ }));
+    fireEvent.click(within(essenAccordion!).getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.getByRole("dialog", { name: "Kategorie bearbeiten" })).toBeInTheDocument();
     const fileInput = screen.getByLabelText("Bilddatei fuer Essen auswaehlen");
     fireEvent.change(fileInput, {
       target: { files: [new File(["<svg></svg>"], "bad.svg", { type: "image/svg+xml" })] },
