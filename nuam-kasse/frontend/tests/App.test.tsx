@@ -288,7 +288,7 @@ function mockFetch(handler: (url: string, options?: RequestInit) => Promise<Resp
 }
 
 function healthResponse() {
-  return jsonResponse({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.6.0" });
+  return jsonResponse({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.6.1" });
 }
 
 afterEach(() => {

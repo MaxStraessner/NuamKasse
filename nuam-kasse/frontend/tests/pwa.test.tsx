@@ -8,7 +8,7 @@ import { PwaInstallPrompt } from "../src/components/PwaInstallPrompt";
 import { PwaUpdatePrompt } from "../src/components/PwaUpdatePrompt";
 
 function healthResponse(status = 200) {
-  return new Response(JSON.stringify({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.6.0" }), {
+  return new Response(JSON.stringify({ status: "ok", database: "connected", app: "Nuam Kasse", version: "0.6.1" }), {
     headers: { "Content-Type": "application/json" },
     status,
   });
