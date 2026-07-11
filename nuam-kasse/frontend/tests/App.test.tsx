@@ -793,6 +793,7 @@ describe("Categories", () => {
       target: { files: [new File(["root"], "essen.png", { type: "image/png" })] },
     });
     expect(screen.getByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Zoom fuer Bildausschnitt")).toHaveAttribute("min", "0.5");
     expect(screen.getByRole("img", { name: "Ausgewaehltes Bild fuer Essen" })).toHaveAttribute(
       "src",
       "blob:local-preview",
@@ -919,6 +920,7 @@ describe("Expenses", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Betrag")).toBeInTheDocument();
+    expect(screen.getByLabelText("Betrag")).not.toHaveAttribute("placeholder");
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "250,00" } });
     expect(screen.getByText("Voraussichtlich verbleibend")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
