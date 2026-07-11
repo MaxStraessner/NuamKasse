@@ -1611,21 +1611,39 @@ textarea:focus-visible {
 }
 
 .crop-dialog__circle {
+  position: relative;
   width: min(70vw, 17rem);
   aspect-ratio: 1;
   overflow: hidden;
-  border: 3px solid var(--color-primary);
-  border-radius: 50%;
   background: var(--color-surface-soft);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.crop-dialog__circle:active {
+  cursor: grabbing;
 }
 
 .crop-dialog__circle img {
-  width: 100%;
-  height: 100%;
+  position: absolute;
   display: block;
-  object-fit: cover;
-  transform-origin: center;
+  max-width: none;
+  object-fit: fill;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.crop-dialog__circle::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 3px solid var(--color-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(17, 24, 39, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  content: "";
+  pointer-events: none;
 }
 
 .crop-dialog__controls {
@@ -1647,6 +1665,12 @@ textarea:focus-visible {
 .crop-dialog__controls input[type="range"] {
   width: 100%;
   accent-color: var(--color-primary);
+}
+
+.crop-dialog__hint {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
 }
 
 .money-preview {
