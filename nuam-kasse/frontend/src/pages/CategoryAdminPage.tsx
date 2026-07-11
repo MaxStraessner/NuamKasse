@@ -45,6 +45,7 @@ const emptyForm: CategoryForm = {
 const allowedImageTypes = ["image/png", "image/jpeg", "image/webp"];
 const maxImageBytes = 5 * 1024 * 1024;
 const cropOutputSize = 512;
+const minCropZoom = 0.5;
 
 type ImageCrop = {
   positionX: number;
@@ -92,8 +93,16 @@ async function createCroppedImageFile(file: File, sourceUrl: string, crop: Image
   const sourceSize = Math.max(1, Math.min(naturalWidth, naturalHeight) / crop.zoom);
   const centerX = (naturalWidth * crop.positionX) / 100;
   const centerY = (naturalHeight * crop.positionY) / 100;
-  const sourceX = clamp(centerX - sourceSize / 2, 0, Math.max(0, naturalWidth - sourceSize));
-  const sourceY = clamp(centerY - sourceSize / 2, 0, Math.max(0, naturalHeight - sourceSize));
+  const sourceX = clamp(
+    centerX - sourceSize / 2,
+    Math.min(0, naturalWidth - sourceSize),
+    Math.max(0, naturalWidth - sourceSize),
+  );
+  const sourceY = clamp(
+    centerY - sourceSize / 2,
+    Math.min(0, naturalHeight - sourceSize),
+    Math.max(0, naturalHeight - sourceSize),
+  );
 
   context.drawImage(
     image,
@@ -176,7 +185,7 @@ function CategoryImageCropDialog({
             <input
               aria-label="Zoom fuer Bildausschnitt"
               max="3"
-              min="1"
+              min={minCropZoom}
               onChange={(event) => onCropChange({ ...crop, zoom: Number(event.target.value) })}
               step="0.05"
               type="range"

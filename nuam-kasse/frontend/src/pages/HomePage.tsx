@@ -385,7 +385,6 @@ export function HomePage() {
                   autoFocus
                   inputMode="decimal"
                   onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
-                  placeholder="250.00"
                   value={expenseAmount}
                 />
               </label>
