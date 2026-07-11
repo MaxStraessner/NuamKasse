@@ -734,8 +734,9 @@ describe("Categories", () => {
         }
       },
     );
+    const drawImageSpy = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-      drawImage: vi.fn(),
+      drawImage: drawImageSpy,
     } as unknown as CanvasRenderingContext2D);
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function toBlob(callback) {
       callback(new Blob(["cropped"], { type: "image/webp" }));
@@ -792,15 +793,17 @@ describe("Categories", () => {
     fireEvent.change(fileInput, {
       target: { files: [new File(["root"], "essen.png", { type: "image/png" })] },
     });
-    expect(screen.getByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Zoom fuer Bildausschnitt")).toHaveAttribute("min", "0.5");
+    expect(await screen.findByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Zoom fuer Bildausschnitt")).toHaveAttribute("min", "1");
+    expect(screen.getByLabelText("Zoom fuer Bildausschnitt")).toHaveValue("1.7777777777777777");
     expect(screen.getByRole("img", { name: "Ausgewaehltes Bild fuer Essen" })).toHaveAttribute(
       "src",
       "blob:local-preview",
     );
-    fireEvent.change(screen.getByLabelText("Zoom fuer Bildausschnitt"), { target: { value: "1.6" } });
+    fireEvent.change(screen.getByLabelText("Zoom fuer Bildausschnitt"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "Ausschnitt uebernehmen" }));
     expect(await screen.findByText("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.")).toBeInTheDocument();
+    expect(drawImageSpy).toHaveBeenLastCalledWith(expect.anything(), 0, -7, 32, 32, 0, 0, 512, 512);
     expect(screen.queryByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Bild der Kategorie Essen" })).toHaveAttribute("src", "blob:local-preview");
 
@@ -819,7 +822,7 @@ describe("Categories", () => {
     fireEvent.change(fileInput, {
       target: { files: [new File(["root-replaced"], "essen.webp", { type: "image/webp" })] },
     });
-    expect(screen.getByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Bildausschnitt fuer Essen waehlen" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ausschnitt uebernehmen" }));
     await screen.findByText("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.");
     fireEvent.click(screen.getByRole("button", { name: "Bild ersetzen" }));

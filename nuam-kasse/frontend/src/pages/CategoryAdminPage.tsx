@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppCard } from "../components/AppCard";
 import { CategoryTile } from "../components/CategoryTile";
@@ -45,29 +45,27 @@ const emptyForm: CategoryForm = {
 const allowedImageTypes = ["image/png", "image/jpeg", "image/webp"];
 const maxImageBytes = 5 * 1024 * 1024;
 const cropOutputSize = 512;
-const minCropZoom = 0.5;
+const minCropZoom = 1;
 
 type ImageCrop = {
-  positionX: number;
-  positionY: number;
+  offsetX: number;
+  offsetY: number;
   zoom: number;
 };
 
 type PendingCrop = {
   file: File;
   sourceUrl: string;
+  naturalWidth: number;
+  naturalHeight: number;
   crop: ImageCrop;
 };
 
 const defaultCrop: ImageCrop = {
-  positionX: 50,
-  positionY: 50,
+  offsetX: 0,
+  offsetY: 0,
   zoom: 1,
 };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
 
 function loadCropImage(sourceUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -90,19 +88,13 @@ async function createCroppedImageFile(file: File, sourceUrl: string, crop: Image
     throw new Error("Der Bildausschnitt konnte nicht erzeugt werden.");
   }
 
-  const sourceSize = Math.max(1, Math.min(naturalWidth, naturalHeight) / crop.zoom);
-  const centerX = (naturalWidth * crop.positionX) / 100;
-  const centerY = (naturalHeight * crop.positionY) / 100;
-  const sourceX = clamp(
-    centerX - sourceSize / 2,
-    Math.min(0, naturalWidth - sourceSize),
-    Math.max(0, naturalWidth - sourceSize),
-  );
-  const sourceY = clamp(
-    centerY - sourceSize / 2,
-    Math.min(0, naturalHeight - sourceSize),
-    Math.max(0, naturalHeight - sourceSize),
-  );
+  // Zoom is relative to a contain fit: zoom 1 always shows the complete original.
+  // Offsets are stored as fractions of the circular viewport, independent of its CSS size.
+  const sourceSize = Math.max(1, Math.max(naturalWidth, naturalHeight) / crop.zoom);
+  const centerX = naturalWidth / 2 - (crop.offsetX * Math.max(naturalWidth, naturalHeight)) / crop.zoom;
+  const centerY = naturalHeight / 2 - (crop.offsetY * Math.max(naturalWidth, naturalHeight)) / crop.zoom;
+  const sourceX = centerX - sourceSize / 2;
+  const sourceY = centerY - sourceSize / 2;
 
   context.drawImage(
     image,
@@ -151,7 +143,35 @@ function CategoryImageCropDialog({
   onConfirm,
   onCropChange,
 }: CategoryImageCropDialogProps) {
-  const { crop, sourceUrl } = pendingCrop;
+  const { crop, sourceUrl, naturalWidth, naturalHeight } = pendingCrop;
+  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const longestSide = Math.max(naturalWidth, naturalHeight);
+  const baseWidth = naturalWidth / longestSide;
+  const baseHeight = naturalHeight / longestSide;
+  const coverZoom = longestSide / Math.min(naturalWidth, naturalHeight);
+  const maxZoom = Math.max(8, coverZoom * 4);
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const size = event.currentTarget.getBoundingClientRect().width;
+    if (size <= 0) return;
+    onCropChange({
+      ...crop,
+      offsetX: crop.offsetX + (event.clientX - drag.x) / size,
+      offsetY: crop.offsetY + (event.clientY - drag.y) / size,
+    });
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+  }
+
+  function handlePointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+  }
 
   return (
     <div className="crop-dialog-backdrop" role="presentation">
@@ -163,17 +183,27 @@ function CategoryImageCropDialog({
       >
         <div className="crop-dialog__header">
           <span>Bildausschnitt waehlen</span>
-          <small>Der runde Bereich wird spaeter als Kategorie-Bild angezeigt.</small>
+          <small>Ziehe das Originalbild in Position. Der Kreis zeigt nur den spaeteren Ausschnitt.</small>
         </div>
 
         <div className="crop-dialog__stage">
-          <div className="crop-dialog__circle" aria-label="Runder Bildausschnitt">
+          <div
+            className="crop-dialog__circle"
+            aria-label="Runder Bildausschnitt"
+            onPointerCancel={handlePointerEnd}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+          >
             <img
+              draggable="false"
               alt={`Ausgewaehltes Bild fuer ${categoryName}`}
               src={sourceUrl}
               style={{
-                objectPosition: `${crop.positionX}% ${crop.positionY}%`,
-                transform: `scale(${crop.zoom})`,
+                height: `${baseHeight * crop.zoom * 100}%`,
+                left: `${50 + crop.offsetX * 100}%`,
+                top: `${50 + crop.offsetY * 100}%`,
+                width: `${baseWidth * crop.zoom * 100}%`,
               }}
             />
           </div>
@@ -184,7 +214,7 @@ function CategoryImageCropDialog({
             <span>Zoom</span>
             <input
               aria-label="Zoom fuer Bildausschnitt"
-              max="3"
+              max={maxZoom}
               min={minCropZoom}
               onChange={(event) => onCropChange({ ...crop, zoom: Number(event.target.value) })}
               step="0.05"
@@ -192,30 +222,7 @@ function CategoryImageCropDialog({
               value={crop.zoom}
             />
           </label>
-          <label>
-            <span>Horizontal</span>
-            <input
-              aria-label="Bildausschnitt horizontal verschieben"
-              max="100"
-              min="0"
-              onChange={(event) => onCropChange({ ...crop, positionX: Number(event.target.value) })}
-              step="1"
-              type="range"
-              value={crop.positionX}
-            />
-          </label>
-          <label>
-            <span>Vertikal</span>
-            <input
-              aria-label="Bildausschnitt vertikal verschieben"
-              max="100"
-              min="0"
-              onChange={(event) => onCropChange({ ...crop, positionY: Number(event.target.value) })}
-              step="1"
-              type="range"
-              value={crop.positionY}
-            />
-          </label>
+          <small className="crop-dialog__hint">Ganz links siehst du immer das vollstaendige Originalbild.</small>
         </div>
 
         <div className="action-row action-row--wrap">
@@ -263,7 +270,7 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
     }
   }, []);
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setMessage(null);
     setError(null);
@@ -287,11 +294,18 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
     setSelectedFile(null);
     const sourceUrl = URL.createObjectURL(file);
     pendingCropUrlRef.current = sourceUrl;
-    setPendingCrop({
-      file,
-      sourceUrl,
-      crop: defaultCrop,
-    });
+    try {
+      const image = await loadCropImage(sourceUrl);
+      const naturalWidth = image.naturalWidth || image.width;
+      const naturalHeight = image.naturalHeight || image.height;
+      if (naturalWidth <= 0 || naturalHeight <= 0) throw new Error("Das Bild hat keine gueltigen Abmessungen.");
+      const initialZoom = Math.max(naturalWidth, naturalHeight) / Math.min(naturalWidth, naturalHeight);
+      setPendingCrop({ file, sourceUrl, naturalWidth, naturalHeight, crop: { ...defaultCrop, zoom: initialZoom } });
+    } catch (err) {
+      URL.revokeObjectURL(sourceUrl);
+      pendingCropUrlRef.current = null;
+      setError(err instanceof Error ? err.message : "Das Bild konnte nicht geladen werden.");
+    }
   }
 
   function handleCancelCrop() {
