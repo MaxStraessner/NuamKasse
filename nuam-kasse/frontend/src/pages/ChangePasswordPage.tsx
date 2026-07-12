@@ -74,7 +74,7 @@ export function ChangePasswordPage() {
         </label>
 
         <button className="secondary-action" type="button" onClick={() => setShowPasswords((value) => !value)}>
-          Passwoerter {showPasswords ? "ausblenden" : "einblenden"}
+          Passwörter {showPasswords ? "ausblenden" : "einblenden"}
         </button>
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}

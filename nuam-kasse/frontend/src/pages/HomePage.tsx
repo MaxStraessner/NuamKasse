@@ -1,12 +1,14 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
 import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
+import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
-import { HealthStatus } from "../components/HealthStatus";
 import { PageContainer } from "../components/PageContainer";
+import { PageHeader } from "../components/PageHeader";
 import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod, getCurrentCashPeriodSummary } from "../services/cashPeriodsApi";
 import { getCategories } from "../services/categoriesApi";
@@ -18,7 +20,6 @@ import {
   minorUnitsToDecimalString,
   normalizeMoneyInput,
 } from "../services/money";
-import { useHealth } from "../services/useHealth";
 import type { CashPeriod, CashPeriodSummary } from "../types/cashPeriod";
 import type { Category } from "../types/category";
 
@@ -27,7 +28,6 @@ function isNoActiveCashPeriod(error: unknown): boolean {
 }
 
 export function HomePage() {
-  const health = useHealth();
   const { status: networkStatus } = useNetworkStatus();
   const { user } = useAuth();
   const [cashPeriod, setCashPeriod] = useState<CashPeriod | null>(null);
@@ -42,6 +42,7 @@ export function HomePage() {
   const [selectedRootCategory, setSelectedRootCategory] = useState<Category | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [expenseAmount, setExpenseAmount] = useState("");
+  const [subcategorySearch, setSubcategorySearch] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
@@ -54,6 +55,9 @@ export function HomePage() {
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const rootCategories = categoryTree.filter((category) => category.is_active);
   const selectedRootChildren = selectedRootCategory ? getActiveChildren(categories, selectedRootCategory.id) : [];
+  const visibleRootChildren = selectedRootChildren.filter((category) =>
+    category.name.toLocaleLowerCase("de-DE").includes(subcategorySearch.trim().toLocaleLowerCase("de-DE")),
+  );
   const selectedParentCategory = selectedCategory?.parent_category_id
     ? categories.find((category) => category.id === selectedCategory.parent_category_id) ?? selectedRootCategory
     : null;
@@ -143,7 +147,7 @@ export function HomePage() {
   function openRootCategory(category: Category) {
     if (!canUseServer) {
       setSuccessMessage(null);
-      setBookingError("Neue Buchungen sind erst wieder mit Serververbindung moeglich.");
+      setBookingError("Neue Buchungen sind erst wieder mit Serververbindung möglich.");
       return;
     }
     if (!canBook || !category.is_active) {
@@ -153,6 +157,7 @@ export function HomePage() {
     if (children.length > 0) {
       setSelectedRootCategory(category);
       setSelectedCategory(null);
+      setSubcategorySearch("");
       setBookingError(null);
       setSuccessMessage(null);
       return;
@@ -192,6 +197,7 @@ export function HomePage() {
     }
     setSelectedRootCategory(null);
     setSelectedCategory(null);
+    setSubcategorySearch("");
     setDialogError(null);
   }
 
@@ -209,7 +215,7 @@ export function HomePage() {
       return;
     }
     if (enteredMinorUnits <= 0) {
-      setDialogError("Der Betrag muss groesser als null sein.");
+      setDialogError("Der Betrag muss größer als null sein.");
       return;
     }
 
@@ -221,7 +227,7 @@ export function HomePage() {
         amount: normalizeMoneyInput(expenseAmount),
       });
       setCashSummary(response.summary);
-      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} fuer ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
+      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
       setSelectedCategory(null);
       setSelectedRootCategory(null);
       setExpenseAmount("");
@@ -240,13 +246,7 @@ export function HomePage() {
 
   return (
     <PageContainer>
-      <header className="home-header">
-        <div>
-          <p className="home-header__eyebrow">Gemeinsame Kasse</p>
-          <h1>Nuam Kasse</h1>
-        </div>
-        <HealthStatus status={health.status} health={health.data} />
-      </header>
+      <PageHeader eyebrow="Gemeinsame Kasse" title="Nuam Kasse" />
 
       <AppCard ariaLabel="Kassenuebersicht">
         <div className="card-heading">
@@ -285,7 +285,7 @@ export function HomePage() {
         ) : null}
       </AppCard>
 
-      {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
+      {successMessage ? <div className="success-toast" role="status"><CheckCircle2 aria-hidden="true" /><span>{successMessage}</span></div> : null}
 
       <AppCard className="category-card" ariaLabel="Kategoriesymbole">
         <div className="card-heading">
@@ -312,7 +312,7 @@ export function HomePage() {
           <p className="empty-state">
             {user?.role === "admin"
               ? "Noch keine Kategorien vorhanden. Lege in den Einstellungen eine Kategorie an."
-              : "Noch keine Kategorien verfuegbar."}
+              : "Noch keine Kategorien verfügbar."}
           </p>
         ) : null}
         {!isLoadingCategories && !categoryError && rootCategories.length > 0 ? (
@@ -329,39 +329,39 @@ export function HomePage() {
         ) : null}
       </AppCard>
 
-      {selectedRootCategory && !selectedCategory ? (
-        <div className="dialog-backdrop" role="presentation">
-          <div aria-modal="true" className="expense-dialog" role="dialog">
-            <div className="subcategory-dialog__hero">
-              <CategoryTile category={selectedRootCategory} />
-            </div>
-            {selectedRootChildren.length === 0 ? (
-              <p className="empty-state">Fuer diese Oberkategorie gibt es noch keine aktiven Unterkategorien.</p>
-            ) : (
-              <div className="category-grid">
-                {selectedRootChildren.map((subcategory) => (
-                  <CategoryTile
-                    category={subcategory}
-                    isDisabled={!canBook || !subcategory.is_active}
-                    key={subcategory.id}
-                    onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="action-row">
-              <button className="secondary-action" onClick={closeSubcategoryView} type="button">
-                Zurueck
-              </button>
-            </div>
+      <AppDialog
+        description="Wähle den passenden Bereich für deine Ausgabe."
+        isOpen={Boolean(selectedRootCategory && !selectedCategory)}
+        onClose={closeSubcategoryView}
+        title={selectedRootCategory?.name ?? "Unterkategorie wählen"}
+      >
+        {selectedRootChildren.length > 6 ? (
+          <label className="dialog-search">
+            <Search aria-hidden="true" />
+            <span className="sr-only">Unterkategorie suchen</span>
+            <input onChange={(event) => setSubcategorySearch(event.target.value)} placeholder="Unterkategorie suchen" value={subcategorySearch} />
+          </label>
+        ) : null}
+        {selectedRootChildren.length === 0 ? <p className="empty-state">Für diese Oberkategorie gibt es noch keine aktiven Unterkategorien.</p> : null}
+        {selectedRootChildren.length > 0 && visibleRootChildren.length === 0 ? <p className="empty-state">Keine passende Unterkategorie gefunden.</p> : null}
+        {visibleRootChildren.length > 0 ? (
+          <div className="category-grid category-grid--dialog">
+            {visibleRootChildren.map((subcategory) => (
+              <CategoryTile category={subcategory} isDisabled={!canBook || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} />
+            ))}
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </AppDialog>
 
-      {selectedCategory ? (
-        <div className="dialog-backdrop" role="presentation">
-          <div aria-modal="true" className="expense-dialog" role="dialog">
-            <form onSubmit={(event) => void handleCreateExpense(event)}>
+      <AppDialog
+        description={selectedCategory ? getCategoryPath(categories, selectedCategory) : undefined}
+        isOpen={Boolean(selectedCategory)}
+        onClose={closeExpenseDialog}
+        preventClose={isSavingExpense}
+        title="Ausgabe eintragen"
+      >
+        {selectedCategory ? (
+            <form className="booking-form" onSubmit={(event) => void handleCreateExpense(event)}>
               <div className="booking-category-header">
                 <CategoryTile category={selectedCategory} showLabel={false} />
                 {selectedParentCategory ? (
@@ -382,12 +382,20 @@ export function HomePage() {
               <label className="amount-field">
                 <span>Betrag</span>
                 <input
-                  autoFocus
+                  aria-label="Betrag"
+                  aria-describedby="amount-help"
+                  data-autofocus
                   inputMode="decimal"
                   onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
                   value={expenseAmount}
                 />
+                <small id="amount-help">Betrag in Thai Baht</small>
               </label>
+              <div className="quick-amounts" aria-label="Schnellbeträge">
+                {[100, 250, 500, 1000].map((amount) => (
+                  <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
+                ))}
+              </div>
               <div className="expense-preview">
                 <div>
                   <span>Verbleibend vorher</span>
@@ -395,30 +403,29 @@ export function HomePage() {
                 </div>
                 <div>
                   <span>Neue Ausgabe</span>
-                  <strong>{enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "ungültiger Betrag"}</strong>
+                  <strong>{expenseAmount.trim() ? (enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "Bitte prüfen") : "—"}</strong>
                 </div>
                 <div>
                   <span>Voraussichtlich verbleibend</span>
                   <strong>
-                    {enteredMinorUnits !== null
+                    {expenseAmount.trim() && enteredMinorUnits !== null
                       ? formatThaiBaht(minorUnitsToDecimalString(Math.max(remainingMinorUnits - enteredMinorUnits, 0)))
-                      : "ungültiger Betrag"}
+                      : "—"}
                   </strong>
                 </div>
               </div>
               {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
               <div className="action-row">
                 <button className="primary-action" disabled={isSavingExpense || !canUseServer} type="submit">
-                  Ausgabe speichern
+                  {isSavingExpense ? "Wird gespeichert …" : "Ausgabe speichern"}
                 </button>
                 <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">
-                  {selectedRootCategory && selectedCategory.parent_category_id === selectedRootCategory.id ? "Zurueck" : "Abbrechen"}
+                  {selectedRootCategory && selectedCategory.parent_category_id === selectedRootCategory.id ? "Zurück" : "Abbrechen"}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </AppDialog>
     </PageContainer>
   );
 }

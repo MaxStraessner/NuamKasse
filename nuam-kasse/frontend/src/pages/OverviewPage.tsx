@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
 import { AppCard } from "../components/AppCard";
+import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
 import { MetricTile } from "../components/MetricTile";
 import { PageContainer } from "../components/PageContainer";
+import { PageHeader } from "../components/PageHeader";
 import { ApiError } from "../services/apiClient";
 import { listCashPeriods } from "../services/cashPeriodsApi";
 import { formatLocalDateTime } from "../services/dateTime";
@@ -85,6 +88,10 @@ function consumptionPercent(openingAmount: string, spentAmount: string): number 
   return Math.min(100, Math.max(0, (spent / opening) * 100));
 }
 
+function formatExpenseCount(count: number): string {
+  return `${count} ${count === 1 ? "Buchung" : "Buchungen"}`;
+}
+
 export function OverviewPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -101,6 +108,9 @@ export function OverviewPage() {
   const [filterError, setFilterError] = useState<string | null>(null);
   const [hasNoActivePeriod, setHasNoActivePeriod] = useState(false);
   const [voidingExpenseId, setVoidingExpenseId] = useState<number | null>(null);
+  const [voidTarget, setVoidTarget] = useState<OverviewExpense | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   const cashPeriod = overview?.summary?.cash_period ?? null;
   const percentSpent = overview?.summary
@@ -297,15 +307,10 @@ export function OverviewPage() {
   }
 
   async function handleVoidExpense(expense: OverviewExpense) {
-    const confirmed = window.confirm(
-      `Buchung entfernen?\n\n${expense.category.name}\n${formatThaiBaht(expense.amount, expense.currency)}`,
-    );
-    if (!confirmed) {
-      return;
-    }
     setVoidingExpenseId(expense.id);
     try {
       await voidExpense(expense.id);
+      setVoidTarget(null);
       await loadOverview(true);
       await loadExpenses(0, false, true);
     } catch (err) {
@@ -316,6 +321,7 @@ export function OverviewPage() {
   }
 
   const overviewCategories = Array.isArray(overview?.categories) ? overview.categories : [];
+  const displayedCategories = showAllCategories ? overviewCategories : overviewCategories.slice(0, 5);
   const overviewUsers = Array.isArray(overview?.users) ? overview.users : [];
   const selectedCategory = overviewCategories.find((category) => String(category.category_id) === filters.categoryId);
   const selectedUser = overviewUsers.find((summaryUser) => String(summaryUser.user_id) === filters.userId);
@@ -325,12 +331,10 @@ export function OverviewPage() {
 
   return (
     <PageContainer>
-      <header className="home-header">
-        <div>
-          <p className="home-header__eyebrow">Auswertung</p>
-          <h1>Übersicht</h1>
-        </div>
-        {isAdmin && periodOptions.length > 0 ? (
+      <PageHeader
+        eyebrow="Auswertung"
+        title="Übersicht"
+        action={isAdmin && periodOptions.length > 0 ? (
           <label className="period-select">
             <span>Kassenperiode</span>
             <select onChange={(event) => selectPeriod(event.target.value)} value={selectedPeriodId ?? ""}>
@@ -345,7 +349,7 @@ export function OverviewPage() {
             </select>
           </label>
         ) : null}
-      </header>
+      />
 
       {isLoadingOverview && !overview ? (
         <AppCard ariaLabel="Übersicht wird geladen">
@@ -396,26 +400,26 @@ export function OverviewPage() {
             <div className="cash-hero">
               <span>Verbleibend</span>
               <strong>{formatThaiBaht(overview.summary.remaining_amount, cashPeriod.currency)}</strong>
-              <small>{overview.summary.active_expense_count} gültige Buchungen</small>
+              <small>{formatExpenseCount(overview.summary.active_expense_count)}</small>
             </div>
             <div className="metric-grid">
               <MetricTile
                 label="Ausgegeben"
                 value={formatThaiBaht(overview.summary.spent_amount, cashPeriod.currency)}
                 tone="warning"
-                hint={`${overview.summary.voided_expense_count} storniert`}
+                hint={isAdmin ? `${overview.summary.voided_expense_count} storniert` : "Aktuelle Periode"}
               />
               <MetricTile
                 label="Ausgangsbetrag"
                 value={formatThaiBaht(overview.summary.opening_amount, cashPeriod.currency)}
                 tone="neutral"
-                hint="API Wert"
+                hint="Zu Periodenbeginn"
               />
               <MetricTile
                 label="Buchungen"
-                value={String(overview.summary.expense_count)}
+                value={String(isAdmin ? overview.summary.expense_count : overview.summary.active_expense_count)}
                 tone="positive"
-                hint="inklusive storniert"
+                hint={isAdmin ? "Inklusive stornierter" : "Gültige Ausgaben"}
               />
             </div>
             <div className="overview-progress" aria-label={`${percentSpent.toFixed(2)} Prozent ausgegeben`}>
@@ -435,7 +439,7 @@ export function OverviewPage() {
               <p className="empty-state">Noch keine Ausgaben vorhanden.</p>
             ) : (
               <div className="overview-summary-list">
-                {overviewCategories.map((category) => (
+                {displayedCategories.map((category) => (
                   <button
                     className={`overview-summary-row${filters.categoryId === String(category.category_id) ? " overview-summary-row--active" : ""}`}
                     key={category.category_id}
@@ -445,11 +449,12 @@ export function OverviewPage() {
                     <CategoryTile category={categoryAsTile(category)} size="compact" />
                     <span>
                       <strong>{formatThaiBaht(category.total_amount, cashPeriod.currency)}</strong>
-                      <small>{category.expense_count} Buchungen / {category.percentage_of_spending} Prozent</small>
+                      <small>{formatExpenseCount(category.expense_count)} · {category.percentage_of_spending} Prozent</small>
                       <i style={{ width: `${Math.min(Number(category.percentage_of_spending), 100)}%` }} />
                     </span>
                   </button>
                 ))}
+                {overviewCategories.length > 5 ? <button className="disclosure-button" onClick={() => setShowAllCategories((value) => !value)} type="button">{showAllCategories ? "Weniger anzeigen" : `Alle ${overviewCategories.length} Kategorien anzeigen`}</button> : null}
               </div>
             )}
           </AppCard>
@@ -472,7 +477,7 @@ export function OverviewPage() {
                   >
                     <span>
                       <strong>{summaryUser.display_name}</strong>
-                      <small>{summaryUser.expense_count} Buchungen / {summaryUser.percentage_of_spending} Prozent</small>
+                      <small>{formatExpenseCount(summaryUser.expense_count)} · {summaryUser.percentage_of_spending} Prozent</small>
                     </span>
                     <b>{formatThaiBaht(summaryUser.total_amount, cashPeriod.currency)}</b>
                   </button>
@@ -483,105 +488,12 @@ export function OverviewPage() {
 
           <AppCard ariaLabel="Buchungsliste">
             <div className="card-heading">
-              <span>Buchungen</span>
-              <small>{expensesPage ? `${expensesPage.total} gefunden` : "wird geladen"}</small>
+              <div><span>Buchungen</span><small>{expensesPage ? `${expensesPage.total} gefunden` : "Wird geladen"}</small></div>
+              <button className="filter-button" onClick={() => setIsFilterOpen(true)} type="button">
+                <SlidersHorizontal aria-hidden="true" />
+                Filter{hasActiveFilters ? " aktiv" : ""}
+              </button>
             </div>
-            <div className="overview-filter-bar">
-              <label>
-                <span>Kategorie</span>
-                <select
-                  onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))}
-                  value={filters.categoryId}
-                >
-                  <option value="">Alle</option>
-                  {overviewCategories.map((category) => (
-                    <option key={category.category_id} value={category.category_id}>
-                      {category.category_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Benutzer</span>
-                <select
-                  onChange={(event) => setFilters((current) => ({ ...current, userId: event.target.value }))}
-                  value={filters.userId}
-                >
-                  <option value="">Alle</option>
-                  {overviewUsers.map((summaryUser) => (
-                    <option key={summaryUser.user_id} value={summaryUser.user_id}>
-                      {summaryUser.display_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Zeitraum</span>
-                <select
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))
-                  }
-                  value={filters.datePreset}
-                >
-                  <option value="all">Gesamte Periode</option>
-                  <option value="today">Heute</option>
-                  <option value="last7">Letzte 7 Tage</option>
-                  <option value="custom">Benutzerdefiniert</option>
-                </select>
-              </label>
-              {isAdmin ? (
-                <label>
-                  <span>Status</span>
-                  <select
-                    onChange={(event) =>
-                      setFilters((current) => ({ ...current, status: event.target.value as StatusFilter }))
-                    }
-                    value={filters.status}
-                  >
-                    <option value="active">Gültig</option>
-                    <option value="all">Mit stornierten</option>
-                  </select>
-                </label>
-              ) : null}
-              <label>
-                <span>Sortierung</span>
-                <select
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, sort: event.target.value as OverviewExpenseSort }))
-                  }
-                  value={filters.sort}
-                >
-                  <option value="created_at_desc">Neueste zuerst</option>
-                  <option value="created_at_asc">Älteste zuerst</option>
-                  <option value="amount_desc">Betrag absteigend</option>
-                  <option value="amount_asc">Betrag aufsteigend</option>
-                </select>
-              </label>
-            </div>
-            {filters.datePreset === "custom" ? (
-              <div className="overview-date-row">
-                <label>
-                  <span>Von</span>
-                  <input
-                    max={cashPeriod.end_date ?? undefined}
-                    min={cashPeriod.start_date}
-                    onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))}
-                    type="date"
-                    value={filters.dateFrom}
-                  />
-                </label>
-                <label>
-                  <span>Bis</span>
-                  <input
-                    max={cashPeriod.end_date ?? undefined}
-                    min={cashPeriod.start_date}
-                    onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))}
-                    type="date"
-                    value={filters.dateTo}
-                  />
-                </label>
-              </div>
-            ) : null}
             {hasActiveFilters ? (
               <div className="filter-chips">
                 {selectedCategory ? <button onClick={() => setFilters((current) => ({ ...current, categoryId: "" }))} type="button">Kategorie: {selectedCategory.category_name}</button> : null}
@@ -592,7 +504,6 @@ export function OverviewPage() {
                 <button onClick={resetFilters} type="button">Alle Filter zurücksetzen</button>
               </div>
             ) : null}
-            {filterError ? <p className="form-error" role="alert">{filterError}</p> : null}
             {expenseError ? <p className="form-error" role="alert">{expenseError}</p> : null}
             {isLoadingExpenses && !expensesPage ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
             {expensesPage && expensesPage.items.length === 0 ? (
@@ -628,7 +539,7 @@ export function OverviewPage() {
                           <button
                             className="link-button"
                             disabled={voidingExpenseId === expense.id}
-                            onClick={() => void handleVoidExpense(expense)}
+                            onClick={() => setVoidTarget(expense)}
                             type="button"
                           >
                             Buchung entfernen
@@ -651,6 +562,26 @@ export function OverviewPage() {
               </button>
             ) : null}
           </AppCard>
+          <AppDialog
+            description="Grenze die Buchungsliste ein. Änderungen werden sofort übernommen."
+            isOpen={isFilterOpen}
+            onClose={() => setIsFilterOpen(false)}
+            title="Buchungen filtern"
+          >
+            <div className="overview-filter-sheet">
+              <label><span>Kategorie</span><select onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))} value={filters.categoryId}><option value="">Alle Kategorien</option>{overviewCategories.map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</select></label>
+              <label><span>Benutzer</span><select onChange={(event) => setFilters((current) => ({ ...current, userId: event.target.value }))} value={filters.userId}><option value="">Alle Benutzer</option>{overviewUsers.map((summaryUser) => <option key={summaryUser.user_id} value={summaryUser.user_id}>{summaryUser.display_name}</option>)}</select></label>
+              <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamte Periode</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
+              {filters.datePreset === "custom" ? <div className="overview-date-row"><label><span>Von</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} type="date" value={filters.dateFrom} /></label><label><span>Bis</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} type="date" value={filters.dateTo} /></label></div> : null}
+              {isAdmin ? <label><span>Status</span><select onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as StatusFilter }))} value={filters.status}><option value="active">Nur gültige</option><option value="all">Mit stornierten</option></select></label> : null}
+              <label><span>Sortierung</span><select onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as OverviewExpenseSort }))} value={filters.sort}><option value="created_at_desc">Neueste zuerst</option><option value="created_at_asc">Älteste zuerst</option><option value="amount_desc">Höchster Betrag zuerst</option><option value="amount_asc">Niedrigster Betrag zuerst</option></select></label>
+              {filterError ? <p className="form-error" role="alert">{filterError}</p> : null}
+              <div className="action-row"><button className="primary-action" disabled={Boolean(filterError)} onClick={() => setIsFilterOpen(false)} type="button">Ergebnisse anzeigen</button>{hasActiveFilters ? <button className="secondary-action" onClick={resetFilters} type="button">Zurücksetzen</button> : null}</div>
+            </div>
+          </AppDialog>
+          <AppDialog description="Die Buchung bleibt zur Nachvollziehbarkeit gespeichert und wird aus den Summen entfernt." isOpen={Boolean(voidTarget)} onClose={() => setVoidTarget(null)} preventClose={voidingExpenseId !== null} title="Buchung stornieren?">
+            {voidTarget ? <div className="stack-form"><div className="closing-summary"><strong>{voidTarget.category.name}</strong><span>{formatThaiBaht(voidTarget.amount, voidTarget.currency)}</span></div><button className="primary-action category-danger-action" onClick={() => void handleVoidExpense(voidTarget)} type="button">Buchung stornieren</button><button className="secondary-action" onClick={() => setVoidTarget(null)} type="button">Abbrechen</button></div> : null}
+          </AppDialog>
         </>
       ) : null}
     </PageContainer>

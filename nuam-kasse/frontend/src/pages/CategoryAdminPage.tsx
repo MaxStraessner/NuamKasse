@@ -1,9 +1,12 @@
 import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
 
 import { AppCard } from "../components/AppCard";
+import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
 import { getCategoryIcon } from "../components/categoryIconMap";
 import { PageContainer } from "../components/PageContainer";
+import { PageHeader } from "../components/PageHeader";
 import {
   createCategory,
   deleteCategoryImage,
@@ -71,7 +74,7 @@ function loadCropImage(sourceUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Das Bild konnte nicht fuer den Ausschnitt geladen werden."));
+    image.onerror = () => reject(new Error("Das Bild konnte nicht für den Ausschnitt geladen werden."));
     image.src = sourceUrl;
   });
 }
@@ -174,18 +177,7 @@ function CategoryImageCropDialog({
   }
 
   return (
-    <div className="crop-dialog-backdrop" role="presentation">
-      <div
-        aria-label={`Bildausschnitt fuer ${categoryName} waehlen`}
-        aria-modal="true"
-        className="crop-dialog"
-        role="dialog"
-      >
-        <div className="crop-dialog__header">
-          <span>Bildausschnitt waehlen</span>
-          <small>Ziehe das Originalbild in Position. Der Kreis zeigt nur den spaeteren Ausschnitt.</small>
-        </div>
-
+    <AppDialog className="crop-dialog" description={`Ziehe das Originalbild für ${categoryName} in Position. Der Kreis zeigt nur den späteren Ausschnitt.`} isOpen onClose={onCancel} preventClose={isProcessing} title="Bildausschnitt wählen">
         <div className="crop-dialog__stage">
           <div
             className="crop-dialog__circle"
@@ -197,7 +189,7 @@ function CategoryImageCropDialog({
           >
             <img
               draggable="false"
-              alt={`Ausgewaehltes Bild fuer ${categoryName}`}
+              alt={`Ausgewähltes Bild für ${categoryName}`}
               src={sourceUrl}
               style={{
                 height: `${baseHeight * crop.zoom * 100}%`,
@@ -213,7 +205,7 @@ function CategoryImageCropDialog({
           <label>
             <span>Zoom</span>
             <input
-              aria-label="Zoom fuer Bildausschnitt"
+              aria-label="Zoom für Bildausschnitt"
               max={maxZoom}
               min={minCropZoom}
               onChange={(event) => onCropChange({ ...crop, zoom: Number(event.target.value) })}
@@ -222,19 +214,18 @@ function CategoryImageCropDialog({
               value={crop.zoom}
             />
           </label>
-          <small className="crop-dialog__hint">Ganz links siehst du immer das vollstaendige Originalbild.</small>
+          <small className="crop-dialog__hint">Ganz links siehst du immer das vollständige Originalbild.</small>
         </div>
 
         <div className="action-row action-row--wrap">
           <button className="primary-action" disabled={isProcessing} onClick={onConfirm} type="button">
-            {isProcessing ? "Ausschnitt wird erstellt..." : "Ausschnitt uebernehmen"}
+            {isProcessing ? "Ausschnitt wird erstellt …" : "Ausschnitt übernehmen"}
           </button>
           <button className="secondary-action" disabled={isProcessing} onClick={onCancel} type="button">
             Abbrechen
           </button>
         </div>
-      </div>
-    </div>
+    </AppDialog>
   );
 }
 
@@ -251,6 +242,7 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
   const [isCropping, setIsCropping] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -280,12 +272,12 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
     }
     if (!allowedImageTypes.includes(file.type)) {
       setSelectedFile(null);
-      setError("Dieses Dateiformat wird nicht unterstuetzt. Erlaubt sind PNG, JPG, JPEG und WEBP.");
+      setError("Dieses Dateiformat wird nicht unterstützt. Erlaubt sind PNG, JPG, JPEG und WEBP.");
       return;
     }
     if (file.size > maxImageBytes) {
       setSelectedFile(null);
-      setError("Das ausgewaehlte Bild ist zu gross. Bitte verwende eine Datei mit hoechstens 5 MB.");
+      setError("Das ausgewählte Bild ist zu groß. Bitte verwende eine Datei mit höchstens 5 MB.");
       return;
     }
     if (pendingCrop) {
@@ -298,7 +290,7 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
       const image = await loadCropImage(sourceUrl);
       const naturalWidth = image.naturalWidth || image.width;
       const naturalHeight = image.naturalHeight || image.height;
-      if (naturalWidth <= 0 || naturalHeight <= 0) throw new Error("Das Bild hat keine gueltigen Abmessungen.");
+      if (naturalWidth <= 0 || naturalHeight <= 0) throw new Error("Das Bild hat keine gültigen Abmessungen.");
       const initialZoom = Math.max(naturalWidth, naturalHeight) / Math.min(naturalWidth, naturalHeight);
       setPendingCrop({ file, sourceUrl, naturalWidth, naturalHeight, crop: { ...defaultCrop, zoom: initialZoom } });
     } catch (err) {
@@ -328,7 +320,7 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
       pendingCropUrlRef.current = null;
       setPendingCrop(null);
       setSelectedFile(croppedFile);
-      setMessage("Ausschnitt wurde uebernommen. Du kannst das Bild jetzt hochladen.");
+      setMessage("Ausschnitt wurde übernommen. Du kannst das Bild jetzt hochladen.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Der Bildausschnitt konnte nicht erstellt werden.");
     } finally {
@@ -338,7 +330,7 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
 
   async function handleUpload() {
     if (!selectedFile) {
-      setError("Bitte waehle zuerst ein Bild aus.");
+      setError("Bitte wähle zuerst ein Bild aus.");
       return;
     }
     setIsUploading(true);
@@ -357,12 +349,6 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
   }
 
   async function handleDelete() {
-    const confirmed = window.confirm(
-      "Eigenes Bild entfernen?\n\nAnschliessend wird wieder das Standard Icon dieser Kategorie angezeigt.",
-    );
-    if (!confirmed) {
-      return;
-    }
     setIsDeleting(true);
     setMessage(null);
     setError(null);
@@ -371,8 +357,9 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
       onCategoryUpdated(updated);
       setSelectedFile(null);
       setMessage("Eigenes Bild wurde entfernt.");
+      setIsDeleteConfirmOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Das Bild konnte nicht geloescht werden.");
+      setError(err instanceof Error ? err.message : "Das Bild konnte nicht gelöscht werden.");
     } finally {
       setIsDeleting(false);
     }
@@ -387,13 +374,13 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
     <div className="category-image-control">
       <div>
         <span>Eigenes Bild</span>
-        <small>PNG, JPG, JPEG oder WEBP bis 5 MB. Ohne eigenes Bild wird weiterhin das ausgewaehlte Icon verwendet.</small>
+        <small>PNG, JPG, JPEG oder WEBP bis 5 MB. Ohne eigenes Bild wird weiterhin das ausgewählte Icon verwendet.</small>
       </div>
       <div className="category-image-control__preview">
         <CategoryTile category={displayCategory} size="compact" />
       </div>
       <input
-        aria-label={`Bilddatei fuer ${category.name} auswaehlen`}
+        aria-label={`Bilddatei für ${category.name} auswählen`}
         accept="image/png,image/jpeg,image/webp"
         className="category-image-control__input"
         disabled={isBusy}
@@ -410,12 +397,12 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
           {category.has_custom_image ? "Bild ersetzen" : "Bild hochladen"}
         </button>
         {category.has_custom_image ? (
-          <button className="secondary-action" disabled={isBusy} onClick={() => void handleDelete()} type="button">
+          <button className="secondary-action" disabled={isBusy} onClick={() => setIsDeleteConfirmOpen(true)} type="button">
             Bild entfernen
           </button>
         ) : null}
       </div>
-      {isUploading ? <p className="form-success" role="status">Bild wird hochgeladen...</p> : null}
+      {isUploading ? <p className="form-success" role="status">Bild wird hochgeladen …</p> : null}
       {message ? <p className="form-success" role="status">{message}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {pendingCrop ? (
@@ -428,6 +415,9 @@ function CategoryImageControl({ category, onCategoryUpdated }: CategoryImageCont
           pendingCrop={pendingCrop}
         />
       ) : null}
+      <AppDialog description="Anschließend wird wieder das Standardsymbol dieser Kategorie angezeigt." isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} preventClose={isDeleting} title="Eigenes Bild entfernen?">
+        <div className="stack-form"><button className="primary-action category-danger-action" onClick={() => void handleDelete()} type="button">Bild entfernen</button><button className="secondary-action" onClick={() => setIsDeleteConfirmOpen(false)} type="button">Abbrechen</button></div>
+      </AppDialog>
     </div>
   );
 }
@@ -466,14 +456,8 @@ function CategoryFormDialog({
   const title = mode === "edit" ? "Kategorie bearbeiten" : "Neue Kategorie";
 
   return (
-    <div className="dialog-backdrop category-dialog-backdrop" role="presentation">
-      <div aria-label={title} aria-modal="true" className="category-dialog" role="dialog">
+    <AppDialog className="category-dialog" description={mode === "edit" ? category?.name : "Stammdaten und Darstellung festlegen"} isOpen onClose={onCancel} preventClose={isSaving} title={title}>
         <form className="stack-form" onSubmit={(event) => onSubmit(event)}>
-          <div className="card-heading">
-            <span>{title}</span>
-            <small>{mode === "edit" ? category?.name : "Stammdaten"}</small>
-          </div>
-
           <label className="form-field">
             <span>Kategoriename</span>
             <input
@@ -589,8 +573,7 @@ function CategoryFormDialog({
         {mode === "edit" && category ? (
           <CategoryImageControl category={category} onCategoryUpdated={onCategoryUpdated} />
         ) : null}
-      </div>
-    </div>
+    </AppDialog>
   );
 }
 
@@ -610,30 +593,24 @@ function ConfirmDeleteDialog({
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   return (
-    <div className="dialog-backdrop category-dialog-backdrop" role="presentation">
-      <div aria-label={`Kategorie ${category.name} loeschen`} aria-modal="true" className="category-confirm-dialog" role="dialog">
-        <div className="card-heading">
-          <span>Kategorie loeschen?</span>
-          <small>{category.name}</small>
-        </div>
+    <AppDialog className="category-confirm-dialog" description={category.name} isOpen onClose={onCancel} preventClose={isDeleting} title="Kategorie löschen?">
         <p className="category-confirm-dialog__copy">
-          Die Kategorie "{category.name}" wird dauerhaft geloescht. Diese Aktion soll nicht unbeabsichtigt ausgefuehrt werden.
+          Die Kategorie „{category.name}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
         </p>
         <p className="category-confirm-dialog__copy">
           {subcategoryCount > 0
-            ? `${subcategoryCount} Unterkategorie${subcategoryCount === 1 ? "" : "n"} sind betroffen. Wenn die bestehende Logik das Loeschen verhindert, bleibt die Kategorie erhalten.`
+            ? `${subcategoryCount} Unterkategorie${subcategoryCount === 1 ? "" : "n"} sind betroffen. Falls noch abhängige Daten existieren, bleibt die Kategorie erhalten.`
             : "Es sind keine Unterkategorien betroffen."}
         </p>
         <div className="action-row action-row--wrap">
           <button className="primary-action category-danger-action" disabled={isDeleting} onClick={onConfirm} type="button">
-            {isDeleting ? "Wird geloescht..." : "Kategorie loeschen"}
+            {isDeleting ? "Wird gelöscht …" : "Kategorie löschen"}
           </button>
           <button className="secondary-action" disabled={isDeleting} onClick={onCancel} type="button">
             Abbrechen
           </button>
         </div>
-      </div>
-    </div>
+    </AppDialog>
   );
 }
 
@@ -651,9 +628,19 @@ export function CategoryAdminPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusTarget, setStatusTarget] = useState<{ category: Category; nextStatus: boolean } | null>(null);
 
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const rootCategories = categoryTree;
+  const filteredRootCategories = rootCategories.filter((category) => {
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? category.is_active : !category.is_active);
+    const query = search.trim().toLocaleLowerCase("de-DE");
+    const matchesSearch = !query || category.name.toLocaleLowerCase("de-DE").includes(query)
+      || category.children.some((child) => child.name.toLocaleLowerCase("de-DE").includes(query));
+    return matchesStatus && matchesSearch;
+  });
 
   async function loadCategories() {
     setIsLoading(true);
@@ -727,7 +714,7 @@ export function CategoryAdminPage() {
       return;
     }
     if (cleanName.length > 50) {
-      setError("Der Kategoriename darf hoechstens 50 Zeichen lang sein.");
+      setError("Der Kategoriename darf höchstens 50 Zeichen lang sein.");
       return;
     }
 
@@ -766,19 +753,11 @@ export function CategoryAdminPage() {
   async function handleActiveChange(category: Category, isActive: boolean) {
     setMessage(null);
     setError(null);
-    if (!isActive) {
-      const confirmed = window.confirm(
-        `Kategorie "${category.name}" deaktivieren?\n\nDie Kategorie wird nicht mehr auf der Startseite angezeigt. Bereits vorhandene Daten bleiben erhalten.`,
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
     try {
       const updated = await updateCategory(category.id, { is_active: isActive });
       setCategories((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMessage(isActive ? "Kategorie wurde wieder aktiviert." : "Kategorie wurde deaktiviert.");
+      setStatusTarget(null);
       if (editingCategory?.id === category.id) {
         setEditingCategory(updated);
         setForm((current) => ({ ...current, is_active: isActive }));
@@ -830,10 +809,10 @@ export function CategoryAdminPage() {
     try {
       await deleteCategory(deleteTarget.id);
       setDeleteTarget(null);
-      setMessage("Kategorie wurde geloescht.");
+      setMessage("Kategorie wurde gelöscht.");
       await loadCategories();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kategorie konnte nicht geloescht werden.");
+      setError(err instanceof Error ? err.message : "Kategorie konnte nicht gelöscht werden.");
     } finally {
       setIsDeleting(false);
     }
@@ -860,34 +839,35 @@ export function CategoryAdminPage() {
       <div className="category-actions">
         <button
           aria-label={`Kategorie ${category.name} nach oben verschieben`}
-          className="secondary-action"
+          className="category-action-button"
           disabled={index === 0 || isSorting}
           onClick={() => void moveCategory(siblings, index, -1, parentCategoryId)}
           type="button"
         >
-          Nach oben
+          <ArrowUp aria-hidden="true" /><span className="sr-only">Nach oben</span>
         </button>
         <button
           aria-label={`Kategorie ${category.name} nach unten verschieben`}
-          className="secondary-action"
+          className="category-action-button"
           disabled={index === siblings.length - 1 || isSorting}
           onClick={() => void moveCategory(siblings, index, 1, parentCategoryId)}
           type="button"
         >
-          Nach unten
+          <ArrowDown aria-hidden="true" /><span className="sr-only">Nach unten</span>
         </button>
-        <button className="secondary-action" onClick={() => startEdit(category)} type="button">
-          Bearbeiten
+        <button aria-label="Bearbeiten" className="category-action-button" onClick={() => startEdit(category)} type="button">
+          <Pencil aria-hidden="true" /><span className="sr-only">Bearbeiten</span>
         </button>
         <button
-          className="secondary-action"
-          onClick={() => void handleActiveChange(category, !category.is_active)}
+          aria-label={category.is_active ? "Deaktivieren" : "Aktivieren"}
+          className="category-action-button"
+          onClick={() => setStatusTarget({ category, nextStatus: !category.is_active })}
           type="button"
         >
-          {category.is_active ? "Deaktivieren" : "Aktivieren"}
+          <Power aria-hidden="true" /><span className="sr-only">{category.is_active ? "Deaktivieren" : "Aktivieren"}</span>
         </button>
-        <button className="secondary-action" onClick={() => setDeleteTarget(category)} type="button">
-          Loeschen
+        <button aria-label="Löschen" className="category-action-button category-action-button--danger" onClick={() => setDeleteTarget(category)} type="button">
+          <Trash2 aria-hidden="true" /><span className="sr-only">Löschen</span>
         </button>
       </div>
     );
@@ -909,18 +889,13 @@ export function CategoryAdminPage() {
 
   return (
     <PageContainer>
-      <header className="home-header">
-        <div>
-          <p className="home-header__eyebrow">Administration</p>
-          <h1>Kategorien</h1>
-        </div>
-      </header>
+      <PageHeader backLabel="Einstellungen" backTo="/settings" eyebrow="Verwaltung" title="Kategorien" action={<button className="page-action" onClick={startCreate} type="button"><Plus aria-hidden="true" /><span>Neu</span></button>} />
 
-      <AppCard className="category-create-panel">
-        <button className="primary-action" onClick={startCreate} type="button">
-          Neue Kategorie erstellen
-        </button>
-      </AppCard>
+      <p className="section-intro">Ober- und Unterkategorien durchsuchen, sortieren und gestalten.</p>
+      <div className="admin-toolbar">
+        <label className="dialog-search"><Search aria-hidden="true" /><span className="sr-only">Kategorien suchen</span><input onChange={(event) => setSearch(event.target.value)} placeholder="Kategorien suchen" value={search} /></label>
+        <label><span className="sr-only">Status filtern</span><select aria-label="Status filtern" onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}><option value="all">Alle</option><option value="active">Aktiv</option><option value="inactive">Inaktiv</option></select></label>
+      </div>
 
       {message ? <p className="form-success" role="status">{message}</p> : null}
       {error ? (
@@ -937,7 +912,9 @@ export function CategoryAdminPage() {
         {!isLoading && categories.length === 0 ? (
           <AppCard>Noch keine Kategorien vorhanden. Erstelle deine erste Kategorie.</AppCard>
         ) : null}
-        {rootCategories.map((category, index) => {
+        {!isLoading && categories.length > 0 && filteredRootCategories.length === 0 ? <AppCard>Keine passenden Kategorien gefunden.</AppCard> : null}
+        {filteredRootCategories.map((category) => {
+          const index = rootCategories.findIndex((item) => item.id === category.id);
           const isExpanded = expandedIds.has(category.id);
           const panelId = `category-panel-${category.id}`;
           return (
@@ -960,9 +937,7 @@ export function CategoryAdminPage() {
                 <span className={`status-pill ${category.is_active ? "status-pill--active" : ""}`}>
                   {category.is_active ? "aktiv" : "inaktiv"}
                 </span>
-                <span className="category-accordion-item__chevron" aria-hidden="true">
-                  {isExpanded ? "v" : ">"}
-                </span>
+                <span className="category-accordion-item__chevron" aria-hidden="true">{isExpanded ? <ChevronDown /> : <ChevronRight />}</span>
               </button>
 
               {isExpanded ? (
@@ -1008,6 +983,9 @@ export function CategoryAdminPage() {
           subcategoryCount={getSubcategoryCount(deleteTarget)}
         />
       ) : null}
+      <AppDialog description={statusTarget?.nextStatus ? "Die Kategorie wird wieder für neue Buchungen angeboten." : "Die Kategorie verschwindet von der Startseite. Bestehende Buchungen bleiben erhalten."} isOpen={Boolean(statusTarget)} onClose={() => setStatusTarget(null)} title={statusTarget?.nextStatus ? "Kategorie aktivieren?" : "Kategorie deaktivieren?"}>
+        {statusTarget ? <div className="stack-form"><button className={`primary-action${statusTarget.nextStatus ? "" : " category-danger-action"}`} onClick={() => void handleActiveChange(statusTarget.category, statusTarget.nextStatus)} type="button">Bestätigen</button><button className="secondary-action" onClick={() => setStatusTarget(null)} type="button">Abbrechen</button></div> : null}
+      </AppDialog>
     </PageContainer>
   );
 }

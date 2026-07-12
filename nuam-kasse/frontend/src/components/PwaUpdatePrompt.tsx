@@ -23,15 +23,15 @@ export function PwaUpdatePrompt() {
   return (
     <div className="pwa-prompt pwa-prompt--update" role="status">
       <div>
-        <strong>Neue Version verfuegbar</strong>
-        <span>Aktualisiere bewusst, wenn gerade keine Eingabe laeuft.</span>
+        <strong>Neue Version verfügbar</strong>
+        <span>Aktualisiere, sobald keine Eingabe mehr geöffnet ist.</span>
       </div>
       <div className="pwa-prompt__actions">
         <button type="button" onClick={() => void updateServiceWorker(true)}>
           Jetzt aktualisieren
         </button>
         <button type="button" onClick={() => setUpdateServiceWorker(null)}>
-          Spaeter
+          Später
         </button>
       </div>
     </div>

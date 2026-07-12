@@ -2,6 +2,15 @@
 
 Nuam Kasse ist die technische Grundlage fuer eine kleine gemeinsame Kassenbuch-Web-App. Die App ist mobile-first ausgelegt, als Progressive Web App vorbereitet und fuer ein eigenstaendiges Produktionsdeployment auf einem Hostinger VPS dokumentiert.
 
+## Version 0.7 – Mobile Experience Refresh
+
+- rollenbasierte Verwaltungsnavigation mit geschützten Admin-Routen
+- zugängliche Modal- und Bottom-Sheet-Interaktionen mit Fokusmanagement
+- kompakter Buchungsflow mit Suche, Schnellbeträgen und unmittelbarer Bestätigung
+- verdichtete Auswertung mit Filter-Sheet und bereinigten Mitgliederkennzahlen
+- neu strukturierte Einstellungen sowie mobile Benutzer-, Kategorien- und Kassenverwaltung
+- vereinheitlichte Navigation, Typografie, Touchflächen, Lade- und Statuszustände
+
 Umgesetzt sind die technische Basis, Benutzerauthentifizierung mit Rollen und serverseitigen Sitzungen, das Kategorienmodul als Stammdatenverwaltung, das Kassenmodul fuer aktive und abgeschlossene Kassenperioden, das Buchungsmodul fuer Ausgaben und Stornierungen, das Uebersichtsmodul fuer Auswertungen sowie PWA- und Deployment-Vorbereitung. Exporte sind bewusst noch nicht enthalten.
 
 ## Architektur

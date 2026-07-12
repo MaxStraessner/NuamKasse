@@ -1,16 +1,18 @@
 import { NavLink } from "react-router-dom";
+import { ChartNoAxesCombined, House, Settings } from "lucide-react";
 
 const navItems = [
-  { label: "Start", to: "/" },
-  { label: "Übersicht", to: "/overview" },
-  { label: "Einstellungen", to: "/settings" },
+  { icon: House, label: "Start", to: "/" },
+  { icon: ChartNoAxesCombined, label: "Übersicht", to: "/overview" },
+  { icon: Settings, label: "Einstellungen", to: "/settings" },
 ];
 
 export function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Hauptnavigation">
-      {navItems.map((item) => (
-        <NavLink
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        return <NavLink
           className={({ isActive }) =>
             `bottom-nav__item${isActive ? " bottom-nav__item--active" : ""}`
           }
@@ -18,10 +20,10 @@ export function BottomNav() {
           key={item.to}
           to={item.to}
         >
-          <span className="bottom-nav__dot" aria-hidden="true" />
+          <Icon aria-hidden="true" />
           <span>{item.label}</span>
-        </NavLink>
-      ))}
+        </NavLink>;
+      })}
     </nav>
   );
 }

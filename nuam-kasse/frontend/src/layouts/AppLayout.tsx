@@ -1,4 +1,5 @@
-import { Outlet } from "react-router-dom";
+import { CircleUserRound } from "lucide-react";
+import { Link, Outlet } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
 import { BottomNav } from "../components/BottomNav";
@@ -7,15 +8,15 @@ import { PwaInstallPrompt } from "../components/PwaInstallPrompt";
 import { PwaUpdatePrompt } from "../components/PwaUpdatePrompt";
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="app-shell">
       <div className="user-strip">
         <span>Hallo, {user?.display_name}</span>
-        <button type="button" onClick={() => void logout()}>
-          Abmelden
-        </button>
+        <Link aria-label="Konto und Einstellungen öffnen" to="/settings">
+          <CircleUserRound aria-hidden="true" />
+        </Link>
       </div>
       <OfflineNotice />
       <Outlet />
