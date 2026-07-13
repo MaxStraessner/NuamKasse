@@ -248,7 +248,7 @@ export function HomePage() {
     <PageContainer>
       <PageHeader eyebrow="Gemeinsame Kasse" title="Nuam Kasse" />
 
-      <AppCard ariaLabel="Kassenuebersicht">
+      <AppCard ariaLabel="Kassenübersicht">
         <div className="card-heading">
           <span>Aktuelle Kasse</span>
           <small>{cashPeriod?.name || "Kassenperiode"}</small>

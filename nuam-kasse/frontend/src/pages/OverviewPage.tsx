@@ -441,13 +441,14 @@ export function OverviewPage() {
               <div className="overview-summary-list">
                 {displayedCategories.map((category) => (
                   <button
+                    aria-label={`Ausgaben filtern nach Kategorie ${category.category_name}`}
                     className={`overview-summary-row${filters.categoryId === String(category.category_id) ? " overview-summary-row--active" : ""}`}
                     key={category.category_id}
                     onClick={() => selectCategory(category.category_id)}
                     type="button"
                   >
-                    <CategoryTile category={categoryAsTile(category)} size="compact" />
-                    <span>
+                    <CategoryTile category={categoryAsTile(category)} showLabel={false} size="compact" />
+                    <span className="overview-summary-row__details">
                       <strong>{formatThaiBaht(category.total_amount, cashPeriod.currency)}</strong>
                       <small>{formatExpenseCount(category.expense_count)} · {category.percentage_of_spending} Prozent</small>
                       <i style={{ width: `${Math.min(Number(category.percentage_of_spending), 100)}%` }} />

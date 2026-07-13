@@ -480,11 +480,14 @@ textarea:focus-visible {
 }
 
 .metric-tile {
+  display: grid;
   min-height: 6.5rem;
+  align-content: center;
   padding: var(--space-4);
   border: 1px solid rgba(29, 29, 31, 0.06);
   border-radius: var(--radius-lg);
   background: var(--color-surface-soft);
+  text-align: center;
 }
 
 .metric-tile--warning {
@@ -506,9 +509,11 @@ textarea:focus-visible {
 
 .metric-tile__value {
   display: block;
+  min-width: 0;
   margin: var(--space-2) 0;
-  font-size: var(--font-size-xl);
-  line-height: 1;
+  overflow-wrap: anywhere;
+  font-size: clamp(1rem, 4.8vw, var(--font-size-xl));
+  line-height: 1.1;
 }
 
 .metric-tile__hint {
@@ -1066,7 +1071,7 @@ textarea:focus-visible {
 }
 
 .overview-summary-row {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 3.5rem minmax(0, 1fr);
 }
 
 .overview-user-row {
@@ -1084,6 +1089,11 @@ textarea:focus-visible {
   display: grid;
   min-width: 0;
   gap: 0.28rem;
+}
+
+.overview-summary-row__details strong,
+.overview-summary-row__details small {
+  text-align: right;
 }
 
 .overview-summary-row small,
@@ -1993,11 +2003,15 @@ textarea:focus-visible {
 
 @media (min-width: 420px) {
   .metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metric-tile {
     min-height: 7.25rem;
+  }
+
+  .metric-tile:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 

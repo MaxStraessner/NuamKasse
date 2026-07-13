@@ -1135,7 +1135,7 @@ describe("Overview", () => {
     expect(screen.queryByText(/storniert/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inklusive stornierter")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByText("Essen")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Ausgaben filtern nach Kategorie Essen" }));
     await waitFor(() => expect(expenseUrls.some((url) => url.includes("category_id=1"))).toBe(true));
     expect(screen.getByRole("button", { name: "Kategorie: Essen" })).toBeInTheDocument();
 

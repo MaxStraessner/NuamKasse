@@ -15,7 +15,7 @@ def validate_password(password: str) -> None:
     if len(password) < 8:
         raise ValueError("Das Passwort muss mindestens 8 Zeichen enthalten.")
     if len(password) > 128:
-        raise ValueError("Das Passwort darf hoechstens 128 Zeichen enthalten.")
+        raise ValueError("Das Passwort darf höchstens 128 Zeichen enthalten.")
     if not password.strip():
         raise ValueError("Das Passwort muss mindestens ein sichtbares Zeichen enthalten.")
 

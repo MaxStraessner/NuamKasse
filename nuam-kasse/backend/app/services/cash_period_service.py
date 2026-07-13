@@ -27,7 +27,7 @@ def _validate_name(name: str) -> str:
     if not clean_name:
         raise CashPeriodServiceError("Der Name der Kassenperiode darf nicht leer sein.")
     if len(clean_name) > 80:
-        raise CashPeriodServiceError("Der Name der Kassenperiode darf hoechstens 80 Zeichen lang sein.")
+        raise CashPeriodServiceError("Der Name der Kassenperiode darf höchstens 80 Zeichen lang sein.")
     return clean_name
 
 
@@ -121,7 +121,7 @@ def update_cash_period(
 ) -> CashPeriod:
     if cash_period.status == CashPeriodStatus.closed:
         raise CashPeriodServiceError(
-            "Eine abgeschlossene Kassenperiode kann nicht mehr veraendert werden.",
+            "Eine abgeschlossene Kassenperiode kann nicht mehr verändert werden.",
             code="cash_period_closed",
             conflict=True,
         )
