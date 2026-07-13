@@ -7,7 +7,7 @@ from PIL import Image
 
 from app.core.config import Settings
 from app.models.cash_period import CashPeriod, CashPeriodStatus
-from app.models.category import Category
+from app.models.category import Category, CategoryType
 from app.models.expense import Expense
 from app.models.user import User
 from app.models.user import UserRole
@@ -32,6 +32,7 @@ def create_test_category(
     is_active: bool = True,
     parent_category_id: int | None = None,
     user_id: int | None = None,
+    category_type: CategoryType = CategoryType.expense,
 ) -> Category:
     owner_id = user_id
     if owner_id is None:
@@ -42,6 +43,7 @@ def create_test_category(
         name_normalized=name.strip().casefold(),
         icon_key=icon_key,
         color_key=color_key,
+        category_type=category_type,
         parent_category_id=parent_category_id,
         sort_order=sort_order,
         is_active=is_active,
@@ -126,7 +128,53 @@ def test_admin_can_create_category_with_normalized_unique_name(client, db_sessio
     assert response.json()["name"] == "Essen"
     assert response.json()["sort_order"] == 5
     assert response.json()["is_active"] is True
+    assert response.json()["category_type"] == "expense"
     assert duplicate.status_code == 400
+
+
+def test_category_type_can_be_created_changed_and_is_inherited(client, db_session):
+    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
+    login(client, "admin", "admin-pass")
+
+    income = client.post(
+        "/api/v1/categories",
+        json={"name": "Gehalt", "icon_key": "wallet", "color_key": "green", "category_type": "income"},
+    )
+    child = client.post(
+        "/api/v1/categories",
+        json={
+            "name": "Bonus",
+            "icon_key": "gift",
+            "color_key": "green",
+            "parent_category_id": income.json()["id"],
+        },
+    )
+
+    assert income.status_code == 201
+    assert income.json()["category_type"] == "income"
+    assert child.status_code == 201
+    assert child.json()["category_type"] == "income"
+
+    child_type_change = client.patch(f"/api/v1/categories/{child.json()['id']}", json={"category_type": "expense"})
+    changed = client.patch(f"/api/v1/categories/{income.json()['id']}", json={"category_type": "expense"})
+    listed = client.get("/api/v1/categories")
+
+    assert child_type_change.status_code == 400
+    assert changed.status_code == 200
+    assert changed.json()["category_type"] == "expense"
+    assert {item["name"]: item["category_type"] for item in listed.json()}["Bonus"] == "expense"
+
+
+def test_invalid_category_type_is_rejected(client, db_session):
+    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
+    login(client, "admin", "admin-pass")
+
+    created = client.post(
+        "/api/v1/categories",
+        json={"name": "Gehalt", "icon_key": "wallet", "color_key": "green", "category_type": "credit"},
+    )
+
+    assert created.status_code == 422
 
 
 def test_admin_can_create_subcategories_and_reject_invalid_hierarchy(client, db_session):

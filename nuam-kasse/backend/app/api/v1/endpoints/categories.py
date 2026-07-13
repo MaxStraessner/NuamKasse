@@ -75,6 +75,7 @@ def create_category_endpoint(
             user_id=user.id,
             parent_category_id=payload.parent_category_id,
             sort_order=payload.sort_order,
+            category_type=payload.category_type,
         )
     except CategoryServiceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

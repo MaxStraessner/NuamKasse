@@ -1,5 +1,7 @@
 import { isCategoryColorKey } from "../types/category";
 import { CategoryVisual } from "./CategoryVisual";
+import { CategoryTypeBadge } from "./CategoryTypeBadge";
+import type { CategoryType } from "../types/category";
 
 type CategoryTileProps = {
   category: {
@@ -7,6 +9,7 @@ type CategoryTileProps = {
     icon_key: string;
     color_key: string;
     image_url?: string | null;
+    category_type?: CategoryType;
   };
   size?: "regular" | "compact";
   isDisabled?: boolean;
@@ -27,6 +30,7 @@ export function CategoryTile({
     <>
       <CategoryVisual icon={category.icon_key} imageUrl={category.image_url} name={category.name} />
       {showLabel ? <strong>{category.name}</strong> : null}
+      {showLabel && category.category_type ? <CategoryTypeBadge compact type={category.category_type} /> : null}
     </>
   );
 

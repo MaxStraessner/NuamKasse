@@ -1,4 +1,5 @@
 import type { CashPeriodStatus } from "./cashPeriod";
+import type { CategoryType } from "./category";
 
 export type OverviewCashPeriod = {
   id: number;
@@ -13,6 +14,7 @@ export type OverviewSummary = {
   cash_period: OverviewCashPeriod;
   opening_amount: string;
   spent_amount: string;
+  income_amount: string;
   remaining_amount: string;
   expense_count: number;
   active_expense_count: number;
@@ -24,6 +26,7 @@ export type CategorySummary = {
   category_name: string;
   icon_key: string;
   color_key: string;
+  category_type: CategoryType;
   has_custom_image?: boolean;
   image_url?: string | null;
   image_updated_at?: string | null;
@@ -51,6 +54,7 @@ export type OverviewExpenseCategory = {
   icon_key: string;
   color_key: string;
   parent_category_id: number | null;
+  category_type: CategoryType;
   has_custom_image?: boolean;
   image_url?: string | null;
   image_updated_at?: string | null;
@@ -61,6 +65,7 @@ export type OverviewExpense = {
   cash_period_id: number;
   category: OverviewExpenseCategory;
   amount: string;
+  transaction_type: CategoryType;
   currency: "THB";
   created_by: OverviewExpenseUser;
   created_at: string;

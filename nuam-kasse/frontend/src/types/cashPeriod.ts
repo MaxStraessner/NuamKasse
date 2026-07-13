@@ -25,6 +25,7 @@ export type CashPeriodSummary = {
   name: string;
   opening_amount: string;
   spent_amount: string;
+  income_amount: string;
   remaining_amount: string;
   currency: "THB";
   status: CashPeriodStatus;

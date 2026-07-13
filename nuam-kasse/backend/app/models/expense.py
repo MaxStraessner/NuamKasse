@@ -1,10 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.category import CategoryType
 from app.models.user import utc_now
 
 
@@ -26,6 +27,12 @@ class Expense(Base):
         index=True,
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    transaction_type: Mapped[CategoryType] = mapped_column(
+        Enum(CategoryType, native_enum=False),
+        nullable=False,
+        default=CategoryType.expense,
+        index=True,
+    )
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="THB")
     created_by_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),

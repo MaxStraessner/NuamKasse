@@ -43,6 +43,7 @@ export const categoryColorKeys = [
 
 export type CategoryIconKey = (typeof categoryIconKeys)[number];
 export type CategoryColorKey = (typeof categoryColorKeys)[number];
+export type CategoryType = "expense" | "income";
 
 export type Category = {
   id: number;
@@ -50,6 +51,7 @@ export type Category = {
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  category_type: CategoryType;
   parent_category_id: number | null;
   sort_order: number;
   is_active: boolean;
@@ -65,6 +67,7 @@ export type CategoryCreate = {
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  category_type?: CategoryType;
   parent_category_id?: number | null;
 };
 
@@ -72,6 +75,7 @@ export type CategoryUpdate = Partial<{
   name: string;
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
+  category_type: CategoryType;
   parent_category_id: number | null;
   is_active: boolean;
 }>;

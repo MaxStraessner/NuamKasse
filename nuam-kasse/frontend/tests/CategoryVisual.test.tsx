@@ -8,6 +8,7 @@ const rootCategory = {
   icon_key: "heart-pulse",
   color_key: "red",
   image_url: "/api/v1/categories/1/image?v=1",
+  category_type: "income" as const,
 };
 
 const subcategory = {
@@ -15,9 +16,17 @@ const subcategory = {
   icon_key: "pill",
   color_key: "red",
   image_url: null,
+  category_type: "expense" as const,
 };
 
 describe("CategoryTile custom images", () => {
+  test("shows text and color-independent category type status", () => {
+    render(<CategoryTile category={rootCategory} />);
+
+    const badge = screen.getByLabelText("Kategorieart: Einnahme");
+    expect(badge).toHaveTextContent("Einnahme");
+    expect(badge).toHaveClass("category-type-badge--income");
+  });
   test("shows the standard icon when no image is present", () => {
     render(<CategoryTile category={subcategory} />);
 

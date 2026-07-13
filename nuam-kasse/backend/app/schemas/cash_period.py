@@ -65,6 +65,7 @@ class CashPeriodSummary(BaseModel):
     name: str
     opening_amount: str
     spent_amount: str
+    income_amount: str
     remaining_amount: str
     currency: str
     status: CashPeriodStatus

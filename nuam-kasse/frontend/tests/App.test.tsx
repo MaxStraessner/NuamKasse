@@ -30,6 +30,7 @@ const essenCategory = {
   name: "Essen",
   icon_key: "utensils",
   color_key: "orange",
+  category_type: "expense" as const,
   parent_category_id: null,
   sort_order: 1,
   is_active: true,
@@ -44,6 +45,7 @@ const bankCategory = {
   name: "Bank",
   icon_key: "landmark",
   color_key: "blue",
+  category_type: "expense" as const,
   parent_category_id: null,
   sort_order: 2,
   is_active: true,
@@ -58,6 +60,7 @@ const apothekeCategory = {
   name: "Apotheke",
   icon_key: "pill",
   color_key: "red",
+  category_type: "expense" as const,
   parent_category_id: essenCategory.id,
   sort_order: 1,
   is_active: true,
@@ -112,6 +115,7 @@ const activeCashSummary: CashPeriodSummary = {
   name: "Juli 2026",
   opening_amount: "20000.00",
   spent_amount: "0.00",
+  income_amount: "0.00",
   remaining_amount: "20000.00",
   currency: "THB",
   status: "active",
@@ -137,8 +141,10 @@ const essenExpense: Expense = {
     icon_key: "utensils",
     color_key: "orange",
     parent_category_id: null,
+    category_type: "expense",
   },
   amount: "250.00",
+  transaction_type: "expense",
   currency: "THB",
   created_by: { id: memberUser.id, display_name: memberUser.display_name },
   created_at: "2026-07-03T12:25:00Z",
@@ -164,8 +170,10 @@ const overviewExpense = {
     icon_key: essenCategory.icon_key,
     color_key: essenCategory.color_key,
     parent_category_id: null,
+    category_type: "expense",
   },
   amount: "250.00",
+  transaction_type: "expense",
   currency: "THB",
   created_by: { id: memberUser.id, display_name: memberUser.display_name },
   created_at: "2026-07-03T12:25:00Z",
@@ -196,6 +204,7 @@ const currentOverview: CashPeriodOverview = {
     },
     opening_amount: "20000.00",
     spent_amount: "400.00",
+    income_amount: "0.00",
     remaining_amount: "19600.00",
     expense_count: 3,
     active_expense_count: 2,
@@ -207,6 +216,7 @@ const currentOverview: CashPeriodOverview = {
       category_name: essenCategory.name,
       icon_key: essenCategory.icon_key,
       color_key: essenCategory.color_key,
+      category_type: "expense",
       expense_count: 1,
       total_amount: "250.00",
       percentage_of_spending: "62.50",
@@ -216,6 +226,7 @@ const currentOverview: CashPeriodOverview = {
       category_name: bankCategory.name,
       icon_key: bankCategory.icon_key,
       color_key: bankCategory.color_key,
+      category_type: "expense",
       expense_count: 1,
       total_amount: "150.00",
       percentage_of_spending: "37.50",
@@ -562,6 +573,7 @@ describe("Categories", () => {
 
   test("admin can create a category from catalog choices", async () => {
     let categories = [essenCategory];
+    let categoryPayload: Record<string, unknown> | null = null;
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(adminUser);
@@ -576,6 +588,7 @@ describe("Categories", () => {
         return jsonResponse(categories.filter((category) => category.is_active));
       }
       if (url.endsWith("/categories") && options?.method === "POST") {
+        categoryPayload = JSON.parse(String(options.body)) as Record<string, unknown>;
         const created = {
           ...bankCategory,
           id: 3,
@@ -598,14 +611,52 @@ describe("Categories", () => {
     expect(screen.queryByLabelText("Kategoriename")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Neu" }));
     expect(screen.getByRole("dialog", { name: "Neue Kategorie" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kategorieart: Ausgabe" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("Kategoriename"), { target: { value: "Einkauf" } });
     fireEvent.click(screen.getByRole("button", { name: "Symbol Einkauf" }));
     fireEvent.click(screen.getByRole("button", { name: "Farbe Grün" }));
+    const incomeTypeButton = screen.getByRole("button", { name: "Kategorieart: Einnahme" });
+    incomeTypeButton.focus();
+    fireEvent.keyDown(incomeTypeButton, { key: "Enter" });
+    fireEvent.click(incomeTypeButton);
+    expect(incomeTypeButton).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Kategorie anlegen" }));
 
     expect(await screen.findByText("Kategorie wurde angelegt.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Neue Kategorie" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Einkauf").length).toBeGreaterThan(0);
+    expect(categoryPayload).toMatchObject({ category_type: "income" });
+  });
+
+  test("subcategory shows its inherited category type without an independent selector", async () => {
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) {
+        return jsonResponse(adminUser);
+      }
+      if (url.endsWith("/categories/catalog")) {
+        return jsonResponse(categoryCatalog);
+      }
+      if (url.includes("/categories?include_inactive=true") && options?.method === "GET") {
+        return jsonResponse([essenCategory, apothekeCategory]);
+      }
+      if (url.endsWith("/categories") && options?.method === "GET") {
+        return jsonResponse([essenCategory, apothekeCategory]);
+      }
+      return jsonResponse({});
+    });
+
+    window.history.pushState({}, "", "/settings/categories");
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Kategorien" });
+    fireEvent.click(screen.getByRole("button", { name: /Kategorie Essen/ }));
+    const editButtons = screen.getAllByRole("button", { name: "Bearbeiten" });
+    fireEvent.click(editButtons[1]);
+
+    const dialog = screen.getByRole("dialog", { name: "Kategorie bearbeiten" });
+    expect(within(dialog).getAllByLabelText("Kategorieart: Ausgabe").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("Wird von der Oberkategorie übernommen")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Kategorieart: Einnahme" })).not.toBeInTheDocument();
   });
 
   test("admin can edit, deactivate, reactivate, and reorder categories", async () => {
@@ -939,6 +990,52 @@ describe("Expenses", () => {
     expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
   });
 
+  test("income remains bookable at zero balance and increases the preview", async () => {
+    window.history.pushState({}, "", "/");
+    const incomeCategory = { ...essenCategory, id: 8, name: "Gehalt", category_type: "income" as const };
+    const zeroSummary: CashPeriodSummary = {
+      ...activeCashSummary,
+      opening_amount: "0.00",
+      remaining_amount: "0.00",
+    };
+    const incomeSummary: CashPeriodSummary = {
+      ...zeroSummary,
+      income_amount: "500.00",
+      remaining_amount: "500.00",
+      expense_count: 1,
+      active_expense_count: 1,
+    };
+    const incomeExpense: Expense = {
+      ...essenExpense,
+      id: 8,
+      category: { ...essenExpense.category, id: 8, name: "Gehalt", category_type: "income" },
+      amount: "500.00",
+      transaction_type: "income",
+    };
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(memberUser);
+      if (url.endsWith("/cash-periods/current/summary")) return jsonResponse(zeroSummary);
+      if (url.endsWith("/cash-periods/current")) return jsonResponse(activeCashPeriod);
+      if (url.endsWith("/categories")) return jsonResponse([incomeCategory]);
+      if (url.endsWith("/expenses") && options?.method === "POST") {
+        return jsonResponse({ expense: incomeExpense, summary: incomeSummary }, 201);
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    const categoryButton = await screen.findByLabelText("Kategorie Gehalt");
+    expect(categoryButton).not.toBeDisabled();
+    fireEvent.click(categoryButton);
+    expect(await screen.findByRole("dialog", { name: "Einnahme eintragen" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "500" } });
+    expect(screen.getAllByText(/500\.00/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Einnahme speichern" }));
+
+    expect(await screen.findByText(/Einnahme über/)).toBeInTheDocument();
+  });
+
   test("root category with subcategories opens subcategory selection before amount dialog", async () => {
     window.history.pushState({}, "", "/");
     let summary = activeCashSummary;
@@ -952,6 +1049,7 @@ describe("Expenses", () => {
         icon_key: "pill",
         color_key: "red",
         parent_category_id: essenCategory.id,
+        category_type: "expense",
       },
     };
     mockFetch((url, options) => {
@@ -1135,7 +1233,7 @@ describe("Overview", () => {
     expect(screen.queryByText(/storniert/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inklusive stornierter")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ausgaben filtern nach Kategorie Essen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buchungen filtern nach Kategorie Essen" }));
     await waitFor(() => expect(expenseUrls.some((url) => url.includes("category_id=1"))).toBe(true));
     expect(screen.getByRole("button", { name: "Kategorie: Essen" })).toBeInTheDocument();
 

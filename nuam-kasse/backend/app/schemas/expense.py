@@ -4,6 +4,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 
 from app.core.money import format_money
+from app.models.category import CategoryType
 from app.schemas.cash_period import CashPeriodSummary
 
 
@@ -13,6 +14,7 @@ class ExpenseCategoryRead(BaseModel):
     icon_key: str
     color_key: str
     parent_category_id: int | None
+    category_type: CategoryType
     image_updated_at: datetime | None = None
     image_preview_path: str | None = Field(default=None, exclude=True)
 
@@ -57,6 +59,7 @@ class ExpenseRead(BaseModel):
     cash_period_id: int
     category: ExpenseCategoryRead
     amount: Decimal
+    transaction_type: CategoryType
     currency: str
     created_by: ExpenseUserRead
     created_at: datetime

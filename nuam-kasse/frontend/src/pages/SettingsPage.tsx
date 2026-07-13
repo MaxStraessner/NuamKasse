@@ -42,7 +42,7 @@ export function SettingsPage() {
         <section className="settings-section" aria-labelledby="admin-settings">
           <h2 id="admin-settings">Verwaltung</h2>
           <AppCard className="settings-menu">
-            <SettingsLink description="Ausgabenbereiche und Bilder verwalten" icon={Layers3} label="Kategorien" to="/settings/categories" />
+            <SettingsLink description="Einnahmen- und Ausgabenbereiche verwalten" icon={Layers3} label="Kategorien" to="/settings/categories" />
             <SettingsLink description="Budgets und vergangene Perioden" icon={PiggyBank} label="Kassenperioden" to="/settings/cash-periods" />
             <SettingsLink description="Konten, Rollen und Zugänge" icon={UserRoundCog} label="Benutzer" to="/settings/users" />
           </AppCard>
