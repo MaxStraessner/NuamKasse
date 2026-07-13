@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
+from app.models.category import CategoryType
 
 
 class CategoryCatalogItem(BaseModel):
@@ -17,6 +19,7 @@ class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     icon_key: str = Field(min_length=1, max_length=40)
     color_key: str = Field(min_length=1, max_length=30)
+    category_type: CategoryType = CategoryType.expense
     parent_category_id: int | None = None
     sort_order: int | None = Field(default=None, ge=1)
 
@@ -25,8 +28,16 @@ class CategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=50)
     icon_key: str | None = Field(default=None, min_length=1, max_length=40)
     color_key: str | None = Field(default=None, min_length=1, max_length=30)
+    category_type: CategoryType | None = None
     parent_category_id: int | None = None
     is_active: bool | None = None
+
+    @field_validator("category_type")
+    @classmethod
+    def category_type_must_not_be_null(cls, value: CategoryType | None) -> CategoryType | None:
+        if value is None:
+            raise ValueError("Die Kategorieart darf nicht leer sein.")
+        return value
 
 
 class CategoryRead(BaseModel):
@@ -35,6 +46,7 @@ class CategoryRead(BaseModel):
     name: str
     icon_key: str
     color_key: str
+    category_type: CategoryType
     parent_category_id: int | None
     sort_order: int
     is_active: bool

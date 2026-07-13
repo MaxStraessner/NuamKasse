@@ -5,11 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.core.money import MoneyError, format_money, parse_money, validate_currency
 from app.models.cash_period import CashPeriod, CashPeriodStatus
-from app.models.category import Category
+from app.models.category import CategoryType
 from app.models.expense import Expense
 from app.models.user import User, UserRole, utc_now
-from app.services.category_service import can_book_directly, get_category_by_id, get_category_filter_ids
-from app.services.cash_summary_service import get_cash_period_summary, get_spent_amount
+from app.services.category_service import (
+    can_book_directly,
+    get_category_by_id,
+    get_category_filter_ids,
+    get_effective_category_type,
+)
+from app.services.cash_summary_service import get_cash_period_summary
 
 
 class ExpenseServiceError(ValueError):
@@ -55,7 +60,8 @@ def _validate_void_reason(reason: str | None) -> str | None:
 
 
 def _get_remaining_amount(db: Session, cash_period: CashPeriod) -> Decimal:
-    return cash_period.opening_amount - get_spent_amount(db, cash_period.id)
+    summary = get_cash_period_summary(db, cash_period)
+    return Decimal(str(summary["remaining_amount"]))
 
 
 def create_expense(
@@ -95,8 +101,9 @@ def create_expense(
     except MoneyError as exc:
         raise ExpenseServiceError(str(exc)) from exc
 
+    transaction_type = get_effective_category_type(db, category)
     remaining_amount = _get_remaining_amount(db, cash_period)
-    if expense_amount > remaining_amount:
+    if transaction_type == CategoryType.expense and expense_amount > remaining_amount:
         raise ExpenseServiceError(
             "Der Betrag ist höher als der verbleibende Betrag.",
             code="insufficient_remaining_amount",
@@ -108,6 +115,7 @@ def create_expense(
         cash_period_id=cash_period.id,
         category_id=category.id,
         amount=expense_amount,
+        transaction_type=transaction_type,
         currency=currency,
         created_by_user_id=created_by.id,
     )

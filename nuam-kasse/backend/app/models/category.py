@@ -1,10 +1,16 @@
+import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.user import utc_now
+
+
+class CategoryType(str, enum.Enum):
+    expense = "expense"
+    income = "income"
 
 
 class Category(Base):
@@ -32,6 +38,12 @@ class Category(Base):
     )
     icon_key: Mapped[str] = mapped_column(String(40), nullable=False)
     color_key: Mapped[str] = mapped_column(String(30), nullable=False)
+    category_type: Mapped[CategoryType] = mapped_column(
+        Enum(CategoryType, native_enum=False),
+        nullable=False,
+        default=CategoryType.expense,
+        index=True,
+    )
     image_path: Mapped[str] = mapped_column(String(500), nullable=True)
     image_preview_path: Mapped[str] = mapped_column(String(500), nullable=True)
     image_original_name: Mapped[str] = mapped_column(String(255), nullable=True)

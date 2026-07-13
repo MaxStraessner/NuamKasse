@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.models.cash_period import CashPeriod, CashPeriodStatus
-from app.models.category import Category
+from app.models.category import Category, CategoryType
 from app.models.expense import Expense
 from app.models.user import User, UserRole
 from conftest import create_test_user
@@ -19,6 +19,7 @@ def create_category(
     is_active: bool = True,
     parent_category_id: int | None = None,
     user_id: int | None = None,
+    category_type: CategoryType = CategoryType.expense,
 ) -> Category:
     owner_id = user_id
     if owner_id is None:
@@ -29,6 +30,7 @@ def create_category(
         name_normalized=name.casefold(),
         icon_key="utensils",
         color_key="orange",
+        category_type=category_type,
         parent_category_id=parent_category_id,
         sort_order=1,
         is_active=is_active,
@@ -106,11 +108,42 @@ def test_member_can_create_expense_and_summary_uses_real_spending(client, db_ses
     assert response.json()["expense"]["category"]["name"] == "Essen"
     assert response.json()["expense"]["created_by"]["id"] == member.id
     assert response.json()["expense"]["amount"] == "250.50"
+    assert response.json()["expense"]["transaction_type"] == "expense"
     assert response.json()["summary"]["spent_amount"] == "250.50"
     assert response.json()["summary"]["remaining_amount"] == "19749.50"
     assert summary.json()["spent_amount"] == "250.50"
     assert isinstance(db_session.get(Expense, response.json()["expense"]["id"]).amount, Decimal)
     assert manipulated_creator.status_code == 422
+
+
+def test_income_increases_remaining_and_historical_type_does_not_change(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    income_category = create_category(
+        db_session,
+        name="Gehalt",
+        user_id=admin.id,
+        category_type=CategoryType.income,
+    )
+    create_cash_period(db_session, created_by_user_id=admin.id, opening_amount=Decimal("100.00"))
+    login(client, "admin")
+
+    income = client.post("/api/v1/expenses", json={"category_id": income_category.id, "amount": "500.00"})
+    changed = client.patch(f"/api/v1/categories/{income_category.id}", json={"category_type": "expense"})
+    expense = client.post("/api/v1/expenses", json={"category_id": income_category.id, "amount": "50.00"})
+
+    assert income.status_code == 201
+    assert income.json()["expense"]["transaction_type"] == "income"
+    assert income.json()["summary"]["income_amount"] == "500.00"
+    assert income.json()["summary"]["spent_amount"] == "0.00"
+    assert income.json()["summary"]["remaining_amount"] == "600.00"
+    assert changed.status_code == 200
+    assert expense.status_code == 201
+    assert expense.json()["expense"]["transaction_type"] == "expense"
+    assert expense.json()["summary"]["income_amount"] == "500.00"
+    assert expense.json()["summary"]["spent_amount"] == "50.00"
+    assert expense.json()["summary"]["remaining_amount"] == "550.00"
+    stored_income = db_session.get(Expense, income.json()["expense"]["id"])
+    assert stored_income.transaction_type == CategoryType.income
 
 
 def test_create_expense_requires_active_cash_period_and_active_category(client, db_session):

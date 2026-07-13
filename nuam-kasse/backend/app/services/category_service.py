@@ -10,7 +10,7 @@ from app.core.category_icons import (
     is_valid_category_icon,
 )
 from app.core.config import Settings
-from app.models.category import Category
+from app.models.category import Category, CategoryType
 from app.models.expense import Expense
 from app.models.user import User, utc_now
 from app.services.category_image_service import delete_category_image_paths
@@ -145,6 +145,14 @@ def is_subcategory(category: Category) -> bool:
     return category.parent_category_id is not None
 
 
+def get_effective_category_type(db: Session, category: Category) -> CategoryType:
+    """Return the root category type, which is authoritative for the hierarchy."""
+    if category.parent_category_id is None:
+        return category.category_type
+    parent = db.get(Category, category.parent_category_id)
+    return parent.category_type if parent is not None else category.category_type
+
+
 def get_active_children(db: Session, category_id: int, *, user_id: int | None = None) -> list[Category]:
     filters = [
         Category.parent_category_id == category_id,
@@ -271,8 +279,9 @@ def create_category(
     user_id: int,
     parent_category_id: int | None = None,
     sort_order: int | None = None,
+    category_type: CategoryType = CategoryType.expense,
 ) -> Category:
-    _validate_parent(db, user_id=user_id, parent_category_id=parent_category_id)
+    parent = _validate_parent(db, user_id=user_id, parent_category_id=parent_category_id)
     clean_name, normalized = ensure_unique_category_name(db, name, user_id, parent_category_id)
     clean_icon = _validate_icon(icon_key)
     clean_color = _validate_color(color_key)
@@ -287,6 +296,7 @@ def create_category(
         icon_key=clean_icon,
         color_key=clean_color,
         parent_category_id=parent_category_id,
+        category_type=parent.category_type if parent is not None else category_type,
         sort_order=order,
         is_active=True,
     )
@@ -305,11 +315,12 @@ def update_category(
     color_key: str | None = None,
     parent_category_id: int | None | object = _UNSET,
     is_active: bool | None = None,
+    category_type: CategoryType | None = None,
 ) -> Category:
     next_parent_category_id = category.parent_category_id
     if parent_category_id is not _UNSET:
         next_parent_category_id = parent_category_id if isinstance(parent_category_id, int) else None
-        _validate_parent(
+        next_parent = _validate_parent(
             db,
             user_id=category.user_id,
             parent_category_id=next_parent_category_id,
@@ -324,6 +335,11 @@ def update_category(
             )
             if has_children:
                 raise CategoryServiceError("Eine Oberkategorie mit Unterkategorien kann nicht verschoben werden.")
+    else:
+        next_parent = db.get(Category, next_parent_category_id) if next_parent_category_id is not None else None
+
+    if category_type is not None and next_parent_category_id is not None:
+        raise CategoryServiceError("Die Kategorieart wird von der Oberkategorie übernommen.")
 
     if name is not None:
         clean_name, normalized = ensure_unique_category_name(
@@ -345,6 +361,19 @@ def update_category(
     if category.parent_category_id != next_parent_category_id:
         category.parent_category_id = next_parent_category_id
         category.sort_order = next_sort_order(db, category.user_id, next_parent_category_id)
+        if next_parent is not None:
+            category.category_type = next_parent.category_type
+
+    if category_type is not None:
+        category.category_type = category_type
+        for child in db.scalars(
+            select(Category).where(
+                Category.parent_category_id == category.id,
+                Category.user_id == category.user_id,
+            )
+        ):
+            child.category_type = category_type
+            child.updated_at = utc_now()
 
     if is_active is not None:
         category.is_active = is_active
@@ -446,6 +475,7 @@ def ensure_default_categories_for_user(db: Session, *, user_id: int) -> tuple[in
             user_id=user_id,
             icon_key=str(item["icon_key"]),
             color_key=str(item["color_key"]),
+            category_type=CategoryType.expense,
             sort_order=root_index,
             is_active=True,
         )
@@ -460,6 +490,7 @@ def ensure_default_categories_for_user(db: Session, *, user_id: int) -> tuple[in
                 user_id=user_id,
                 icon_key=str(item["icon_key"]),
                 color_key=str(item["color_key"]),
+                category_type=CategoryType.expense,
                 parent_category_id=root.id,
                 sort_order=child_index,
                 is_active=True,

@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Power, Sea
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
+import { CategoryTypeBadge } from "../components/CategoryTypeBadge";
 import { getCategoryIcon } from "../components/categoryIconMap";
 import { PageContainer } from "../components/PageContainer";
 import { PageHeader } from "../components/PageHeader";
@@ -23,6 +24,7 @@ import type {
   CategoryCatalog,
   CategoryColorKey,
   CategoryIconKey,
+  CategoryType,
 } from "../types/category";
 import {
   isCategoryColorKey,
@@ -35,6 +37,7 @@ type CategoryForm = {
   color_key: CategoryColorKey;
   parent_category_id: number | null;
   is_active: boolean;
+  category_type: CategoryType;
 };
 
 const emptyForm: CategoryForm = {
@@ -43,6 +46,7 @@ const emptyForm: CategoryForm = {
   color_key: "orange",
   parent_category_id: null,
   is_active: true,
+  category_type: "expense",
 };
 
 const allowedImageTypes = ["image/png", "image/jpeg", "image/webp"];
@@ -452,6 +456,7 @@ function CategoryFormDialog({
     icon_key: form.icon_key,
     color_key: form.color_key,
     image_url: category?.image_url ?? null,
+    category_type: form.category_type,
   };
   const title = mode === "edit" ? "Kategorie bearbeiten" : "Neue Kategorie";
 
@@ -472,12 +477,15 @@ function CategoryFormDialog({
             <span>Ebene</span>
             <select
               value={form.parent_category_id ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const parentId = event.target.value ? Number(event.target.value) : null;
+                const parent = rootCategories.find((item) => item.id === parentId);
                 onFormChange({
                   ...form,
-                  parent_category_id: event.target.value ? Number(event.target.value) : null,
-                })
-              }
+                  parent_category_id: parentId,
+                  category_type: parent?.category_type ?? form.category_type,
+                });
+              }}
             >
               <option value="">Oberkategorie</option>
               {rootCategories
@@ -489,6 +497,31 @@ function CategoryFormDialog({
                 ))}
             </select>
           </label>
+
+          {form.parent_category_id === null ? (
+            <fieldset className="form-field category-type-field">
+              <legend>Kategorieart</legend>
+              <div className="category-type-selector" role="group" aria-label="Kategorieart auswählen">
+                {(["expense", "income"] as const).map((type) => (
+                  <button
+                    aria-pressed={form.category_type === type}
+                    className={form.category_type === type ? "category-type-selector__option category-type-selector__option--selected" : "category-type-selector__option"}
+                    key={type}
+                    onClick={() => onFormChange({ ...form, category_type: type })}
+                    type="button"
+                  >
+                    <CategoryTypeBadge type={type} />
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          ) : (
+            <div className="form-field category-type-inherited">
+              <span>Kategorieart</span>
+              <CategoryTypeBadge type={form.category_type} />
+              <small>Wird von der Oberkategorie übernommen</small>
+            </div>
+          )}
 
           <div className="form-field">
             <span>Symbolauswahl</span>
@@ -684,6 +717,7 @@ export function CategoryAdminPage() {
       color_key: isCategoryColorKey(category.color_key) ? category.color_key : "gray",
       parent_category_id: category.parent_category_id,
       is_active: category.is_active,
+      category_type: category.category_type,
     });
     setEditingCategory(category);
     setDialogMode("edit");
@@ -727,6 +761,7 @@ export function CategoryAdminPage() {
           color_key: form.color_key,
           parent_category_id: form.parent_category_id,
           is_active: form.is_active,
+          ...(form.parent_category_id === null ? { category_type: form.category_type } : {}),
         });
         setMessage("Kategorie wurde aktualisiert.");
       } else {
@@ -735,6 +770,7 @@ export function CategoryAdminPage() {
           icon_key: form.icon_key,
           color_key: form.color_key,
           parent_category_id: form.parent_category_id,
+          ...(form.parent_category_id === null ? { category_type: form.category_type } : {}),
         });
         if (created.parent_category_id) {
           setExpandedIds((current) => new Set(current).add(created.parent_category_id!));

@@ -7,6 +7,7 @@ import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
+import { CategoryTypeBadge, categoryTypeLabel } from "../components/CategoryTypeBadge";
 import { PageContainer } from "../components/PageContainer";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError } from "../services/apiClient";
@@ -51,7 +52,7 @@ export function HomePage() {
   const remainingMinorUnits = decimalStringToMinorUnits(cashSummary?.remaining_amount ?? "") ?? 0;
   const enteredMinorUnits = decimalStringToMinorUnits(expenseAmount);
   const canUseServer = networkStatus.isOnline && networkStatus.isServerReachable;
-  const canBook = Boolean(cashPeriod && cashSummary && remainingMinorUnits > 0 && !hasNoActiveCashPeriod && canUseServer);
+  const canStartBooking = Boolean(cashPeriod && cashSummary && !hasNoActiveCashPeriod && canUseServer);
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const rootCategories = categoryTree.filter((category) => category.is_active);
   const selectedRootChildren = selectedRootCategory ? getActiveChildren(categories, selectedRootCategory.id) : [];
@@ -61,6 +62,10 @@ export function HomePage() {
   const selectedParentCategory = selectedCategory?.parent_category_id
     ? categories.find((category) => category.id === selectedCategory.parent_category_id) ?? selectedRootCategory
     : null;
+  const selectedCategoryType = selectedParentCategory?.category_type ?? selectedCategory?.category_type ?? "expense";
+  const isIncomeBooking = selectedCategoryType === "income";
+  const canBookCategory = (category: Category) => canStartBooking
+    && (category.category_type === "income" || remainingMinorUnits > 0);
 
   async function loadCashPeriod(silent = false) {
     if (!silent) {
@@ -150,7 +155,7 @@ export function HomePage() {
       setBookingError("Neue Buchungen sind erst wieder mit Serververbindung möglich.");
       return;
     }
-    if (!canBook || !category.is_active) {
+    if (!canBookCategory(category) || !category.is_active) {
       return;
     }
     const children = getActiveChildren(categories, category.id);
@@ -207,7 +212,7 @@ export function HomePage() {
       return;
     }
     if (!canUseServer) {
-      setDialogError("Keine Verbindung zum Server. Die Ausgabe wurde nicht gespeichert.");
+      setDialogError("Keine Verbindung zum Server. Die Buchung wurde nicht gespeichert.");
       return;
     }
     if (enteredMinorUnits === null) {
@@ -227,7 +232,7 @@ export function HomePage() {
         amount: normalizeMoneyInput(expenseAmount),
       });
       setCashSummary(response.summary);
-      setSuccessMessage(`${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
+      setSuccessMessage(`${categoryTypeLabel(response.expense.transaction_type)} über ${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
       setSelectedCategory(null);
       setSelectedRootCategory(null);
       setExpenseAmount("");
@@ -280,7 +285,10 @@ export function HomePage() {
             <div>
               <strong>{formatThaiBaht(cashSummary.remaining_amount, cashSummary.currency)}</strong>
             </div>
-            <small>Startbetrag: {formatThaiBaht(cashSummary.opening_amount, cashSummary.currency)}</small>
+            <small>
+              Startbetrag: {formatThaiBaht(cashSummary.opening_amount, cashSummary.currency)}
+              {cashSummary.income_amount !== "0.00" ? ` · Einnahmen: ${formatThaiBaht(cashSummary.income_amount, cashSummary.currency)}` : ""}
+            </small>
           </div>
         ) : null}
       </AppCard>
@@ -290,7 +298,7 @@ export function HomePage() {
       <AppCard className="category-card" ariaLabel="Kategoriesymbole">
         <div className="card-heading">
           <span>Kategorien</span>
-          <small>{canBook ? "Ausgabe erfassen" : "nicht buchbar"}</small>
+          <small>{canStartBooking ? "Buchung erfassen" : "nicht buchbar"}</small>
         </div>
         {isLoadingCategories ? (
           <div className="category-grid" aria-label="Kategorien werden geladen">
@@ -320,7 +328,7 @@ export function HomePage() {
             {rootCategories.map((category) => (
               <CategoryTile
                 category={category}
-                isDisabled={!canBook || !category.is_active}
+                isDisabled={!canBookCategory(category) || !category.is_active}
                 key={category.id}
                 onSelect={() => openRootCategory(category)}
               />
@@ -330,7 +338,7 @@ export function HomePage() {
       </AppCard>
 
       <AppDialog
-        description="Wähle den passenden Bereich für deine Ausgabe."
+        description={`Wähle den passenden Bereich für deine ${selectedRootCategory?.category_type === "income" ? "Einnahme" : "Ausgabe"}.`}
         isOpen={Boolean(selectedRootCategory && !selectedCategory)}
         onClose={closeSubcategoryView}
         title={selectedRootCategory?.name ?? "Unterkategorie wählen"}
@@ -347,7 +355,7 @@ export function HomePage() {
         {visibleRootChildren.length > 0 ? (
           <div className="category-grid category-grid--dialog">
             {visibleRootChildren.map((subcategory) => (
-              <CategoryTile category={subcategory} isDisabled={!canBook || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} />
+              <CategoryTile category={subcategory} isDisabled={!canBookCategory(subcategory) || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} />
             ))}
           </div>
         ) : null}
@@ -358,7 +366,7 @@ export function HomePage() {
         isOpen={Boolean(selectedCategory)}
         onClose={closeExpenseDialog}
         preventClose={isSavingExpense}
-        title="Ausgabe eintragen"
+        title={`${isIncomeBooking ? "Einnahme" : "Ausgabe"} eintragen`}
       >
         {selectedCategory ? (
             <form className="booking-form" onSubmit={(event) => void handleCreateExpense(event)}>
@@ -378,6 +386,7 @@ export function HomePage() {
                 ) : (
                   <strong className="booking-category-single">{selectedCategory.name}</strong>
                 )}
+                <CategoryTypeBadge type={selectedCategoryType} />
               </div>
               <label className="amount-field">
                 <span>Betrag</span>
@@ -402,14 +411,18 @@ export function HomePage() {
                   <strong>{formatThaiBaht(cashSummary?.remaining_amount ?? "0.00", cashSummary?.currency ?? "THB")}</strong>
                 </div>
                 <div>
-                  <span>Neue Ausgabe</span>
+                  <span>Neue {isIncomeBooking ? "Einnahme" : "Ausgabe"}</span>
                   <strong>{expenseAmount.trim() ? (enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "Bitte prüfen") : "—"}</strong>
                 </div>
                 <div>
                   <span>Voraussichtlich verbleibend</span>
                   <strong>
                     {expenseAmount.trim() && enteredMinorUnits !== null
-                      ? formatThaiBaht(minorUnitsToDecimalString(Math.max(remainingMinorUnits - enteredMinorUnits, 0)))
+                      ? formatThaiBaht(minorUnitsToDecimalString(
+                        isIncomeBooking
+                          ? remainingMinorUnits + enteredMinorUnits
+                          : Math.max(remainingMinorUnits - enteredMinorUnits, 0),
+                      ))
                       : "—"}
                   </strong>
                 </div>
@@ -417,7 +430,7 @@ export function HomePage() {
               {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
               <div className="action-row">
                 <button className="primary-action" disabled={isSavingExpense || !canUseServer} type="submit">
-                  {isSavingExpense ? "Wird gespeichert …" : "Ausgabe speichern"}
+                  {isSavingExpense ? "Wird gespeichert …" : `${isIncomeBooking ? "Einnahme" : "Ausgabe"} speichern`}
                 </button>
                 <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">
                   {selectedRootCategory && selectedCategory.parent_category_id === selectedRootCategory.id ? "Zurück" : "Abbrechen"}

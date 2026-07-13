@@ -6,6 +6,7 @@ import { useAuth } from "../app/AuthContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
+import { CategoryTypeBadge } from "../components/CategoryTypeBadge";
 import { MetricTile } from "../components/MetricTile";
 import { PageContainer } from "../components/PageContainer";
 import { PageHeader } from "../components/PageHeader";
@@ -75,6 +76,7 @@ function categoryAsTile(category: CashPeriodOverview["categories"][number]) {
     name: category.category_name,
     icon_key: category.icon_key,
     color_key: category.color_key,
+    category_type: category.category_type,
     image_url: category.image_url,
   };
 }
@@ -410,6 +412,12 @@ export function OverviewPage() {
                 hint={isAdmin ? `${overview.summary.voided_expense_count} storniert` : "Aktuelle Periode"}
               />
               <MetricTile
+                label="Eingenommen"
+                value={formatThaiBaht(overview.summary.income_amount, cashPeriod.currency)}
+                tone="positive"
+                hint="Aktuelle Periode"
+              />
+              <MetricTile
                 label="Ausgangsbetrag"
                 value={formatThaiBaht(overview.summary.opening_amount, cashPeriod.currency)}
                 tone="neutral"
@@ -419,7 +427,7 @@ export function OverviewPage() {
                 label="Buchungen"
                 value={String(isAdmin ? overview.summary.expense_count : overview.summary.active_expense_count)}
                 tone="positive"
-                hint={isAdmin ? "Inklusive stornierter" : "Gültige Ausgaben"}
+                hint={isAdmin ? "Inklusive stornierter" : "Gültige Buchungen"}
               />
             </div>
             <div className="overview-progress" aria-label={`${percentSpent.toFixed(2)} Prozent ausgegeben`}>
@@ -430,26 +438,27 @@ export function OverviewPage() {
             </div>
           </AppCard>
 
-          <AppCard ariaLabel="Ausgaben nach Kategorie">
+          <AppCard ariaLabel="Buchungen nach Kategorie">
             <div className="card-heading">
-              <span>Ausgaben nach Kategorie</span>
-              <small>{overviewCategories.length ? `${overviewCategories.length} Kategorien` : "keine Ausgaben"}</small>
+              <span>Buchungen nach Kategorie</span>
+              <small>{overviewCategories.length ? `${overviewCategories.length} Kategorien` : "keine Buchungen"}</small>
             </div>
             {overviewCategories.length === 0 ? (
-              <p className="empty-state">Noch keine Ausgaben vorhanden.</p>
+              <p className="empty-state">Noch keine Buchungen vorhanden.</p>
             ) : (
               <div className="overview-summary-list">
                 {displayedCategories.map((category) => (
                   <button
-                    aria-label={`Ausgaben filtern nach Kategorie ${category.category_name}`}
+                    aria-label={`Buchungen filtern nach Kategorie ${category.category_name}`}
                     className={`overview-summary-row${filters.categoryId === String(category.category_id) ? " overview-summary-row--active" : ""}`}
-                    key={category.category_id}
+                    key={`${category.category_id}-${category.category_type}`}
                     onClick={() => selectCategory(category.category_id)}
                     type="button"
                   >
                     <CategoryTile category={categoryAsTile(category)} showLabel={false} size="compact" />
                     <span className="overview-summary-row__details">
                       <strong>{formatThaiBaht(category.total_amount, cashPeriod.currency)}</strong>
+                      <CategoryTypeBadge compact type={category.category_type} />
                       <small>{formatExpenseCount(category.expense_count)} · {category.percentage_of_spending} Prozent</small>
                       <i style={{ width: `${Math.min(Number(category.percentage_of_spending), 100)}%` }} />
                     </span>
@@ -460,13 +469,13 @@ export function OverviewPage() {
             )}
           </AppCard>
 
-          <AppCard ariaLabel="Ausgaben nach Benutzer">
+          <AppCard ariaLabel="Buchungen nach Benutzer">
             <div className="card-heading">
-              <span>Ausgaben nach Benutzer</span>
-              <small>{overviewUsers.length ? `${overviewUsers.length} Benutzer` : "keine Ausgaben"}</small>
+              <span>Buchungen nach Benutzer</span>
+              <small>{overviewUsers.length ? `${overviewUsers.length} Benutzer` : "keine Buchungen"}</small>
             </div>
             {overviewUsers.length === 0 ? (
-              <p className="empty-state">Noch keine Ausgaben vorhanden.</p>
+              <p className="empty-state">Noch keine Buchungen vorhanden.</p>
             ) : (
               <div className="overview-summary-list">
                 {overviewUsers.map((summaryUser) => (
@@ -509,7 +518,7 @@ export function OverviewPage() {
             {isLoadingExpenses && !expensesPage ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
             {expensesPage && expensesPage.items.length === 0 ? (
               <p className="empty-state">
-                {hasActiveFilters ? "Für diese Auswahl wurden keine Buchungen gefunden." : "Noch keine Ausgaben vorhanden."}
+                {hasActiveFilters ? "Für diese Auswahl wurden keine Buchungen gefunden." : "Noch keine Buchungen vorhanden."}
               </p>
             ) : null}
             {expensesPage && expensesPage.items.length > 0 ? (
@@ -525,6 +534,7 @@ export function OverviewPage() {
                       <CategoryTile category={expense.category} showLabel={false} size="compact" />
                       <div className="expense-item__body">
                         <strong>{expense.category.name}</strong>
+                        <CategoryTypeBadge compact type={expense.transaction_type} />
                         <span>{expense.created_by.display_name} / {formatLocalDateTime(expense.created_at)}</span>
                         {isAdmin && expense.is_voided ? (
                           <small>

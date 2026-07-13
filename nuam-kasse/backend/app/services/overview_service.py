@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, aliased
 from app.core.money import format_money
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category
+from app.models.category import CategoryType
 from app.models.expense import Expense
 from app.models.user import User, UserRole
 from app.services.cash_period_service import get_active_cash_period, get_cash_period_by_id
@@ -49,6 +50,7 @@ def _overview_summary(db: Session, cash_period: CashPeriod) -> dict[str, object]
         "cash_period": cash_period,
         "opening_amount": summary["opening_amount"],
         "spent_amount": summary["spent_amount"],
+        "income_amount": summary["income_amount"],
         "remaining_amount": summary["remaining_amount"],
         "expense_count": summary["expense_count"],
         "active_expense_count": summary["active_expense_count"],
@@ -61,6 +63,20 @@ def _total_spending(db: Session, cash_period_id: int) -> Decimal:
         select(func.coalesce(func.sum(Expense.amount), Decimal("0.00"))).where(
             Expense.cash_period_id == cash_period_id,
             Expense.is_voided.is_(False),
+            Expense.transaction_type == CategoryType.expense,
+        )
+    )
+    if isinstance(amount, Decimal):
+        return amount
+    return Decimal(str(amount or "0.00"))
+
+
+def _total_income(db: Session, cash_period_id: int) -> Decimal:
+    amount = db.scalar(
+        select(func.coalesce(func.sum(Expense.amount), Decimal("0.00"))).where(
+            Expense.cash_period_id == cash_period_id,
+            Expense.is_voided.is_(False),
+            Expense.transaction_type == CategoryType.income,
         )
     )
     if isinstance(amount, Decimal):
@@ -70,6 +86,7 @@ def _total_spending(db: Session, cash_period_id: int) -> Decimal:
 
 def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, object]]:
     total_spending = _total_spending(db, cash_period_id)
+    total_income = _total_income(db, cash_period_id)
     total_amount = func.coalesce(func.sum(Expense.amount), Decimal("0.00"))
     parent_category = aliased(Category)
     root_id = func.coalesce(parent_category.id, Category.id)
@@ -84,6 +101,7 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
             root_name,
             root_icon,
             root_color,
+            Expense.transaction_type,
             root_image_preview_path,
             root_image_updated_at,
             func.count(Expense.id),
@@ -96,7 +114,7 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
             Expense.cash_period_id == cash_period_id,
             Expense.is_voided.is_(False),
         )
-        .group_by(root_id, root_name, root_icon, root_color, root_image_preview_path, root_image_updated_at)
+        .group_by(root_id, root_name, root_icon, root_color, Expense.transaction_type, root_image_preview_path, root_image_updated_at)
         .order_by(total_amount.desc(), root_name.asc())
     ).all()
     return [
@@ -105,18 +123,22 @@ def get_category_summaries(db: Session, cash_period_id: int) -> list[dict[str, o
             "category_name": name,
             "icon_key": icon_key,
             "color_key": color_key,
+            "category_type": transaction_type,
             "image_preview_path": image_preview_path,
             "image_updated_at": image_updated_at,
             "expense_count": int(expense_count),
             "total_amount": format_money(amount),
-            "percentage_of_spending": _percentage(amount, total_spending),
+            "percentage_of_spending": _percentage(
+                amount,
+                total_income if transaction_type == CategoryType.income else total_spending,
+            ),
         }
-        for category_id, name, icon_key, color_key, image_preview_path, image_updated_at, expense_count, amount in rows
+        for category_id, name, icon_key, color_key, transaction_type, image_preview_path, image_updated_at, expense_count, amount in rows
     ]
 
 
 def get_user_summaries(db: Session, cash_period_id: int) -> list[dict[str, object]]:
-    total_spending = _total_spending(db, cash_period_id)
+    total_activity = _total_spending(db, cash_period_id) + _total_income(db, cash_period_id)
     total_amount = func.coalesce(func.sum(Expense.amount), Decimal("0.00"))
     rows = db.execute(
         select(
@@ -139,7 +161,7 @@ def get_user_summaries(db: Session, cash_period_id: int) -> list[dict[str, objec
             "display_name": display_name,
             "expense_count": int(expense_count),
             "total_amount": format_money(amount),
-            "percentage_of_spending": _percentage(amount, total_spending),
+            "percentage_of_spending": _percentage(amount, total_activity),
         }
         for user_id, display_name, expense_count, amount in rows
     ]

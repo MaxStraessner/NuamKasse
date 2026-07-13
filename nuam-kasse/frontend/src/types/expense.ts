@@ -1,5 +1,5 @@
 import type { CashPeriodSummary } from "./cashPeriod";
-import type { CategoryColorKey, CategoryIconKey } from "./category";
+import type { CategoryColorKey, CategoryIconKey, CategoryType } from "./category";
 
 export type ExpenseCategory = {
   id: number;
@@ -7,6 +7,7 @@ export type ExpenseCategory = {
   icon_key: CategoryIconKey;
   color_key: CategoryColorKey;
   parent_category_id: number | null;
+  category_type: CategoryType;
   has_custom_image?: boolean;
   image_url?: string | null;
   image_updated_at?: string | null;
@@ -22,6 +23,7 @@ export type Expense = {
   cash_period_id: number;
   category: ExpenseCategory;
   amount: string;
+  transaction_type: CategoryType;
   currency: "THB";
   created_by: ExpenseUser;
   created_at: string;

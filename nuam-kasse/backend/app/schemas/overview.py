@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_seriali
 
 from app.core.money import format_money
 from app.models.cash_period import CashPeriodStatus
+from app.models.category import CategoryType
 
 
 class OverviewCashPeriodRead(BaseModel):
@@ -22,6 +23,7 @@ class OverviewSummary(BaseModel):
     cash_period: OverviewCashPeriodRead
     opening_amount: str
     spent_amount: str
+    income_amount: str
     remaining_amount: str
     expense_count: int
     active_expense_count: int
@@ -33,6 +35,7 @@ class OverviewCategorySummary(BaseModel):
     category_name: str
     icon_key: str
     color_key: str
+    category_type: CategoryType
     image_updated_at: datetime | None = None
     image_preview_path: str | None = Field(default=None, exclude=True)
     expense_count: int
@@ -67,6 +70,7 @@ class OverviewExpenseCategory(BaseModel):
     icon_key: str
     color_key: str
     parent_category_id: int | None
+    category_type: CategoryType
     image_updated_at: datetime | None = None
     image_preview_path: str | None = Field(default=None, exclude=True)
 
@@ -98,6 +102,7 @@ class OverviewExpenseRead(BaseModel):
     cash_period_id: int
     category: OverviewExpenseCategory
     amount: Decimal
+    transaction_type: CategoryType
     currency: str
     created_by: OverviewExpenseUser
     created_at: datetime
