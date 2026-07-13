@@ -50,7 +50,7 @@ def _validate_void_reason(reason: str | None) -> str | None:
     if not clean_reason:
         raise ExpenseServiceError("Der Stornierungsgrund darf nicht leer sein.")
     if len(clean_reason) > 200:
-        raise ExpenseServiceError("Der Stornierungsgrund darf hoechstens 200 Zeichen lang sein.")
+        raise ExpenseServiceError("Der Stornierungsgrund darf höchstens 200 Zeichen lang sein.")
     return clean_reason
 
 
@@ -78,13 +78,13 @@ def create_expense(
         raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
     if not category.is_active:
         raise ExpenseServiceError(
-            "Diese Kategorie ist nicht mehr verfuegbar.",
+            "Diese Kategorie ist nicht mehr verfügbar.",
             code="category_inactive",
             status_code=409,
         )
     if not can_book_directly(db, category):
         raise ExpenseServiceError(
-            "Bitte waehle zuerst eine Unterkategorie aus.",
+            "Bitte wähle zuerst eine Unterkategorie aus.",
             code="category_requires_subcategory",
             status_code=409,
         )
@@ -98,7 +98,7 @@ def create_expense(
     remaining_amount = _get_remaining_amount(db, cash_period)
     if expense_amount > remaining_amount:
         raise ExpenseServiceError(
-            "Der Betrag ist hoeher als der verbleibende Betrag.",
+            "Der Betrag ist höher als der verbleibende Betrag.",
             code="insufficient_remaining_amount",
             status_code=409,
             extra={"remaining_amount": format_money(remaining_amount)},

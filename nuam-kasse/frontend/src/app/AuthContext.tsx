@@ -51,7 +51,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } catch (err) {
       setUser(null);
       if (!isAuthError(err)) {
-        setError(err instanceof Error ? err.message : "Sitzung konnte nicht geprueft werden.");
+        setError(err instanceof Error ? err.message : "Sitzung konnte nicht geprüft werden.");
       }
       return null;
     } finally {

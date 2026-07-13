@@ -51,7 +51,7 @@ def ensure_unique_username(
 
 def ensure_password_confirmation(password: str, confirmation: str) -> None:
     if password != confirmation:
-        raise UserServiceError("Die Passwortbestaetigung stimmt nicht ueberein.")
+        raise UserServiceError("Die Passwortbestätigung stimmt nicht überein.")
     try:
         validate_password(password)
     except ValueError as exc:

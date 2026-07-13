@@ -85,7 +85,7 @@ export function PwaInstallPrompt() {
       <div>
         <strong>Nuam Kasse installieren</strong>
         {showIOSHelp ? (
-          <span>In Safari teilen oeffnen und dann Zum Home Bildschirm waehlen.</span>
+          <span>In Safari „Teilen“ öffnen und anschließend „Zum Home-Bildschirm“ wählen.</span>
         ) : (
           <span>Als App auf dem Startbildschirm nutzen.</span>
         )}
@@ -102,7 +102,7 @@ export function PwaInstallPrompt() {
           </button>
         ) : null}
         <button type="button" onClick={dismiss}>
-          Spaeter
+          Später
         </button>
       </div>
     </div>

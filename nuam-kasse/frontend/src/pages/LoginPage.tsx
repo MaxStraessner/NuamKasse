@@ -55,8 +55,8 @@ export function LoginPage() {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
-            <button type="button" onClick={() => setShowPassword((value) => !value)}>
-              {showPassword ? "Aus" : "Ein"}
+            <button aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} type="button" onClick={() => setShowPassword((value) => !value)}>
+              {showPassword ? "Ausblenden" : "Anzeigen"}
             </button>
           </div>
         </label>
@@ -64,7 +64,7 @@ export function LoginPage() {
         {error ? <p className="form-error" role="alert">{error}</p> : null}
 
         <button className="primary-action" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Anmeldung laeuft" : "Anmelden"}
+          {isSubmitting ? "Anmeldung läuft …" : "Anmelden"}
         </button>
       </form>
     </main>

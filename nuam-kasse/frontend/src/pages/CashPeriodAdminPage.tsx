@@ -1,7 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
+import { ChevronRight, Plus, WalletCards } from "lucide-react";
 
 import { AppCard } from "../components/AppCard";
+import { AppDialog } from "../components/AppDialog";
 import { PageContainer } from "../components/PageContainer";
+import { PageHeader } from "../components/PageHeader";
 import {
   closeCashPeriod,
   createCashPeriod,
@@ -51,6 +54,9 @@ export function CashPeriodAdminPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [closeTarget, setCloseTarget] = useState<CashPeriod | null>(null);
+  const [closeEndDate, setCloseEndDate] = useState("");
 
   async function loadCashPeriods() {
     setIsLoading(true);
@@ -71,6 +77,7 @@ export function CashPeriodAdminPage() {
   function resetForm() {
     setForm(emptyForm);
     setEditingId(null);
+    setIsFormOpen(false);
   }
 
   function startEdit(cashPeriod: CashPeriod) {
@@ -84,6 +91,7 @@ export function CashPeriodAdminPage() {
       end_date: cashPeriod.end_date || "",
     });
     setEditingId(cashPeriod.id);
+    setIsFormOpen(true);
     setMessage(null);
     setError(null);
   }
@@ -139,23 +147,22 @@ export function CashPeriodAdminPage() {
     }
   }
 
-  async function handleClose(cashPeriod: CashPeriod) {
-    const endDate = window.prompt(
-      `Kassenperiode "${cashPeriod.name}" abschliessen?\n\nNach dem Abschluss kann diese Kassenperiode nicht mehr bearbeitet werden.\n\nEnddatum:`,
-      cashPeriod.end_date || new Date().toISOString().slice(0, 10),
-    );
-    if (endDate === null) {
-      return;
-    }
+  function startClose(cashPeriod: CashPeriod) {
+    setCloseTarget(cashPeriod);
+    setCloseEndDate(cashPeriod.end_date || new Date().toISOString().slice(0, 10));
+  }
 
+  async function handleClose() {
+    if (!closeTarget || !closeEndDate) return;
     setMessage(null);
     setError(null);
     try {
-      await closeCashPeriod(cashPeriod.id, endDate);
+      await closeCashPeriod(closeTarget.id, closeEndDate);
       setMessage("Kassenperiode wurde abgeschlossen.");
-      if (editingId === cashPeriod.id) {
+      if (editingId === closeTarget.id) {
         resetForm();
       }
+      setCloseTarget(null);
       await loadCashPeriods();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kassenperiode konnte nicht abgeschlossen werden.");
@@ -172,20 +179,25 @@ export function CashPeriodAdminPage() {
 
   return (
     <PageContainer>
-      <header className="home-header">
-        <div>
-          <p className="home-header__eyebrow">Administration</p>
-          <h1>Kassenperioden</h1>
-        </div>
-      </header>
+      <PageHeader backLabel="Einstellungen" backTo="/settings" eyebrow="Verwaltung" title="Kassenperioden" action={<button className="page-action" onClick={() => { resetForm(); setIsFormOpen(true); }} type="button"><Plus aria-hidden="true" /><span>Neu</span></button>} />
 
-      <AppCard>
+      <p className="section-intro">Aktuelle Kasse und abgeschlossene Zeiträume verwalten.</p>
+      {message ? <p className="form-success" role="status">{message}</p> : null}
+      {error ? <div className="form-error" role="alert"><p>{error}</p><button className="secondary-action" type="button" onClick={() => void loadCashPeriods()}>Erneut laden</button></div> : null}
+
+      <AppCard className="admin-list" aria-live="polite">
+        {isLoading ? <div className="list-skeleton" aria-label="Kassenperioden werden geladen" /> : null}
+        {!isLoading && cashPeriods.length === 0 ? <p className="empty-state empty-state--padded">Noch keine Kassenperiode vorhanden.</p> : null}
+        {cashPeriods.map((cashPeriod) => {
+          const content = <><span className="admin-list__icon"><WalletCards aria-hidden="true" /></span><span className="admin-list__content"><strong>{cashPeriod.name}</strong><small>{formatDate(cashPeriod.start_date)} bis {formatDate(cashPeriod.end_date)} · {formatThaiBaht(cashPeriod.opening_amount, cashPeriod.currency)}</small></span><span className={`status-dot ${cashPeriod.status === "active" ? "status-dot--active" : ""}`} aria-label={cashPeriod.status === "active" ? "Aktiv" : "Abgeschlossen"} />{cashPeriod.status === "active" ? <ChevronRight aria-hidden="true" /> : <span />}</>;
+          return cashPeriod.status === "active"
+            ? <button className="admin-list__row cash-period-row" key={cashPeriod.id} onClick={() => startEdit(cashPeriod)} type="button">{content}</button>
+            : <div className="admin-list__row cash-period-row cash-period-row--closed" key={cashPeriod.id}>{content}</div>;
+        })}
+      </AppCard>
+
+      <AppDialog description={editingId ? "Änderungen gelten sofort für die aktive Periode." : "Lege das Budget für einen neuen Zeitraum fest."} isOpen={isFormOpen} onClose={resetForm} preventClose={isSaving} title={editingId ? "Kassenperiode bearbeiten" : "Neue Kassenperiode"}>
         <form className="stack-form" onSubmit={(event) => void handleSubmit(event)}>
-          <div className="card-heading">
-            <span>{editingId ? "Kassenperiode bearbeiten" : "Neue Kassenperiode"}</span>
-            <small>Thai Baht</small>
-          </div>
-
           <label className="form-field">
             <span>Name der Kassenperiode</span>
             <input
@@ -233,7 +245,7 @@ export function CashPeriodAdminPage() {
 
           <div className="settings-list">
             <div>
-              <span>Waehrung</span>
+              <span>Währung</span>
               <strong>Thai Baht / THB</strong>
             </div>
           </div>
@@ -249,65 +261,12 @@ export function CashPeriodAdminPage() {
             ) : null}
           </div>
         </form>
-      </AppCard>
+      </AppDialog>
 
-      {message ? <p className="form-success" role="status">{message}</p> : null}
-      {error ? (
-        <div className="form-error" role="alert">
-          <p>{error}</p>
-          <button className="secondary-action" type="button" onClick={() => void loadCashPeriods()}>
-            Erneut laden
-          </button>
-        </div>
-      ) : null}
-
-      <div className="cash-period-list" aria-live="polite">
-        {isLoading ? <AppCard>Kassenperioden werden geladen</AppCard> : null}
-        {!isLoading && cashPeriods.length === 0 ? (
-          <AppCard>Noch keine Kassenperiode vorhanden. Lege oben die erste Periode an.</AppCard>
-        ) : null}
-        {cashPeriods.map((cashPeriod) => (
-          <AppCard
-            className={`cash-period-card${cashPeriod.status === "active" ? " cash-period-card--active" : " cash-period-card--closed"}`}
-            key={cashPeriod.id}
-          >
-            <div className="cash-period-card__header">
-              <div>
-                <strong>{cashPeriod.name}</strong>
-                <span>{formatDate(cashPeriod.start_date)} bis {formatDate(cashPeriod.end_date)}</span>
-              </div>
-              <span className={`status-pill ${cashPeriod.status === "active" ? "status-pill--active" : ""}`}>
-                {cashPeriod.status === "active" ? "aktiv" : "abgeschlossen"}
-              </span>
-            </div>
-            <div className="cash-period-amount">{formatThaiBaht(cashPeriod.opening_amount, cashPeriod.currency)}</div>
-            <div className="settings-list">
-              <div>
-                <span>Erstellt von</span>
-                <strong>{cashPeriod.created_by.display_name}</strong>
-              </div>
-              <div>
-                <span>Abschluss</span>
-                <strong>{cashPeriod.closed_at ? new Date(cashPeriod.closed_at).toLocaleDateString("de-DE") : "offen"}</strong>
-              </div>
-              <div>
-                <span>Abgeschlossen von</span>
-                <strong>{cashPeriod.closed_by?.display_name || "offen"}</strong>
-              </div>
-            </div>
-            {cashPeriod.status === "active" ? (
-              <div className="action-row">
-                <button className="secondary-action" onClick={() => startEdit(cashPeriod)} type="button">
-                  Bearbeiten
-                </button>
-                <button className="secondary-action" onClick={() => void handleClose(cashPeriod)} type="button">
-                  Abschließen
-                </button>
-              </div>
-            ) : null}
-          </AppCard>
-        ))}
-      </div>
+      {cashPeriods.find((period) => period.status === "active") ? <button className="danger-link" onClick={() => startClose(cashPeriods.find((period) => period.status === "active")!)} type="button">Aktive Kassenperiode abschließen</button> : null}
+      <AppDialog description="Nach dem Abschluss kann diese Kassenperiode nicht mehr bearbeitet werden." isOpen={Boolean(closeTarget)} onClose={() => setCloseTarget(null)} title="Kassenperiode abschließen">
+        <div className="stack-form"><div className="closing-summary"><strong>{closeTarget?.name}</strong><span>{closeTarget ? formatThaiBaht(closeTarget.opening_amount, closeTarget.currency) : null}</span></div><label className="form-field"><span>Enddatum</span><input data-autofocus min={closeTarget?.start_date} onChange={(event) => setCloseEndDate(event.target.value)} required type="date" value={closeEndDate} /></label><button className="primary-action category-danger-action" onClick={() => void handleClose()} type="button">Periode endgültig abschließen</button><button className="secondary-action" onClick={() => setCloseTarget(null)} type="button">Abbrechen</button></div>
+      </AppDialog>
     </PageContainer>
   );
 }

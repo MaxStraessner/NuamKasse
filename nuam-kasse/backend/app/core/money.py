@@ -12,7 +12,7 @@ class MoneyError(ValueError):
 
 def parse_money(value: str | Decimal) -> Decimal:
     if isinstance(value, float):
-        raise MoneyError("Geldbetraege duerfen nicht als Float verarbeitet werden.")
+        raise MoneyError("Geldbeträge dürfen nicht als Float verarbeitet werden.")
     if isinstance(value, Decimal):
         amount = value
     else:
@@ -25,10 +25,10 @@ def parse_money(value: str | Decimal) -> Decimal:
             raise MoneyError("Der Ausgangsbetrag ist ungültig.") from exc
 
     if amount.as_tuple().exponent < -2:
-        raise MoneyError("Der Ausgangsbetrag darf hoechstens zwei Nachkommastellen haben.")
+        raise MoneyError("Der Ausgangsbetrag darf höchstens zwei Nachkommastellen haben.")
     amount = amount.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
     if amount <= 0:
-        raise MoneyError("Der Ausgangsbetrag muss groesser als 0 sein.")
+        raise MoneyError("Der Ausgangsbetrag muss größer als 0 sein.")
     if amount > MAX_MONEY_AMOUNT:
         raise MoneyError("Der Ausgangsbetrag ist zu hoch.")
     return amount

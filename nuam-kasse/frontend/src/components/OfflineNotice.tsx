@@ -11,10 +11,10 @@ export function OfflineNotice() {
     <div className="offline-notice" role="status">
       <div>
         <strong>Keine Verbindung zum Server</strong>
-        <span>Die angezeigten Daten sind moeglicherweise nicht aktuell. Neue Buchungen sind erst wieder mit Serververbindung moeglich.</span>
+        <span>Die angezeigten Daten sind möglicherweise nicht aktuell. Neue Buchungen sind erst wieder mit Serververbindung möglich.</span>
       </div>
       <button type="button" onClick={() => void refreshServerStatus()}>
-        Erneut pruefen
+        Erneut prüfen
       </button>
     </div>
   );

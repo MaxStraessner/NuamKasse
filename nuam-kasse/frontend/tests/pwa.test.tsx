@@ -73,7 +73,7 @@ describe("PWA update prompt", () => {
     const options = calls[calls.length - 1]?.[0];
     options?.onNeedRefresh?.();
 
-    expect(await screen.findByText("Neue Version verfuegbar")).toBeInTheDocument();
+    expect(await screen.findByText("Neue Version verfügbar")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Jetzt aktualisieren"));
 
     await waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true));

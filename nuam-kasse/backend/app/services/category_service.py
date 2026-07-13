@@ -25,16 +25,16 @@ _UNSET = object()
 
 DEFAULT_CATEGORY_STRUCTURE: tuple[dict[str, object], ...] = (
     {
-        "name": "Ernaehrung",
+        "name": "Ernährung",
         "icon_key": "utensils",
         "color_key": "orange",
-        "children": ("Supermarkt", "Baeckerei", "Metzgerei", "Getraenke", "Restaurant", "Cafe", "Imbiss", "Lieferdienst", "Kantine", "Snacks und Suessigkeiten", "Sonstiges"),
+        "children": ("Supermarkt", "Bäckerei", "Metzgerei", "Getränke", "Restaurant", "Café", "Imbiss", "Lieferdienst", "Kantine", "Snacks und Süßigkeiten", "Sonstiges"),
     },
     {
         "name": "Haushalt",
         "icon_key": "house",
         "color_key": "green",
-        "children": ("Drogerie", "Reinigungsmittel", "Haushaltswaren", "Moebel", "Dekoration", "Kuechengeraete", "Reparaturen", "Garten", "Sonstiges"),
+        "children": ("Drogerie", "Reinigungsmittel", "Haushaltswaren", "Möbel", "Dekoration", "Küchengeräte", "Reparaturen", "Garten", "Sonstiges"),
     },
     {
         "name": "Wohnen",
@@ -49,28 +49,28 @@ DEFAULT_CATEGORY_STRUCTURE: tuple[dict[str, object], ...] = (
         "children": ("Apotheke", "Arzt", "Zahnarzt", "Krankenhaus", "Medikamente", "Brille und Kontaktlinsen", "Physiotherapie", "Therapie", "medizinische Hilfsmittel", "Pflege", "Sonstiges"),
     },
     {
-        "name": "Mobilitaet",
+        "name": "Mobilität",
         "icon_key": "car",
         "color_key": "teal",
-        "children": ("Tanken", "Bus und Bahn", "Taxi", "Fahrrad", "Autoreparatur", "Autowaesche", "Parken", "Maut", "Fahrzeugversicherung", "Fahrzeugsteuer", "Sonstiges"),
+        "children": ("Tanken", "Bus und Bahn", "Taxi", "Fahrrad", "Autoreparatur", "Autowäsche", "Parken", "Maut", "Fahrzeugversicherung", "Fahrzeugsteuer", "Sonstiges"),
     },
     {
         "name": "Kinder und Familie",
         "icon_key": "baby",
         "color_key": "pink",
-        "children": ("Kindergarten", "Schule", "Kleidung", "Spielzeug", "Taschengeld", "Betreuung", "Ausfluege", "Babyausstattung", "Vereinsbeitraege", "Sonstiges"),
+        "children": ("Kindergarten", "Schule", "Kleidung", "Spielzeug", "Taschengeld", "Betreuung", "Ausflüge", "Babyausstattung", "Vereinsbeiträge", "Sonstiges"),
     },
     {
         "name": "Kleidung und Pflege",
         "icon_key": "shirt",
         "color_key": "purple",
-        "children": ("Kleidung", "Schuhe", "Friseur", "Kosmetik", "Koerperpflege", "Schmuck", "Accessoires", "Reinigung", "Sonstiges"),
+        "children": ("Kleidung", "Schuhe", "Friseur", "Kosmetik", "Körperpflege", "Schmuck", "Accessoires", "Reinigung", "Sonstiges"),
     },
     {
         "name": "Freizeit",
         "icon_key": "cake",
         "color_key": "indigo",
-        "children": ("Kino", "Sport", "Hobby", "Musik", "Buecher", "Spiele", "Veranstaltungen", "Ausfluege", "Abonnements", "Sonstiges"),
+        "children": ("Kino", "Sport", "Hobby", "Musik", "Bücher", "Spiele", "Veranstaltungen", "Ausflüge", "Abonnements", "Sonstiges"),
     },
     {
         "name": "Reisen",
@@ -79,22 +79,22 @@ DEFAULT_CATEGORY_STRUCTURE: tuple[dict[str, object], ...] = (
         "children": ("Unterkunft", "Flug", "Bahn", "Mietwagen", "Verpflegung", "Eintritt", "Reiseversicherung", "Souvenirs", "Sonstiges"),
     },
     {
-        "name": "Finanzen und Vertraege",
+        "name": "Finanzen und Verträge",
         "icon_key": "landmark",
         "color_key": "gray",
-        "children": ("Versicherungen", "Bankgebuehren", "Kredite", "Ratenzahlungen", "Steuern", "Gebuehren", "Telefon", "Abonnements", "Mitgliedschaften", "Sonstiges"),
+        "children": ("Versicherungen", "Bankgebühren", "Kredite", "Ratenzahlungen", "Steuern", "Gebühren", "Telefon", "Abonnements", "Mitgliedschaften", "Sonstiges"),
     },
     {
         "name": "Haustiere",
         "icon_key": "paw-print",
         "color_key": "orange",
-        "children": ("Futter", "Tierarzt", "Medikamente", "Zubehoer", "Pflege", "Versicherung", "Hundeschule", "Sonstiges"),
+        "children": ("Futter", "Tierarzt", "Medikamente", "Zubehör", "Pflege", "Versicherung", "Hundeschule", "Sonstiges"),
     },
     {
         "name": "Geschenke und Sonstiges",
         "icon_key": "gift",
         "color_key": "pink",
-        "children": ("Geschenke", "Spenden", "Unterstuetzung Familie", "Bargeld", "unbekannte Ausgabe", "Sonstiges"),
+        "children": ("Geschenke", "Spenden", "Unterstützung Familie", "Bargeld", "unbekannte Ausgabe", "Sonstiges"),
     },
 )
 
@@ -109,21 +109,21 @@ def _validate_name(name: str) -> tuple[str, str]:
     if not clean_name or not normalized:
         raise CategoryServiceError("Der Kategoriename darf nicht leer sein.")
     if len(clean_name) > 50:
-        raise CategoryServiceError("Der Kategoriename darf hoechstens 50 Zeichen lang sein.")
+        raise CategoryServiceError("Der Kategoriename darf höchstens 50 Zeichen lang sein.")
     return clean_name, normalized
 
 
 def _validate_icon(icon_key: str) -> str:
     clean_icon = icon_key.strip()
     if not clean_icon or not is_valid_category_icon(clean_icon):
-        raise CategoryServiceError("Dieses Symbol ist nicht zulaessig.")
+        raise CategoryServiceError("Dieses Symbol ist nicht zulässig.")
     return clean_icon
 
 
 def _validate_color(color_key: str) -> str:
     clean_color = color_key.strip()
     if not clean_color or not is_valid_category_color(clean_color):
-        raise CategoryServiceError("Diese Farbe ist nicht zulaessig.")
+        raise CategoryServiceError("Diese Farbe ist nicht zulässig.")
     return clean_color
 
 
@@ -210,7 +210,7 @@ def _validate_parent(
     if parent.user_id != user_id:
         raise CategoryServiceError("Oberkategorie nicht gefunden.")
     if parent.parent_category_id is not None:
-        raise CategoryServiceError("Unterkategorien duerfen keine weiteren Unterkategorien besitzen.")
+        raise CategoryServiceError("Unterkategorien dürfen keine weiteren Unterkategorien besitzen.")
     if not parent.is_active:
         raise CategoryServiceError("Eine inaktive Kategorie kann nicht als Oberkategorie verwendet werden.")
     return parent
@@ -403,7 +403,7 @@ def delete_category(db: Session, *, category: Category, settings: Settings | Non
         db.scalar(select(func.count(Expense.id)).where(Expense.category_id == category.id)) or 0
     )
     if expense_count:
-        raise CategoryServiceError("Kategorien mit Buchungen koennen nur deaktiviert werden.")
+        raise CategoryServiceError("Kategorien mit Buchungen können nur deaktiviert werden.")
     child_count = int(
         db.scalar(
             select(func.count(Category.id)).where(
@@ -413,7 +413,7 @@ def delete_category(db: Session, *, category: Category, settings: Settings | Non
         ) or 0
     )
     if child_count:
-        raise CategoryServiceError("Oberkategorien mit Unterkategorien koennen nicht geloescht werden.")
+        raise CategoryServiceError("Oberkategorien mit Unterkategorien können nicht gelöscht werden.")
     image_path = category.image_path
     image_preview_path = category.image_preview_path
     db.delete(category)

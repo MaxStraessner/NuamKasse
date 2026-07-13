@@ -47,12 +47,12 @@ const router = createBrowserRouter([
             element: <SettingsPage />,
           },
           {
-            path: "settings/categories",
-            element: <CategoryAdminPage />,
-          },
-          {
             element: <AdminRoute />,
             children: [
+              {
+                path: "settings/categories",
+                element: <CategoryAdminPage />,
+              },
               {
                 path: "settings/users",
                 element: <UserAdminPage />,

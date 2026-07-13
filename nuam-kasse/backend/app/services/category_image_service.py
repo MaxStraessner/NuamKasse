@@ -62,7 +62,7 @@ def _absolute_path(relative_path: str, settings: Settings | None = None) -> Path
     root = _storage_root(settings).resolve()
     path = (root / relative_path).resolve()
     if root not in path.parents and path != root:
-        raise CategoryImageError("Bildpfad ist ungueltig.", status_code=404)
+        raise CategoryImageError("Bildpfad ist ungültig.", status_code=404)
     return path
 
 
@@ -85,7 +85,7 @@ def _validate_size(content: bytes, settings: Settings) -> None:
     if len(content) > settings.category_image_max_bytes:
         max_mb = settings.category_image_max_bytes // (1024 * 1024)
         raise CategoryImageError(
-            f"Das ausgewaehlte Bild ist zu gross. Bitte verwende eine Datei mit hoechstens {max_mb} MB.",
+            f"Das ausgewählte Bild ist zu groß. Bitte verwende eine Datei mit höchstens {max_mb} MB.",
         )
 
 
@@ -95,19 +95,19 @@ def _decode_image(content: bytes, settings: Settings) -> tuple[Image.Image, str,
         image = Image.open(BytesIO(content))
         image.load()
     except Image.DecompressionBombError as exc:
-        raise CategoryImageError("Das Bild ist zu gross fuer die Verarbeitung.") from exc
+        raise CategoryImageError("Das Bild ist zu groß für die Verarbeitung.") from exc
     except (OSError, UnidentifiedImageError) as exc:
-        raise CategoryImageError("Das Bild konnte nicht gelesen werden. Bitte pruefe das Dateiformat.") from exc
+        raise CategoryImageError("Das Bild konnte nicht gelesen werden. Bitte prüfe das Dateiformat.") from exc
 
     image_format = (image.format or "").upper()
     if image_format not in ALLOWED_IMAGE_FORMATS:
-        raise CategoryImageError("Dieses Dateiformat wird nicht unterstuetzt. Erlaubt sind PNG, JPG, JPEG und WEBP.")
+        raise CategoryImageError("Dieses Dateiformat wird nicht unterstützt. Erlaubt sind PNG, JPG, JPEG und WEBP.")
 
     width, height = image.size
     if width <= 0 or height <= 0:
-        raise CategoryImageError("Das Bild besitzt ungueltige Abmessungen.")
+        raise CategoryImageError("Das Bild besitzt ungültige Abmessungen.")
     if width * height > settings.category_image_max_pixels:
-        raise CategoryImageError("Das Bild ist zu gross fuer die Verarbeitung.")
+        raise CategoryImageError("Das Bild ist zu groß für die Verarbeitung.")
 
     extension, mime_type = ALLOWED_IMAGE_FORMATS[image_format]
     return image, extension, mime_type, width, height

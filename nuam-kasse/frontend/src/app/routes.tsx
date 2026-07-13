@@ -7,7 +7,7 @@ function LoadingScreen() {
     <main className="auth-screen">
       <div className="auth-panel">
         <p className="home-header__eyebrow">Nuam Kasse</p>
-        <h1>Sitzung wird geprueft</h1>
+        <h1>Sitzung wird geprüft</h1>
       </div>
     </main>
   );
