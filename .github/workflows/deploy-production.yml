@@ -1,0 +1,136 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Optional full or abbreviated commit hash contained in main
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuamkasse-production
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Required checks
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy verified main commit
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+    steps:
+      - name: Require workflow from main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Production workflow must be dispatched from main; got ${GITHUB_REF}." >&2
+            exit 64
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve and validate target commit
+        id: target
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          requested="${REQUESTED_COMMIT:-}"
+          if [[ -z "$requested" ]]; then
+            requested="origin/main"
+          fi
+          if ! target="$(git rev-parse --verify "${requested}^{commit}")"; then
+            echo "Requested commit does not exist: ${requested}" >&2
+            exit 65
+          fi
+          if ! git merge-base --is-ancestor "$target" origin/main; then
+            echo "Refusing deployment: ${target} is not contained in main." >&2
+            exit 66
+          fi
+          echo "commit=$target" >> "$GITHUB_OUTPUT"
+          echo "Deploy target: $target"
+
+      - name: Validate required configuration
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          for name in VPS_HOST VPS_USER HEALTH_URL; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub configuration: ${name}" >&2
+              exit 67
+            fi
+          done
+          if [[ -z "$SSH_PRIVATE_KEY" || -z "$SSH_HOST_KEY" ]]; then
+            echo "Missing VPS_SSH_PRIVATE_KEY or VPS_SSH_HOST_KEY." >&2
+            exit 67
+          fi
+
+      - name: Configure strict SSH host verification
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_HOST_KEY" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          if ! ssh-keygen -F "$VPS_HOST" -f "$HOME/.ssh/known_hosts" >/dev/null; then
+            echo "VPS_SSH_HOST_KEY does not contain an entry for VPS_HOST." >&2
+            exit 68
+          fi
+
+      - name: Pre-deployment health check
+        shell: bash
+        run: curl --fail --silent --show-error --max-time 15 "$HEALTH_URL"
+
+      - name: Deploy exact commit
+        env:
+          TARGET_COMMIT: ${{ steps.target.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" "deploy $TARGET_COMMIT"
+
+      - name: Post-deployment health check
+        shell: bash
+        run: curl --fail --silent --show-error --retry 8 --retry-delay 5 --max-time 15 "$HEALTH_URL"
+
+      - name: Record deployed commit
+        env:
+          TARGET_COMMIT: ${{ steps.target.outputs.commit }}
+        shell: bash
+        run: |
+          {
+            echo "### Production deployment"
+            echo ""
+            echo "Deployed commit: \`$TARGET_COMMIT\`"
+            echo "Health check: successful"
+          } >> "$GITHUB_STEP_SUMMARY"

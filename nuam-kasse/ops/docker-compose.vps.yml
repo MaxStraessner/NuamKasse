@@ -1,0 +1,117 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - nuam_internal
+
+  migrate:
+    image: nuamkasse-ip-backend:__DEPLOY_COMMIT__
+    build:
+      context: __RELEASE_DIR__/backend
+    environment:
+      APP_NAME: ${APP_NAME:-Nuam Kasse}
+      APP_VERSION: ${APP_VERSION:-0.7.0}
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-nuam_kasse_session}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      CATEGORY_IMAGE_STORAGE_PATH: ${CATEGORY_IMAGE_STORAGE_PATH:-/app/uploads/category-images}
+      CATEGORY_IMAGE_MAX_BYTES: ${CATEGORY_IMAGE_MAX_BYTES:-5242880}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      org.opencontainers.image.revision: __DEPLOY_COMMIT__
+    networks:
+      - nuam_internal
+
+  backend:
+    image: nuamkasse-ip-backend:__DEPLOY_COMMIT__
+    build:
+      context: __RELEASE_DIR__/backend
+    restart: unless-stopped
+    environment:
+      APP_NAME: ${APP_NAME:-Nuam Kasse}
+      APP_VERSION: ${APP_VERSION:-0.7.0}
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-nuam_kasse_session}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      CATEGORY_IMAGE_STORAGE_PATH: ${CATEGORY_IMAGE_STORAGE_PATH:-/app/uploads/category-images}
+      CATEGORY_IMAGE_MAX_BYTES: ${CATEGORY_IMAGE_MAX_BYTES:-5242880}
+    volumes:
+      - category_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=3)); raise SystemExit(0 if data.get('status') == 'ok' and data.get('database') == 'connected' else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    labels:
+      org.opencontainers.image.revision: __DEPLOY_COMMIT__
+    networks:
+      - nuam_internal
+
+  frontend:
+    image: nuamkasse-ip-frontend:__DEPLOY_COMMIT__
+    build:
+      context: __RELEASE_DIR__/frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-0.7.0}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    labels:
+      org.opencontainers.image.revision: __DEPLOY_COMMIT__
+    networks:
+      - nuam_internal
+
+volumes:
+  postgres_data:
+    external: true
+    name: nuamkasse-ip_postgres_data
+  category_uploads:
+    external: true
+    name: nuamkasse-ip_category_uploads
+
+networks:
+  nuam_internal:
+    external: true
+    name: nuamkasse-ip_nuam_internal
