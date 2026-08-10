@@ -521,6 +521,7 @@ describe("Categories", () => {
 
     const essen = await screen.findByLabelText("Kategorie Essen");
     expect(essen).toBeInTheDocument();
+    expect(essen).toHaveClass("category-tile--selection");
     expect(essen).toHaveAttribute("data-category-color", "orange");
     expect(screen.getByLabelText("Kategorie Bank")).toHaveAttribute("data-category-color", "blue");
   });
@@ -1080,7 +1081,11 @@ describe("Expenses", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.queryByLabelText("Betrag")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Kategorie Apotheke"));
+    const subcategoryTile = screen.getByLabelText("Kategorie Apotheke");
+    expect(subcategoryTile).toHaveClass("category-tile--selection");
+    expect(within(subcategoryTile).queryByText("Ausgabe")).not.toBeInTheDocument();
+    expect(within(subcategoryTile).getByLabelText("Kategorieart: Ausgabe")).toHaveClass("category-type-badge--dot-only");
+    fireEvent.click(subcategoryTile);
     expect(await screen.findByLabelText("Betrag")).toBeInTheDocument();
     expect(screen.getByText("Oberkategorie")).toBeInTheDocument();
     expect(screen.getByText("Unterkategorie")).toBeInTheDocument();
