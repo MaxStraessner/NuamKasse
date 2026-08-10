@@ -27,7 +27,6 @@ jobs:
     timeout-minutes: 45
     environment: production
     env:
-      HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
     steps:
@@ -75,7 +74,7 @@ jobs:
           SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
         run: |
           set -euo pipefail
-          for name in VPS_HOST VPS_USER HEALTH_URL; do
+          for name in VPS_HOST VPS_USER; do
             if [[ -z "${!name:-}" ]]; then
               echo "Missing required GitHub configuration: ${name}" >&2
               exit 67
@@ -104,7 +103,10 @@ jobs:
 
       - name: Pre-deployment health check
         shell: bash
-        run: curl --fail --silent --show-error --max-time 15 "$HEALTH_URL"
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" health
 
       - name: Deploy exact commit
         env:
@@ -121,7 +123,17 @@ jobs:
 
       - name: Post-deployment health check
         shell: bash
-        run: curl --fail --silent --show-error --retry 8 --retry-delay 5 --max-time 15 "$HEALTH_URL"
+        run: |
+          set -euo pipefail
+          for attempt in {1..8}; do
+            if ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+              "$VPS_USER@$VPS_HOST" health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Post-deployment health check failed after 8 attempts." >&2
+          exit 70
 
       - name: Record deployed commit
         env:

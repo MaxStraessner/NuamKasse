@@ -43,6 +43,9 @@ cat > "$SSH_WRAPPER" <<'EOF'
 set -Eeuo pipefail
 
 case "${SSH_ORIGINAL_COMMAND:-}" in
+  "health")
+    exec curl --fail --silent --show-error --max-time 15 http://127.0.0.1:8080/api/v1/health
+    ;;
   "deploy "*)
     commit="${SSH_ORIGINAL_COMMAND#deploy }"
     mode="deploy"
@@ -52,7 +55,7 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     mode="dry-run"
     ;;
   *)
-    echo "Only deploy <40-hex-commit> or dry-run <40-hex-commit> is allowed." >&2
+    echo "Only health, deploy <40-hex-commit> or dry-run <40-hex-commit> is allowed." >&2
     exit 64
     ;;
 esac

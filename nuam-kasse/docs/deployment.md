@@ -21,10 +21,6 @@ Repository-Secrets unter `Settings -> Secrets and variables -> Actions`:
 - `VPS_SSH_PRIVATE_KEY`: privater, ausschliesslich fuer GitHub Actions erzeugter Ed25519-Schluessel.
 - `VPS_SSH_HOST_KEY`: vollstaendige, vorab verifizierte Known-Hosts-Zeile; der Workflow verwendet kein `StrictHostKeyChecking=no` und kein ungeprueftes `ssh-keyscan`.
 
-Repository-Variable:
-
-- `PRODUCTION_HEALTH_URL`: oeffentlicher Health-Endpunkt, aktuell nach dem Muster `http://VPS-IP:8080/api/v1/health`.
-
 Empfohlene GitHub-Environment-Einstellung fuer `production`: erforderlicher Reviewer. Der Workflow besitzt `contents: read`, einen 45-Minuten-Timeout und eine exklusive Production-Concurrency-Gruppe.
 
 ## Einmalige VPS-Einrichtung
@@ -61,7 +57,7 @@ Kuenftige Kurzanweisung: **„Erstelle den Pull Request auf GitHub.“**
 1. In GitHub Actions `Deploy production` auf Branch `main` waehlen.
 2. `commit` leer lassen, um den aktuellen `main`-Stand zu deployen; fuer einen kontrollierten Rollback einen in `main` enthaltenen Commit angeben.
 3. Workflow ausfuehren und gegebenenfalls das `production`-Environment freigeben.
-4. Der Workflow wiederholt CI, prueft den Commit, den Host-Key und den oeffentlichen Pre-Health-Check.
+4. Der Workflow wiederholt CI, prueft den Commit, den Host-Key und den internen Pre-Health-Check ueber den eingeschraenkten SSH-Befehl.
 5. Das VPS-Skript prueft nochmals `main`, vorhandene Volumes/Netzwerk, `.env`-Rechte und den internen Health-Check.
 6. Vor jeder Migration entsteht ein Custom-Format-Backup mit SHA-256 und erfolgreichem `pg_restore --list`.
 7. Der exakte Commit wird in ein eigenes Release-Verzeichnis ausgecheckt; Images tragen den vollen Commit-Tag.
@@ -72,7 +68,7 @@ Kuenftige Kurzanweisung nach geprueftem Merge: **„Deploye den aktuellen Stand 
 
 ## Health Checks
 
-- GitHub Runner: `PRODUCTION_HEALTH_URL` vor und nach dem Deployment.
+- GitHub Runner: interner VPS-Health-Check ueber den eingeschraenkten SSH-Befehl `health` vor und nach dem Deployment.
 - VPS intern: `http://127.0.0.1:8080/api/v1/health`.
 - Compose: Datenbank, Backend und Frontend muessen `healthy` sein.
 - Erwartete API-Felder: `status=ok`, `database=connected`.
