@@ -1,185 +1,109 @@
-# Nuam Kasse Deployment
+# Verbindlicher GitHub- und VPS-Deploymentprozess
 
-Dieses Deployment ist fuer einen eigenstaendigen Docker Stack auf einem Hostinger VPS vorbereitet. Es veraendert keine fremden Docker Stacks, Volumes oder Netzwerke.
-
-## Zielarchitektur
+Es gibt genau einen Produktionsweg:
 
 ```text
-Smartphone
-  -> HTTPS Domain oder Subdomain
-  -> Reverse Proxy
-  -> nuam-kasse-frontend
-  -> nuam-kasse-backend
-  -> nuam-kasse-db
+Feature-Branch -> Pull Request -> CI -> Merge in main
+  -> manueller GitHub-Workflow "Deploy production"
+  -> eingeschraenkter SSH-Befehl
+  -> /usr/local/sbin/nuamkasse-deploy
+  -> Health- und Commit-Bestaetigung
 ```
 
-Bevorzugte oeffentliche Herkunft:
+Direkte Feature-Branch-Deployments, manuelle SCP-/Docker-Updates und die Hostinger-Projekt-Updatefunktion sind fuer Nuam Kasse nicht zulaessig.
 
-- Frontend: `https://kasse.example.com/`
-- API: `https://kasse.example.com/api/v1/`
+## GitHub-Konfiguration
 
-`VITE_API_BASE_URL` bleibt in Produktion relativ: `/api/v1`.
+Repository-Secrets unter `Settings -> Secrets and variables -> Actions`:
 
-## Serververzeichnis
+- `VPS_HOST`: VPS-Hostname, exakt wie in der Known-Hosts-Zeile.
+- `VPS_USER`: `nuamkasse-deploy`.
+- `VPS_SSH_PRIVATE_KEY`: privater, ausschliesslich fuer GitHub Actions erzeugter Ed25519-Schluessel.
+- `VPS_SSH_HOST_KEY`: vollstaendige, vorab verifizierte Known-Hosts-Zeile; der Workflow verwendet kein `StrictHostKeyChecking=no` und kein ungeprueftes `ssh-keyscan`.
 
-Empfohlen:
+Repository-Variable:
 
-```sh
-/opt/nuam-kasse
-```
+- `PRODUCTION_HEALTH_URL`: oeffentlicher Health-Endpunkt, aktuell nach dem Muster `http://VPS-IP:8080/api/v1/health`.
 
-Enthalten sein sollten:
+Empfohlene GitHub-Environment-Einstellung fuer `production`: erforderlicher Reviewer. Der Workflow besitzt `contents: read`, einen 45-Minuten-Timeout und eine exklusive Production-Concurrency-Gruppe.
 
-- `docker-compose.prod.yml`
-- `.env.production`
-- `scripts/`
-- `backups/`
-- Quellcode oder ein kontrolliertes Release-Artefakt
+## Einmalige VPS-Einrichtung
 
-## Start ohne Domain ueber VPS-IP
+Die Einrichtung wird einmal kontrolliert ueber den bereits verifizierten Root-Schluessel ausgefuehrt. Sie veraendert keine bestehenden Root-Schluessel und deaktiviert keinen Zugang.
 
-Eine Domain ist fuer den ersten Funktionstest nicht erforderlich. Nutze dafuer die
-separate Compose-Datei `docker-compose.ip.yml`. Sie veroeffentlicht nur das
-Frontend auf Port 80 und haelt Backend und Datenbank im internen Docker-Netzwerk.
+1. Separates Actions-Schluesselpaar lokal erzeugen; der private Teil kommt nur in `VPS_SSH_PRIVATE_KEY`.
+2. Den Ordner `nuam-kasse/` aus dem geprueften Commit temporaer auf die VPS uebertragen, damit Installer, Deploymentskript und Compose-Template gemeinsam vorliegen.
+3. Als Root ausfuehren:
 
-Wichtig: Diese Variante setzt `APP_ENV=development` und
-`SESSION_COOKIE_SECURE=false`, damit Login-Cookies auch ueber `http://VPS-IP`
-funktionieren. Sobald eine Domain mit HTTPS vorhanden ist, auf
-`docker-compose.prod.yml` und `.env.production` wechseln.
+   ```sh
+   bash scripts/install-deploy-access.sh /root/setup/nuamkasse-actions.pub
+   chmod 600 /docker/nuamkasse-ip/.env
+   ```
 
-Auf dem VPS:
+4. Der Installer legt Skript und Compose-Template root-eigen unter `/usr/local/sbin` beziehungsweise `/usr/local/share/nuamkasse` ab. Er erstellt `nuamkasse-deploy` mit gesperrtem Passwort, einem erzwungenen SSH-Wrapper und genau den erforderlichen `sudo`-Kommandos. Der Benutzer erhaelt keinen allgemeinen Docker- oder Root-Zugang.
+5. Secrets/Variable auf GitHub setzen und nur den Dry-Run ausfuehren.
 
-```sh
-cd /opt/nuam-kasse
-cp .env.ip.example .env.ip
-nano .env.ip
-```
+Eine Hostinger-Browserkonsole ist nicht notwendig, solange der verifizierte Root-Schluessel funktioniert.
 
-Mindestens `POSTGRES_PASSWORD` durch ein langes zufaelliges Passwort ersetzen.
+## Normaler Pull-Request-Ablauf
 
-Erster Start:
+1. Branch von aktuellem `main` erstellen.
+2. Aenderung implementieren, fremde Arbeit erhalten.
+3. Relevante Befehle aus `/AGENTS.md` ausfuehren.
+4. Nur auftragsbezogene Dateien committen und Branch pushen.
+5. PR nach `main` mit Umfang, Risiken und Testnachweisen erstellen.
+6. CI abwarten, pruefen und mergen. Kein Force Push auf `main`.
 
-```sh
-sh scripts/deploy-ip.sh
-```
+Kuenftige Kurzanweisung: **„Erstelle den Pull Request auf GitHub.“**
 
-Oeffentlich pruefen:
+## Normaler Deploymentablauf
 
-```sh
-curl -fsS http://VPS-IP/api/v1/health
-```
+1. In GitHub Actions `Deploy production` auf Branch `main` waehlen.
+2. `commit` leer lassen, um den aktuellen `main`-Stand zu deployen; fuer einen kontrollierten Rollback einen in `main` enthaltenen Commit angeben.
+3. Workflow ausfuehren und gegebenenfalls das `production`-Environment freigeben.
+4. Der Workflow wiederholt CI, prueft den Commit, den Host-Key und den oeffentlichen Pre-Health-Check.
+5. Das VPS-Skript prueft nochmals `main`, vorhandene Volumes/Netzwerk, `.env`-Rechte und den internen Health-Check.
+6. Vor jeder Migration entsteht ein Custom-Format-Backup mit SHA-256 und erfolgreichem `pg_restore --list`.
+7. Der exakte Commit wird in ein eigenes Release-Verzeichnis ausgecheckt; Images tragen den vollen Commit-Tag.
+8. Alembic laeuft einmalig als Migrationsservice. Danach werden nur Backend und Frontend aktualisiert.
+9. Container-Health, API-Health, Image-Tags und Revisionslabels muessen den Zielcommit bestaetigen.
 
-Ersten Administrator anlegen:
-
-```sh
-docker compose --env-file .env.ip -f docker-compose.ip.yml exec backend python -m app.scripts.create_admin
-```
-
-Danach im Browser `http://VPS-IP` oeffnen.
-
-## Produktionsvariablen
-
-Kopiere `.env.production.example` nach `.env.production` und ersetze alle Secrets:
-
-```sh
-cp .env.production.example .env.production
-```
-
-Wichtig:
-
-- `POSTGRES_PASSWORD` muss ein langes zufaelliges Passwort sein.
-- `SESSION_COOKIE_SECURE=true` ist fuer HTTPS gesetzt.
-- `ENABLE_API_DOCS=false` deaktiviert FastAPI-Dokumentation in Produktion.
-- `BACKEND_CORS_ORIGINS` bleibt bei gleicher Domain leer.
-- `NUAM_KASSE_PROXY_NETWORK` muss dem vorhandenen externen Reverse-Proxy-Netzwerk entsprechen.
-
-## Reverse Proxy
-
-Der Frontend-Container ist fuer ein externes Proxy-Netzwerk vorbereitet und veroeffentlicht selbst keinen Host-Port.
-
-Beispiel fuer einen zentralen Nginx-Proxy:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name kasse.example.com;
-
-    location / {
-        proxy_pass http://nuam-kasse-frontend:80;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-```
-
-HTTPS-Zertifikate und HTTP-zu-HTTPS-Weiterleitung werden im vorhandenen Reverse Proxy verwaltet.
-
-## Erster Start
-
-```sh
-docker compose --env-file .env.production -f docker-compose.prod.yml config
-docker compose --env-file .env.production -f docker-compose.prod.yml build
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d db
-docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d backend frontend
-docker compose --env-file .env.production -f docker-compose.prod.yml ps
-```
-
-Ersten Administrator bewusst per CLI anlegen:
-
-```sh
-docker compose --env-file .env.production -f docker-compose.prod.yml exec backend python -m app.scripts.create_admin
-```
-
-Es wird kein Administrator automatisch aus Umgebungsvariablen erzeugt.
-
-## Update
-
-```sh
-git checkout main
-git pull
-sh scripts/deploy.sh
-```
-
-Das Skript prueft Variablen, baut Images, startet die Datenbank, erstellt ein Backup, fuehrt Migrationen aus und aktualisiert Backend und Frontend.
+Kuenftige Kurzanweisung nach geprueftem Merge: **„Deploye den aktuellen Stand von main auf die VPS.“**
 
 ## Health Checks
 
+- GitHub Runner: `PRODUCTION_HEALTH_URL` vor und nach dem Deployment.
+- VPS intern: `http://127.0.0.1:8080/api/v1/health`.
+- Compose: Datenbank, Backend und Frontend muessen `healthy` sein.
+- Erwartete API-Felder: `status=ok`, `database=connected`.
+- Laufender Commit: Backend-/Frontend-Image-Tag und Label `org.opencontainers.image.revision` entsprechen dem Zielcommit.
+
+## Dry-Run
+
+Der eingeschraenkte Actions-Schluessel erlaubt fuer die Ersteinrichtung:
+
 ```sh
-docker compose --env-file .env.production -f docker-compose.prod.yml ps
-docker compose --env-file .env.production -f docker-compose.prod.yml exec backend python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://localhost:8000/api/v1/health')))"
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes nuamkasse-deploy@VPS-HOST \
+  "dry-run VOLLSTAENDIGER_40_STELLIGER_COMMIT"
 ```
 
-Oeffentlich pruefen:
+Der Dry-Run liest Produktion, Health, Volumes und Netzwerk, laedt `main` nur in ein temporaeres `/tmp`-Verzeichnis und validiert das gerenderte Compose-Template. Er erstellt keine Releases, Backups, Images, Container oder Volumes.
 
-```sh
-curl -fsS https://kasse.example.com/api/v1/health
-```
+## Fehlerdiagnose und Wiederherstellung
 
-## Rollback
+Das Skript meldet den fehlgeschlagenen Schritt und einen eindeutigen Exitcode. Bei Fehlern:
 
-Anwendung:
+1. Keine destruktive Eigenreparatur und kein `docker compose down -v` ausfuehren.
+2. GitHub-Jobausgabe sowie `/docker/nuamkasse-ip/deployment-state/history.log` pruefen.
+3. Container nur innerhalb von `nuamkasse-ip` mit `docker compose ... ps` und `logs` untersuchen.
+4. Das vor der Migration erstellte Backup und dessen SHA-256 identifizieren.
+5. Wenn nur die Anwendung fehlschlug, nach Ursachenpruefung den vorherigen, weiterhin in `main` enthaltenen Commit ueber denselben Workflow deployen.
+6. Datenbankmigrationen werden nie automatisch abwaerts ausgefuehrt. Eine Datenbankwiederherstellung ueberschreibt Produktionsdaten und erfordert eine separate ausdrueckliche Freigabe sowie die Anleitung in `docs/backup-and-restore.md`.
 
-1. Vorherigen Git-Commit oder vorheriges Image identifizieren.
-2. Vorherige Version starten.
-3. Health Checks pruefen.
+Alte Release-Verzeichnisse und Backups werden vom Deploymentskript nicht automatisch geloescht. Fremde Docker-Projekte werden nie adressiert.
 
-Datenbank:
+## Aktueller Einrichtungsstatus
 
-- Migrationen werden nicht automatisch rueckwaerts ausgefuehrt.
-- Ein Datenbankrollback ist eine bewusste administrative Entscheidung.
-- Vor Wiederherstellung Backup pruefen.
+Am 2026-08-09 wurden der dedizierte VPS-Benutzer, der erzwungene SSH-Befehl, die root-eigenen Skripte, das Compose-Template, die vier GitHub-Secrets, die Health-Variable und das `production`-Environment eingerichtet. Ein Remote-Dry-Run gegen `e03b5553b6bb273d2c76a303d02fa181b81de666` war erfolgreich; Container, Volumes und Produktionsdateien blieben im Vorher-/Nachher-Vergleich unveraendert.
 
-## Offene Produktionspruefung
-
-Ohne Serverzugriff wurden keine Hostinger-Aktionen ausgefuehrt. Nach Deployment manuell pruefen:
-
-- DNS zeigt auf den VPS.
-- HTTP leitet auf HTTPS um.
-- Zertifikat ist gueltig.
-- Anmeldung funktioniert.
-- Buchung, Stornierung und Uebersicht funktionieren.
-- PWA Installation auf Android und iPhone funktioniert.
-- Backup und Restore sind getestet.
+Noch offen sind die Uebernahme dieses Workflows nach `main`, die anschliessende Aktivierung eines `main`-Rulesets mit verpflichtendem Pull Request und erfolgreichen CI-Checks sowie das erste echte Produktionsdeployment. Das erste echte Deployment bleibt bis zur ausdruecklichen Zustimmung ausstehend.
