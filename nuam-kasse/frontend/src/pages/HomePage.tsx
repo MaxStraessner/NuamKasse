@@ -301,7 +301,7 @@ export function HomePage() {
           <small>{canStartBooking ? "Buchung erfassen" : "nicht buchbar"}</small>
         </div>
         {isLoadingCategories ? (
-          <div className="category-grid" aria-label="Kategorien werden geladen">
+          <div className="category-grid category-grid--selection" aria-label="Kategorien werden geladen">
             {[1, 2, 3, 4].map((item) => (
               <div className="category-skeleton" key={item} />
             ))}
@@ -324,13 +324,14 @@ export function HomePage() {
           </p>
         ) : null}
         {!isLoadingCategories && !categoryError && rootCategories.length > 0 ? (
-          <div className="category-grid">
+          <div className="category-grid category-grid--selection">
             {rootCategories.map((category) => (
               <CategoryTile
                 category={category}
                 isDisabled={!canBookCategory(category) || !category.is_active}
                 key={category.id}
                 onSelect={() => openRootCategory(category)}
+                variant="selection"
               />
             ))}
           </div>
@@ -353,9 +354,9 @@ export function HomePage() {
         {selectedRootChildren.length === 0 ? <p className="empty-state">Für diese Oberkategorie gibt es noch keine aktiven Unterkategorien.</p> : null}
         {selectedRootChildren.length > 0 && visibleRootChildren.length === 0 ? <p className="empty-state">Keine passende Unterkategorie gefunden.</p> : null}
         {visibleRootChildren.length > 0 ? (
-          <div className="category-grid category-grid--dialog">
+          <div className="category-grid category-grid--dialog category-grid--selection">
             {visibleRootChildren.map((subcategory) => (
-              <CategoryTile category={subcategory} isDisabled={!canBookCategory(subcategory) || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} />
+              <CategoryTile category={subcategory} isDisabled={!canBookCategory(subcategory) || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} variant="selection" />
             ))}
           </div>
         ) : null}

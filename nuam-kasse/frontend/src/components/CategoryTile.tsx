@@ -12,6 +12,7 @@ type CategoryTileProps = {
     category_type?: CategoryType;
   };
   size?: "regular" | "compact";
+  variant?: "default" | "selection";
   isDisabled?: boolean;
   showLabel?: boolean;
   onSelect?: () => void;
@@ -20,17 +21,28 @@ type CategoryTileProps = {
 export function CategoryTile({
   category,
   size = "regular",
+  variant = "default",
   isDisabled = false,
   showLabel = true,
   onSelect,
 }: CategoryTileProps) {
   const colorKey = isCategoryColorKey(category.color_key) ? category.color_key : "gray";
-  const className = `category-tile category-tile--${size}${showLabel ? "" : " category-tile--icon-only"}${isDisabled ? " category-tile--disabled" : ""}`;
+  const isSelection = variant === "selection" && showLabel;
+  const className = `category-tile category-tile--${size}${isSelection ? " category-tile--selection" : ""}${showLabel ? "" : " category-tile--icon-only"}${isDisabled ? " category-tile--disabled" : ""}`;
   const content = (
     <>
       <CategoryVisual icon={category.icon_key} imageUrl={category.image_url} name={category.name} />
-      {showLabel ? <strong>{category.name}</strong> : null}
-      {showLabel && category.category_type ? <CategoryTypeBadge compact type={category.category_type} /> : null}
+      {isSelection ? (
+        <span className="category-tile__overlay">
+          <strong>{category.name}</strong>
+          {category.category_type ? <CategoryTypeBadge dotOnly type={category.category_type} /> : null}
+        </span>
+      ) : (
+        <>
+          {showLabel ? <strong>{category.name}</strong> : null}
+          {showLabel && category.category_type ? <CategoryTypeBadge compact type={category.category_type} /> : null}
+        </>
+      )}
     </>
   );
 

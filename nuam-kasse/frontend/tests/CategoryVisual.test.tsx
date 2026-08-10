@@ -20,12 +20,15 @@ const subcategory = {
 };
 
 describe("CategoryTile custom images", () => {
-  test("shows text and color-independent category type status", () => {
-    render(<CategoryTile category={rootCategory} />);
+  test("shows only a color-independent category type dot in selection cards", () => {
+    render(<CategoryTile category={rootCategory} variant="selection" />);
 
     const badge = screen.getByLabelText("Kategorieart: Einnahme");
-    expect(badge).toHaveTextContent("Einnahme");
+    expect(badge).toHaveTextContent("");
     expect(badge).toHaveClass("category-type-badge--income");
+    expect(badge).toHaveClass("category-type-badge--dot-only");
+    expect(screen.queryByText("Einnahme")).not.toBeInTheDocument();
+    expect(screen.getByText("Gesundheit")).toBeInTheDocument();
   });
   test("shows the standard icon when no image is present", () => {
     render(<CategoryTile category={subcategory} />);
@@ -35,11 +38,12 @@ describe("CategoryTile custom images", () => {
   });
 
   test("shows a custom image for the concrete category", () => {
-    render(<CategoryTile category={rootCategory} />);
+    render(<CategoryTile category={rootCategory} variant="selection" />);
 
     const image = screen.getByRole("img", { name: "Bild der Kategorie Gesundheit" });
     expect(image).toHaveAttribute("src", rootCategory.image_url);
     expect(screen.getByLabelText("Kategorie Gesundheit")).toHaveAttribute("data-has-custom-image", "true");
+    expect(screen.getByLabelText("Kategorie Gesundheit")).toHaveClass("category-tile--selection");
   });
 
   test("falls back to the icon when the image cannot be loaded", () => {
