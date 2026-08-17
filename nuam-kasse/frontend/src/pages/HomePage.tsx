@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Search } from "lucide-react";
+import { Check, CheckCircle2, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
@@ -389,18 +389,38 @@ export function HomePage() {
                 )}
                 <CategoryTypeBadge type={selectedCategoryType} />
               </div>
-              <label className="amount-field">
-                <span>Betrag</span>
+              <div className="amount-field">
+                <label htmlFor="expense-amount"><span>Betrag</span></label>
                 <input
                   aria-label="Betrag"
                   aria-describedby="amount-help"
                   data-autofocus
+                  id="expense-amount"
                   inputMode="decimal"
                   onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
                   value={expenseAmount}
                 />
+                <div className="booking-actions">
+                  <button
+                    aria-label="Bestätigen"
+                    className="booking-action booking-action--confirm"
+                    disabled={isSavingExpense || !canUseServer}
+                    type="submit"
+                  >
+                    <Check aria-hidden="true" />
+                  </button>
+                  <button
+                    aria-label="Abbrechen"
+                    className="booking-action booking-action--cancel"
+                    disabled={isSavingExpense}
+                    onClick={closeExpenseDialog}
+                    type="button"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
                 <small id="amount-help">Betrag in Thai Baht</small>
-              </label>
+              </div>
               <div className="quick-amounts" aria-label="Schnellbeträge">
                 {[100, 250, 500, 1000].map((amount) => (
                   <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
@@ -429,14 +449,6 @@ export function HomePage() {
                 </div>
               </div>
               {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
-              <div className="action-row">
-                <button className="primary-action" disabled={isSavingExpense || !canUseServer} type="submit">
-                  {isSavingExpense ? "Wird gespeichert …" : `${isIncomeBooking ? "Einnahme" : "Ausgabe"} speichern`}
-                </button>
-                <button className="secondary-action" disabled={isSavingExpense} onClick={closeExpenseDialog} type="button">
-                  {selectedRootCategory && selectedCategory.parent_category_id === selectedRootCategory.id ? "Zurück" : "Abbrechen"}
-                </button>
-              </div>
             </form>
         ) : null}
       </AppDialog>
