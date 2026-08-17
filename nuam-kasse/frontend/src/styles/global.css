@@ -2407,8 +2407,13 @@ textarea:focus-visible {
 .dialog-search input { width: 100%; min-height: 2.9rem; border: 0; outline: 0; background: transparent; color: var(--color-text-primary); }
 .category-grid--dialog .category-tile { min-height: 5.25rem; }
 .booking-form { display: grid; gap: var(--space-4); }
-.booking-form > .action-row { position: sticky; z-index: 2; bottom: calc(var(--space-5) * -1); margin: 0 calc(var(--space-5) * -1) calc(var(--space-5) * -1); padding: var(--space-3) var(--space-5) calc(var(--space-3) + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(16px); }
 .amount-field small { color: var(--color-text-tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
+.booking-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.booking-action { display: grid; min-height: 3.5rem; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-md); color: var(--color-text-inverse); }
+.booking-action svg { width: 1.75rem; height: 1.75rem; stroke-width: 3; }
+.booking-action--confirm { border-color: var(--color-success); background: var(--color-success); }
+.booking-action--cancel { border-color: var(--color-danger); background: var(--color-danger); }
+.booking-action:disabled { opacity: 0.7; }
 .quick-amounts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
 .quick-amounts button { min-height: 2.75rem; padding: 0 var(--space-1); border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-primary); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .success-toast { position: fixed; z-index: 80; top: calc(4.25rem + env(safe-area-inset-top)); left: 50%; display: flex; width: min(calc(100% - 2rem), 28rem); align-items: center; gap: var(--space-3); transform: translateX(-50%); padding: var(--space-3) var(--space-4); border: 1px solid rgba(35, 132, 95, 0.18); border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.96); box-shadow: var(--shadow-md); color: var(--color-success); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); animation: toast-in var(--duration-slow) var(--ease-emphasized); }

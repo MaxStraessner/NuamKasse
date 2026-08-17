@@ -978,11 +978,21 @@ describe("Expenses", () => {
     fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Betrag")).toBeInTheDocument();
-    expect(screen.getByLabelText("Betrag")).not.toHaveAttribute("placeholder");
+    const amountInput = screen.getByLabelText("Betrag");
+    const confirmButton = screen.getByRole("button", { name: "Bestätigen" });
+    const cancelButton = screen.getByRole("button", { name: "Abbrechen" });
+    expect(amountInput).toBeInTheDocument();
+    expect(amountInput).not.toHaveAttribute("placeholder");
+    expect(amountInput.nextElementSibling).toContainElement(confirmButton);
+    expect(confirmButton).toHaveTextContent("");
+    expect(cancelButton).toHaveTextContent("");
+    expect(confirmButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(cancelButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getAllByRole("button", { name: "Bestätigen" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Abbrechen" })).toHaveLength(1);
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "250,00" } });
     expect(screen.getByText("Voraussichtlich verbleibend")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     await waitFor(() => expect(screen.getByText(/gespeichert/)).toBeInTheDocument());
     expect(createPayload).toEqual({ category_id: 1, amount: "250.00" });
@@ -1032,7 +1042,7 @@ describe("Expenses", () => {
     expect(await screen.findByRole("dialog", { name: "Einnahme eintragen" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "500" } });
     expect(screen.getAllByText(/500\.00/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Einnahme speichern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     expect(await screen.findByText(/Einnahme über/)).toBeInTheDocument();
   });
@@ -1092,10 +1102,35 @@ describe("Expenses", () => {
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getByText("Apotheke")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "25,00" } });
-    fireEvent.click(screen.getByRole("button", { name: "Ausgabe speichern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     expect(await screen.findByText(/Essen > Apotheke gespeichert/)).toBeInTheDocument();
     expect(createPayload).toEqual({ category_id: apothekeCategory.id, amount: "25.00" });
+  });
+
+  test("amount entry can be cancelled directly without creating an expense", async () => {
+    window.history.pushState({}, "", "/");
+    let createRequests = 0;
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(memberUser);
+      if (url.endsWith("/cash-periods/current/summary")) return jsonResponse(activeCashSummary);
+      if (url.endsWith("/cash-periods/current")) return jsonResponse(activeCashPeriod);
+      if (url.endsWith("/categories")) return jsonResponse([essenCategory]);
+      if (url.endsWith("/expenses") && options?.method === "POST") {
+        createRequests += 1;
+      }
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
+    expect(await screen.findByLabelText("Betrag")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "25,00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
+
+    expect(screen.queryByLabelText("Betrag")).not.toBeInTheDocument();
+    expect(createRequests).toBe(0);
   });
 
   test("category tiles are not bookable without an active remaining amount", async () => {
