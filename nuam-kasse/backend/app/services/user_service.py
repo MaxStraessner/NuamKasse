@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, normalize_username, validate_password
 from app.models.user import User, UserRole
 from app.models.user_session import UserSession
+from app.services.cashbook_service import bootstrap_first_cashbook
 
 
 class UserServiceError(ValueError):
@@ -82,6 +83,8 @@ def create_user(
         must_change_password=must_change_password,
     )
     db.add(user)
+    db.flush()
+    bootstrap_first_cashbook(db, user)
     db.commit()
     db.refresh(user)
     return user

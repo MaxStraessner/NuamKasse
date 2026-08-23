@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import case, select
@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.money import MoneyError, parse_money, validate_currency
+from app.models.cashbook import Cashbook
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, utc_now
 from app.services.cash_summary_service import get_cash_period_summary
@@ -20,6 +21,10 @@ class CashPeriodServiceError(ValueError):
 
 
 _UNSET = object()
+GERMAN_MONTHS = (
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+)
 
 
 def _validate_name(name: str) -> str:
@@ -36,24 +41,40 @@ def _validate_dates(start_date: date, end_date: date | None) -> None:
         raise CashPeriodServiceError("Das Enddatum darf nicht vor dem Startdatum liegen.")
 
 
-def _active_cash_period_query():
-    return select(CashPeriod).where(CashPeriod.status == CashPeriodStatus.active)
+def _active_cash_period_query(cashbook_id: int):
+    return select(CashPeriod).where(
+        CashPeriod.cashbook_id == cashbook_id,
+        CashPeriod.status == CashPeriodStatus.active,
+    )
 
 
-def get_active_cash_period(db: Session) -> CashPeriod | None:
-    return db.scalar(_active_cash_period_query())
+def get_active_cash_period(
+    db: Session, cashbook_id: int, *, for_update: bool = False
+) -> CashPeriod | None:
+    query = _active_cash_period_query(cashbook_id)
+    if for_update:
+        query = query.with_for_update()
+    return db.scalar(query)
 
 
-def get_cash_period_by_id(db: Session, cash_period_id: int) -> CashPeriod | None:
-    return db.get(CashPeriod, cash_period_id)
+def get_cash_period_by_id(
+    db: Session, cash_period_id: int, *, cashbook_id: int
+) -> CashPeriod | None:
+    return db.scalar(
+        select(CashPeriod).where(
+            CashPeriod.id == cash_period_id,
+            CashPeriod.cashbook_id == cashbook_id,
+        )
+    )
 
 
 def list_cash_periods(
     db: Session,
     *,
+    cashbook_id: int,
     status_filter: CashPeriodStatus | None = None,
 ) -> list[CashPeriod]:
-    query = select(CashPeriod)
+    query = select(CashPeriod).where(CashPeriod.cashbook_id == cashbook_id)
     if status_filter is not None:
         query = query.where(CashPeriod.status == status_filter)
     query = query.order_by(
@@ -64,9 +85,34 @@ def list_cash_periods(
     return list(db.scalars(query))
 
 
+def list_cash_periods_with_summaries(
+    db: Session,
+    *,
+    cashbook_id: int,
+    status_filter: CashPeriodStatus | None = None,
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for cash_period in list_cash_periods(
+        db, cashbook_id=cashbook_id, status_filter=status_filter
+    ):
+        summary = get_cash_period_summary(db, cash_period)
+        result.append(
+            {
+                "cash_period": cash_period,
+                "income_amount": summary["income_amount"],
+                "spent_amount": summary["spent_amount"],
+                "net_amount": summary["net_amount"],
+                "remaining_amount": summary["remaining_amount"],
+                "transaction_count": summary["active_expense_count"],
+            }
+        )
+    return result
+
+
 def create_cash_period(
     db: Session,
     *,
+    cashbook: Cashbook,
     name: str,
     opening_amount: str | Decimal,
     currency: str,
@@ -74,7 +120,8 @@ def create_cash_period(
     end_date: date | None,
     created_by: User,
 ) -> CashPeriod:
-    if get_active_cash_period(db) is not None:
+    db.scalar(select(Cashbook).where(Cashbook.id == cashbook.id).with_for_update())
+    if get_active_cash_period(db, cashbook.id) is not None:
         raise CashPeriodServiceError(
             "Es existiert bereits eine aktive Kassenperiode.",
             code="active_cash_period_exists",
@@ -86,9 +133,12 @@ def create_cash_period(
         clean_currency = validate_currency(currency)
     except MoneyError as exc:
         raise CashPeriodServiceError(str(exc)) from exc
+    if clean_currency != cashbook.currency:
+        raise CashPeriodServiceError("Die Währung muss der Währung der Kasse entsprechen.")
     _validate_dates(start_date, end_date)
 
     cash_period = CashPeriod(
+        cashbook_id=cashbook.id,
         name=clean_name,
         opening_amount=amount,
         currency=clean_currency,
@@ -109,6 +159,7 @@ def create_cash_period(
         ) from exc
     db.refresh(cash_period)
     return cash_period
+
 
 def update_cash_period(
     db: Session,
@@ -147,13 +198,36 @@ def update_cash_period(
     db.refresh(cash_period)
     return cash_period
 
-def close_cash_period(
+
+def _next_period_start(close_date: date) -> date:
+    today = date.today()
+    return close_date if close_date >= today else close_date + timedelta(days=1)
+
+
+def _period_name(value: date) -> str:
+    return f"{GERMAN_MONTHS[value.month - 1]} {value.year}"
+
+
+def close_cash_period_and_create_next(
     db: Session,
-    cash_period: CashPeriod,
     *,
+    cashbook: Cashbook,
+    cash_period_id: int,
     closed_by: User,
     end_date: date | None = None,
-) -> CashPeriod:
+) -> tuple[CashPeriod, CashPeriod, dict[str, object]]:
+    cash_period = db.scalar(
+        select(CashPeriod)
+        .where(
+            CashPeriod.id == cash_period_id,
+            CashPeriod.cashbook_id == cashbook.id,
+        )
+        .with_for_update()
+    )
+    if cash_period is None:
+        raise CashPeriodServiceError(
+            "Kassenperiode nicht gefunden.", code="cash_period_not_found"
+        )
     if cash_period.status == CashPeriodStatus.closed:
         raise CashPeriodServiceError(
             "Eine abgeschlossene Kassenperiode kann nicht erneut abgeschlossen werden.",
@@ -163,12 +237,36 @@ def close_cash_period(
 
     close_date = end_date or date.today()
     _validate_dates(cash_period.start_date, close_date)
+    summary = get_cash_period_summary(db, cash_period)
+    opening_amount = Decimal(str(summary["remaining_amount"]))
     now = utc_now()
     cash_period.end_date = close_date
     cash_period.status = CashPeriodStatus.closed
     cash_period.closed_at = now
     cash_period.closed_by_user_id = closed_by.id
     cash_period.updated_at = now
-    db.commit()
+    db.flush()
+
+    next_start = _next_period_start(close_date)
+    next_period = CashPeriod(
+        cashbook_id=cashbook.id,
+        name=_period_name(next_start),
+        opening_amount=opening_amount,
+        currency=cash_period.currency,
+        start_date=next_start,
+        status=CashPeriodStatus.active,
+        created_by_user_id=closed_by.id,
+    )
+    db.add(next_period)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise CashPeriodServiceError(
+            "Die Kassenperiode wurde parallel verändert. Bitte lade die Ansicht neu.",
+            code="cash_period_close_conflict",
+            conflict=True,
+        ) from exc
     db.refresh(cash_period)
-    return cash_period
+    db.refresh(next_period)
+    return cash_period, next_period, summary

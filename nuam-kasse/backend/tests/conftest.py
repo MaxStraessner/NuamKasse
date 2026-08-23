@@ -8,7 +8,7 @@ from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import User, UserRole
+from app.models import Cashbook, CashbookMembership, CashbookRole, User, UserRole
 
 
 @pytest.fixture
@@ -80,4 +80,33 @@ def create_test_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    cashbook = db.query(Cashbook).order_by(Cashbook.id.asc()).first()
+    if cashbook is None:
+        cashbook = Cashbook(name="Testkasse", currency="THB", created_by_user_id=user.id)
+        db.add(cashbook)
+        db.flush()
+    has_admin = db.query(CashbookMembership).filter_by(
+        cashbook_id=cashbook.id,
+        role=CashbookRole.admin,
+    ).first()
+    membership_role = (
+        CashbookRole.admin
+        if role == UserRole.admin and has_admin is None
+        else CashbookRole.member
+    )
+    db.add(
+        CashbookMembership(
+            cashbook_id=cashbook.id,
+            user_id=user.id,
+            role=membership_role,
+        )
+    )
+    db.commit()
     return user
+
+
+def get_test_cashbook(db: Session) -> Cashbook:
+    cashbook = db.query(Cashbook).order_by(Cashbook.id.asc()).first()
+    if cashbook is None:
+        raise AssertionError("Testkasse wurde noch nicht angelegt")
+    return cashbook

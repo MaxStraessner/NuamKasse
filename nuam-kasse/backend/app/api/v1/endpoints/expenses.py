@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_password_change_completed
+from app.api.dependencies.auth import require_cashbook_member
 from app.db.session import get_db
 from app.models.expense import Expense
-from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpenseMutationResponse, ExpenseRead, ExpenseVoidRequest
 from app.services.expense_service import (
     ExpenseServiceError,
@@ -13,6 +12,7 @@ from app.services.expense_service import (
     list_current_expenses,
     void_expense,
 )
+from app.services.cashbook_service import CashbookAccess
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -22,8 +22,8 @@ def _service_error(exc: ExpenseServiceError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
-def _get_expense(db: Session, expense_id: int) -> Expense:
-    expense = get_expense_by_id(db, expense_id)
+def _get_expense(db: Session, expense_id: int, access: CashbookAccess) -> Expense:
+    expense = get_expense_by_id(db, expense_id, cashbook_id=access.cashbook.id)
     if expense is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -36,14 +36,16 @@ def _get_expense(db: Session, expense_id: int) -> Expense:
 def create_expense_endpoint(
     payload: ExpenseCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     try:
         expense, summary = create_expense(
             db,
             category_id=payload.category_id,
             amount=payload.amount,
-            created_by=user,
+            note=payload.note,
+            created_by=access.user,
+            cashbook_id=access.cashbook.id,
         )
     except ExpenseServiceError as exc:
         raise _service_error(exc) from exc
@@ -58,12 +60,14 @@ def read_current_expenses(
     created_by_user_id: int | None = None,
     include_voided: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> list[Expense]:
     try:
         return list_current_expenses(
             db,
-            user=user,
+            user=access.user,
+            cashbook_id=access.cashbook.id,
+            is_admin=access.is_admin,
             limit=limit,
             offset=offset,
             category_id=category_id,
@@ -78,9 +82,9 @@ def read_current_expenses(
 def read_expense(
     expense_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> Expense:
-    return _get_expense(db, expense_id)
+    return _get_expense(db, expense_id, access)
 
 
 @router.post("/{expense_id}/void", response_model=ExpenseMutationResponse)
@@ -88,14 +92,16 @@ def void_expense_endpoint(
     expense_id: int,
     payload: ExpenseVoidRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
-    expense = _get_expense(db, expense_id)
+    expense = _get_expense(db, expense_id, access)
     try:
         voided_expense, summary = void_expense(
             db,
             expense=expense,
-            voided_by=user,
+            voided_by=access.user,
+            cashbook_id=access.cashbook.id,
+            is_admin=access.is_admin,
             reason=payload.reason,
         )
     except ExpenseServiceError as exc:

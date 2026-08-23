@@ -11,6 +11,9 @@ const memberUser = {
   username: "nuam",
   display_name: "Nuam",
   role: "member",
+  cashbook_id: 1,
+  cashbook_name: "Nuam Kasse",
+  cashbook_role: "member",
   is_active: true,
   must_change_password: false,
 };
@@ -20,6 +23,9 @@ const adminUser = {
   username: "admin",
   display_name: "Papa",
   role: "admin",
+  cashbook_id: 1,
+  cashbook_name: "Nuam Kasse",
+  cashbook_role: "admin",
   is_active: true,
   must_change_password: false,
 };
@@ -116,6 +122,7 @@ const activeCashSummary: CashPeriodSummary = {
   opening_amount: "20000.00",
   spent_amount: "0.00",
   income_amount: "0.00",
+  net_amount: "0.00",
   remaining_amount: "20000.00",
   currency: "THB",
   status: "active",
@@ -145,6 +152,7 @@ const essenExpense: Expense = {
   },
   amount: "250.00",
   transaction_type: "expense",
+  note: null,
   currency: "THB",
   created_by: { id: memberUser.id, display_name: memberUser.display_name },
   created_at: "2026-07-03T12:25:00Z",
@@ -174,6 +182,7 @@ const overviewExpense = {
   },
   amount: "250.00",
   transaction_type: "expense",
+  note: null,
   currency: "THB",
   created_by: { id: memberUser.id, display_name: memberUser.display_name },
   created_at: "2026-07-03T12:25:00Z",
@@ -444,6 +453,51 @@ describe("App authentication", () => {
     expect(screen.getByText("Nuam")).toBeInTheDocument();
   });
 
+  test("cashbook admin can add an existing user as member", async () => {
+    let members = [
+      {
+        id: 1,
+        role: "admin",
+        created_at: "2026-08-22T12:00:00Z",
+        user: { id: adminUser.id, username: adminUser.username, display_name: adminUser.display_name, is_active: true },
+      },
+    ];
+    let candidates = [
+      { id: memberUser.id, username: memberUser.username, display_name: memberUser.display_name },
+    ];
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(adminUser);
+      if (url.endsWith("/users")) return jsonResponse([]);
+      if (url.endsWith("/cashbooks/current/members") && options?.method === "POST") {
+        const membership = {
+          id: 2,
+          role: "member",
+          created_at: "2026-08-22T12:05:00Z",
+          user: { id: memberUser.id, username: memberUser.username, display_name: memberUser.display_name, is_active: true },
+        };
+        members = [...members, membership];
+        candidates = [];
+        return jsonResponse(membership, 201);
+      }
+      if (url.endsWith("/cashbooks/current/members")) return jsonResponse(members);
+      if (url.endsWith("/cashbooks/current/member-candidates")) return jsonResponse(candidates);
+      if (url.endsWith("/categories")) return jsonResponse([essenCategory]);
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: /^Einstellungen$/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Mitglieder.*Benutzer/i }));
+    expect(await screen.findByRole("heading", { name: "Mitglieder" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    fireEvent.change(screen.getByLabelText("Bestehender Benutzer"), { target: { value: String(memberUser.id) } });
+    fireEvent.click(screen.getByRole("button", { name: "Mitglied hinzufügen" }));
+
+    expect(await screen.findByText(/Mitglied wurde.*zugeordnet/)).toBeInTheDocument();
+    expect(screen.getByText(memberUser.display_name)).toBeInTheDocument();
+  });
+
   test("member sees no administration links", async () => {
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) {
@@ -462,6 +516,8 @@ describe("App authentication", () => {
     expect(screen.queryByText("Verwaltung")).not.toBeInTheDocument();
     expect(screen.queryByText("Kategorien")).not.toBeInTheDocument();
     expect(screen.queryByText("Benutzer")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mitglieder")).not.toBeInTheDocument();
+    expect(screen.getByText("Kassenperioden und Archiv")).toBeInTheDocument();
   });
 
   test("user with required password change is redirected and can change password", async () => {
@@ -995,7 +1051,7 @@ describe("Expenses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     await waitFor(() => expect(screen.getByText(/gespeichert/)).toBeInTheDocument());
-    expect(createPayload).toEqual({ category_id: 1, amount: "250.00" });
+    expect(createPayload).toEqual({ category_id: 1, amount: "250.00", note: null });
     expect(screen.queryByText("Letzte Ausgaben")).not.toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
@@ -1105,7 +1161,7 @@ describe("Expenses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     expect(await screen.findByText(/Essen > Apotheke gespeichert/)).toBeInTheDocument();
-    expect(createPayload).toEqual({ category_id: apothekeCategory.id, amount: "25.00" });
+    expect(createPayload).toEqual({ category_id: apothekeCategory.id, amount: "25.00", note: null });
   });
 
   test("amount entry can be cancelled directly without creating an expense", async () => {
@@ -1492,7 +1548,7 @@ describe("Cash periods", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Budgets/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
     expect(await screen.findByRole("heading", { name: "Kassenperioden" })).toBeInTheDocument();
     expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
 
@@ -1503,7 +1559,9 @@ describe("Cash periods", () => {
     expect(await screen.findByText("Kassenperiode wurde angelegt.")).toBeInTheDocument();
     expect(screen.getByText("August 2026")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Juli 2026/ }));
+    const julyCard = screen.getByText("Juli 2026").closest(".app-card");
+    expect(julyCard).not.toBeNull();
+    fireEvent.click(within(julyCard as HTMLElement).getByRole("button", { name: "Bearbeiten" }));
     fireEvent.change(screen.getByLabelText("Name der Kassenperiode"), { target: { value: "Juli korrigiert" } });
     fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "25000.50" } });
     fireEvent.click(screen.getByRole("button", { name: "Kassenperiode speichern" }));
@@ -1527,8 +1585,14 @@ describe("Cash periods", () => {
         return jsonResponse(cashPeriods);
       }
       if (url.includes("/cash-periods/1/close") && options?.method === "POST") {
-        cashPeriods = [{ ...closedCashPeriod, id: 1, name: "Juli 2026" }];
-        return jsonResponse(cashPeriods[0]);
+        const closedPeriod = { ...closedCashPeriod, id: 1, name: "Juli 2026" };
+        const newPeriod = { ...activeCashPeriod, id: 3, name: "August 2026", start_date: "2026-08-01" };
+        cashPeriods = [closedPeriod, newPeriod];
+        return jsonResponse({
+          closed_period: closedPeriod,
+          new_period: newPeriod,
+          summary: { ...spentCashSummary, status: "closed" },
+        });
       }
       if (url.endsWith("/categories")) {
         return jsonResponse([essenCategory]);
@@ -1539,13 +1603,13 @@ describe("Cash periods", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Budgets/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Aktive Kassenperiode abschließen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Periode endgültig abschließen" }));
+    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Kassenperiode abschließen" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Kassenperiode abschließen" }));
 
-    expect(await screen.findByText("Kassenperiode wurde abgeschlossen.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Abgeschlossen")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Juli 2026/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Kassenperiode wurde abgeschlossen.*August 2026 ist jetzt aktiv/)).toBeInTheDocument();
+    expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
+    expect(screen.getByText("Juli 2026")).toBeInTheDocument();
   });
 
   test("create form shows validation and conflict errors", async () => {
@@ -1577,7 +1641,7 @@ describe("Cash periods", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Budgets/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
     fireEvent.click(screen.getByRole("button", { name: "Neu" }));
     fireEvent.change(await screen.findByLabelText("Name der Kassenperiode"), { target: { value: "August 2026" } });
     fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "21000.00" } });

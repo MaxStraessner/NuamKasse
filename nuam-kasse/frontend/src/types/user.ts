@@ -5,6 +5,9 @@ export type User = {
   username: string;
   display_name: string;
   role: UserRole;
+  cashbook_id?: number | null;
+  cashbook_name?: string | null;
+  cashbook_role?: UserRole | null;
   is_active: boolean;
   must_change_password: boolean;
   created_at?: string | null;

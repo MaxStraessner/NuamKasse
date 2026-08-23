@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
 import { AppCard } from "../components/AppCard";
@@ -96,10 +96,14 @@ function formatExpenseCount(count: number): string {
 
 export function OverviewPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.cashbook_role === "admin";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPeriodId = Number(searchParams.get("period"));
   const [overview, setOverview] = useState<CashPeriodOverview | null>(null);
   const [periods, setPeriods] = useState<CashPeriod[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(
+    Number.isInteger(requestedPeriodId) && requestedPeriodId > 0 ? requestedPeriodId : null,
+  );
   const [filters, setFilters] = useState<OverviewFilters>(defaultFilters);
   const [expensesPage, setExpensesPage] = useState<PaginatedOverviewExpenses | null>(null);
   const [isLoadingOverview, setIsLoadingOverview] = useState(true);
@@ -167,14 +171,11 @@ export function OverviewPage() {
   }
 
   async function loadPeriods() {
-    if (!isAdmin) {
-      return;
-    }
     try {
       const nextPeriods = await listCashPeriods();
       setPeriods(Array.isArray(nextPeriods) ? nextPeriods : []);
     } catch {
-      // Period selection is admin-only convenience; the main overview still carries the page.
+      // The main overview still carries the page if the archive list is temporarily unavailable.
     }
   }
 
@@ -253,6 +254,13 @@ export function OverviewPage() {
   }, [isAdmin]);
 
   useEffect(() => {
+    const nextPeriodId = Number.isInteger(requestedPeriodId) && requestedPeriodId > 0
+      ? requestedPeriodId
+      : null;
+    setSelectedPeriodId((current) => (current === nextPeriodId ? current : nextPeriodId));
+  }, [requestedPeriodId]);
+
+  useEffect(() => {
     void loadOverview(false);
   }, [selectedPeriodId]);
 
@@ -295,7 +303,9 @@ export function OverviewPage() {
   }
 
   function selectPeriod(value: string) {
-    setSelectedPeriodId(value ? Number(value) : null);
+    const nextPeriodId = value ? Number(value) : null;
+    setSelectedPeriodId(nextPeriodId);
+    setSearchParams(nextPeriodId ? { period: String(nextPeriodId) } : {}, { replace: true });
     resetFilters();
     setExpensesPage(null);
   }
@@ -336,7 +346,7 @@ export function OverviewPage() {
       <PageHeader
         eyebrow="Auswertung"
         title="Übersicht"
-        action={isAdmin && periodOptions.length > 0 ? (
+        action={periodOptions.length > 0 ? (
           <label className="period-select">
             <span>Kassenperiode</span>
             <select onChange={(event) => selectPeriod(event.target.value)} value={selectedPeriodId ?? ""}>

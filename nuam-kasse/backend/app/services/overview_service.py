@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session, aliased
 
 from app.core.money import format_money
 from app.models.cash_period import CashPeriod, CashPeriodStatus
+from app.models.cashbook import CashbookMembership
 from app.models.category import Category
 from app.models.category import CategoryType
 from app.models.expense import Expense
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.services.cash_period_service import get_active_cash_period, get_cash_period_by_id
 from app.services.cash_summary_service import get_cash_period_summary
 from app.services.category_service import get_category_filter_ids
@@ -167,23 +168,37 @@ def get_user_summaries(db: Session, cash_period_id: int) -> list[dict[str, objec
     ]
 
 
-def get_current_overview(db: Session, user: User) -> dict[str, object]:
-    cash_period = get_active_cash_period(db)
+def get_current_overview(
+    db: Session,
+    user: User,
+    *,
+    cashbook_id: int,
+    is_admin: bool,
+) -> dict[str, object]:
+    cash_period = get_active_cash_period(db, cashbook_id)
     if cash_period is None:
         raise OverviewServiceError(
             "Es ist keine aktive Kassenperiode vorhanden.",
             code="no_active_cash_period",
             status_code=404,
         )
-    return get_cash_period_overview(db, cash_period, user=user)
+    return get_cash_period_overview(db, cash_period, user=user, is_admin=is_admin)
 
 
-def get_cash_period_overview(db: Session, cash_period: CashPeriod, *, user: User) -> dict[str, object]:
+def get_cash_period_overview(
+    db: Session,
+    cash_period: CashPeriod,
+    *,
+    user: User,
+    is_admin: bool,
+) -> dict[str, object]:
     recent = list_cash_period_expenses(
         db,
         cash_period=cash_period,
         user=user,
-        include_voided=user.role == UserRole.admin,
+        cashbook_id=cash_period.cashbook_id,
+        include_voided=is_admin,
+        is_admin=is_admin,
         limit=5,
         offset=0,
     )
@@ -195,8 +210,15 @@ def get_cash_period_overview(db: Session, cash_period: CashPeriod, *, user: User
     }
 
 
-def get_overview_cash_period_by_id(db: Session, cash_period_id: int) -> CashPeriod:
-    cash_period = get_cash_period_by_id(db, cash_period_id)
+def get_overview_cash_period_by_id(
+    db: Session,
+    cash_period_id: int,
+    *,
+    cashbook_id: int,
+) -> CashPeriod:
+    cash_period = get_cash_period_by_id(
+        db, cash_period_id, cashbook_id=cashbook_id
+    )
     if cash_period is None:
         raise OverviewServiceError(
             "Kassenperiode nicht gefunden.",
@@ -210,15 +232,23 @@ def _validate_filter_entities(
     db: Session,
     *,
     user: User,
+    cashbook_id: int,
     category_id: int | None,
     created_by_user_id: int | None,
 ) -> None:
     if category_id is not None:
         category = db.get(Category, category_id)
-        if category is None or category.user_id != user.id:
+        if category is None or category.cashbook_id != cashbook_id:
             raise OverviewServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
-    if created_by_user_id is not None and db.get(User, created_by_user_id) is None:
-        raise OverviewServiceError("Benutzer nicht gefunden.", code="user_not_found", status_code=404)
+    if created_by_user_id is not None:
+        membership = db.scalar(
+            select(CashbookMembership).where(
+                CashbookMembership.cashbook_id == cashbook_id,
+                CashbookMembership.user_id == created_by_user_id,
+            )
+        )
+        if membership is None:
+            raise OverviewServiceError("Benutzer nicht gefunden.", code="user_not_found", status_code=404)
 
 
 def _apply_expense_filters(
@@ -226,6 +256,7 @@ def _apply_expense_filters(
     *,
     cash_period_id: int,
     user: User,
+    is_admin: bool,
     category_ids: list[int] | None,
     created_by_user_id: int | None,
     date_from: date | None,
@@ -241,7 +272,7 @@ def _apply_expense_filters(
         query = query.where(Expense.created_at >= _date_start(date_from))
     if date_to is not None:
         query = query.where(Expense.created_at <= _date_end(date_to))
-    if user.role != UserRole.admin or not include_voided:
+    if not is_admin or not include_voided:
         query = query.where(Expense.is_voided.is_(False))
     return query
 
@@ -263,6 +294,8 @@ def list_cash_period_expenses(
     *,
     cash_period: CashPeriod,
     user: User,
+    cashbook_id: int,
+    is_admin: bool,
     category_id: int | None = None,
     created_by_user_id: int | None = None,
     date_from: date | None = None,
@@ -272,28 +305,29 @@ def list_cash_period_expenses(
     offset: int = 0,
     sort: str = "created_at_desc",
 ) -> dict[str, object]:
-    if cash_period.status != CashPeriodStatus.active and user.role != UserRole.admin:
-        raise OverviewServiceError(
-            "Diese Kassenperiode ist nur für Administratoren verfügbar.",
-            code="cash_period_forbidden",
-            status_code=403,
-        )
     if date_from is not None and date_to is not None and date_to < date_from:
         raise OverviewServiceError("Das Ende darf nicht vor dem Beginn liegen.", code="invalid_date_range")
     if sort not in VALID_EXPENSE_SORTS:
         raise OverviewServiceError("Ungültige Sortierung.", code="invalid_sort")
 
-    _validate_filter_entities(db, user=user, category_id=category_id, created_by_user_id=created_by_user_id)
+    _validate_filter_entities(
+        db,
+        user=user,
+        cashbook_id=cashbook_id,
+        category_id=category_id,
+        created_by_user_id=created_by_user_id,
+    )
     category_ids = None
     if category_id is not None:
         category = db.get(Category, category_id)
-        if category is not None and category.user_id == user.id:
+        if category is not None and category.cashbook_id == cashbook_id:
             category_ids = get_category_filter_ids(db, category)
-    effective_include_voided = include_voided and user.role == UserRole.admin
+    effective_include_voided = include_voided and is_admin
     filtered = _apply_expense_filters(
         select(Expense),
         cash_period_id=cash_period.id,
         user=user,
+        is_admin=is_admin,
         category_ids=category_ids,
         created_by_user_id=created_by_user_id,
         date_from=date_from,

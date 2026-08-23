@@ -73,6 +73,7 @@ export type OverviewExpense = {
   voided_at: string | null;
   voided_by: OverviewExpenseUser | null;
   void_reason: string | null;
+  note: string | null;
 };
 
 export type CashPeriodOverview = {

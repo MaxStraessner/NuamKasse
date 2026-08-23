@@ -31,11 +31,13 @@ export type Expense = {
   voided_at: string | null;
   voided_by: ExpenseUser | null;
   void_reason: string | null;
+  note: string | null;
 };
 
 export type ExpenseCreate = {
   category_id: number;
   amount: string;
+  note?: string | null;
 };
 
 export type ExpenseVoid = {

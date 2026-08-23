@@ -3,9 +3,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_admin, require_password_change_completed
+from app.api.dependencies.auth import require_cashbook_member
 from app.db.session import get_db
-from app.models.user import User
 from app.schemas.overview import CashPeriodOverview, PaginatedOverviewExpenses
 from app.services.overview_service import (
     OverviewServiceError,
@@ -14,15 +13,9 @@ from app.services.overview_service import (
     get_overview_cash_period_by_id,
     list_cash_period_expenses,
 )
+from app.services.cashbook_service import CashbookAccess
 
 router = APIRouter(prefix="/overview", tags=["overview"])
-
-
-def require_overview_admin(
-    admin: User = Depends(require_admin),
-    user: User = Depends(require_password_change_completed),
-) -> User:
-    return admin
 
 
 def _service_error(exc: OverviewServiceError) -> HTTPException:
@@ -35,10 +28,15 @@ def _service_error(exc: OverviewServiceError) -> HTTPException:
 @router.get("/current", response_model=CashPeriodOverview)
 def read_current_overview(
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     try:
-        return get_current_overview(db, user)
+        return get_current_overview(
+            db,
+            access.user,
+            cashbook_id=access.cashbook.id,
+            is_admin=access.is_admin,
+        )
     except OverviewServiceError as exc:
         raise _service_error(exc) from exc
 
@@ -47,11 +45,15 @@ def read_current_overview(
 def read_cash_period_overview(
     cash_period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_overview_admin),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     try:
-        cash_period = get_overview_cash_period_by_id(db, cash_period_id)
-        return get_cash_period_overview(db, cash_period, user=admin)
+        cash_period = get_overview_cash_period_by_id(
+            db, cash_period_id, cashbook_id=access.cashbook.id
+        )
+        return get_cash_period_overview(
+            db, cash_period, user=access.user, is_admin=access.is_admin
+        )
     except OverviewServiceError as exc:
         raise _service_error(exc) from exc
 
@@ -68,14 +70,18 @@ def read_cash_period_expenses(
     offset: int = Query(default=0, ge=0),
     sort: str = "created_at_desc",
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     try:
-        cash_period = get_overview_cash_period_by_id(db, cash_period_id)
+        cash_period = get_overview_cash_period_by_id(
+            db, cash_period_id, cashbook_id=access.cashbook.id
+        )
         return list_cash_period_expenses(
             db,
             cash_period=cash_period,
-            user=user,
+            user=access.user,
+            cashbook_id=access.cashbook.id,
+            is_admin=access.is_admin,
             category_id=category_id,
             created_by_user_id=created_by_user_id,
             date_from=date_from,

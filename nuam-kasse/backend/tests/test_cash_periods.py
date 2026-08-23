@@ -2,11 +2,14 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.models.cash_period import CashPeriod, CashPeriodStatus
+from app.models.category import Category, CategoryType
+from app.models.expense import Expense
 from app.models.user import UserRole
-from conftest import create_test_user
+from conftest import create_test_user, get_test_cashbook
 
 
 def login(client, username: str, password: str):
@@ -27,6 +30,7 @@ def create_test_cash_period(
     created_by_user_id: int,
 ) -> CashPeriod:
     cash_period = CashPeriod(
+        cashbook_id=get_test_cashbook(db_session).id,
         name=name,
         opening_amount=opening_amount,
         currency="THB",
@@ -233,7 +237,7 @@ def test_admin_can_list_filter_and_read_history(client, db_session):
     assert invalid.status_code == 422
 
 
-def test_member_cannot_list_or_read_history(client, db_session):
+def test_member_can_list_and_read_shared_history(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     cash_period = create_test_cash_period(db_session, created_by_user_id=admin.id)
     create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
@@ -242,8 +246,9 @@ def test_member_cannot_list_or_read_history(client, db_session):
     list_response = client.get("/api/v1/cash-periods")
     read_response = client.get(f"/api/v1/cash-periods/{cash_period.id}")
 
-    assert list_response.status_code == 403
-    assert read_response.status_code == 403
+    assert list_response.status_code == 200
+    assert read_response.status_code == 200
+    assert read_response.json()["id"] == cash_period.id
 
 
 def test_admin_can_update_active_cash_period(client, db_session):
@@ -314,6 +319,30 @@ def test_closed_cash_period_cannot_be_updated_or_closed_again(client, db_session
 def test_admin_can_close_cash_period_and_create_next_one(client, db_session):
     admin = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     cash_period = create_test_cash_period(db_session, created_by_user_id=admin.id)
+    category = Category(
+        cashbook_id=get_test_cashbook(db_session).id,
+        user_id=admin.id,
+        name="Essen",
+        name_normalized="essen",
+        icon_key="utensils",
+        color_key="orange",
+        category_type=CategoryType.expense,
+        sort_order=1,
+        is_active=True,
+    )
+    db_session.add(category)
+    db_session.flush()
+    db_session.add(
+        Expense(
+            cash_period_id=cash_period.id,
+            category_id=category.id,
+            amount=Decimal("125.50"),
+            transaction_type=CategoryType.expense,
+            currency="THB",
+            created_by_user_id=admin.id,
+        )
+    )
+    db_session.commit()
     login(client, "admin", "admin-pass")
 
     close = client.post(
@@ -321,23 +350,20 @@ def test_admin_can_close_cash_period_and_create_next_one(client, db_session):
         json={"end_date": "2026-07-31"},
     )
     current = client.get("/api/v1/cash-periods/current")
-    next_period = client.post(
-        "/api/v1/cash-periods",
-        json={
-            "name": "August 2026",
-            "opening_amount": "21000.00",
-            "currency": "THB",
-            "start_date": "2026-08-01",
-        },
-    )
-
     assert close.status_code == 200
-    assert close.json()["status"] == "closed"
-    assert close.json()["end_date"] == "2026-07-31"
-    assert close.json()["closed_at"] is not None
-    assert close.json()["closed_by"]["display_name"] == "Admin"
-    assert current.status_code == 404
-    assert next_period.status_code == 201
+    assert close.json()["closed_period"]["status"] == "closed"
+    assert close.json()["closed_period"]["end_date"] == "2026-07-31"
+    assert close.json()["closed_period"]["closed_at"] is not None
+    assert close.json()["closed_period"]["closed_by"]["display_name"] == "Admin"
+    assert close.json()["new_period"]["status"] == "active"
+    assert close.json()["summary"]["remaining_amount"] == "19874.50"
+    assert close.json()["new_period"]["opening_amount"] == "19874.50"
+    assert current.status_code == 200
+    assert current.json()["id"] == close.json()["new_period"]["id"]
+    active_count = db_session.scalar(
+        select(func.count(CashPeriod.id)).where(CashPeriod.status == CashPeriodStatus.active)
+    )
+    assert active_count == 1
 
 
 def test_close_rejects_end_date_before_start_and_member(client, db_session):
@@ -362,6 +388,7 @@ def test_database_prevents_two_active_cash_periods(db_session):
     create_test_cash_period(db_session, name="Juli 2026", created_by_user_id=admin.id)
     db_session.add(
         CashPeriod(
+            cashbook_id=get_test_cashbook(db_session).id,
             name="August 2026",
             opening_amount=Decimal("21000.00"),
             currency="THB",

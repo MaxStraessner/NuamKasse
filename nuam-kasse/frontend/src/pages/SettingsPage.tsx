@@ -1,4 +1,4 @@
-import { ChevronRight, KeyRound, Layers3, LogOut, PiggyBank, ShieldCheck, UserRoundCog } from "lucide-react";
+import { ChevronRight, KeyRound, Layers3, LogOut, PiggyBank, ShieldCheck, UserRoundCog, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { APP_VERSION } from "../app/appVersion";
@@ -28,7 +28,7 @@ export function SettingsPage() {
 
       <AppCard className="account-card">
         <div className="account-card__avatar" aria-hidden="true">{user?.display_name?.slice(0, 1).toUpperCase()}</div>
-        <div><strong>{user?.display_name}</strong><span>@{user?.username} · {user?.role === "admin" ? "Administrator" : "Mitglied"}</span></div>
+        <div><strong>{user?.display_name}</strong><span>@{user?.username} · {user?.cashbook_role === "admin" ? "Administrator" : "Mitglied"}</span></div>
       </AppCard>
 
       <section className="settings-section" aria-labelledby="security-settings">
@@ -38,12 +38,19 @@ export function SettingsPage() {
         </AppCard>
       </section>
 
-      {user?.role === "admin" ? (
+      <section className="settings-section" aria-labelledby="cashbook-settings">
+        <h2 id="cashbook-settings">Gemeinsame Kasse</h2>
+        <AppCard className="settings-menu">
+          <SettingsLink description="Aktive und abgeschlossene Zeiträume" icon={PiggyBank} label="Kassenperioden und Archiv" to="/settings/cash-periods" />
+        </AppCard>
+      </section>
+
+      {user?.cashbook_role === "admin" ? (
         <section className="settings-section" aria-labelledby="admin-settings">
           <h2 id="admin-settings">Verwaltung</h2>
           <AppCard className="settings-menu">
             <SettingsLink description="Einnahmen- und Ausgabenbereiche verwalten" icon={Layers3} label="Kategorien" to="/settings/categories" />
-            <SettingsLink description="Budgets und vergangene Perioden" icon={PiggyBank} label="Kassenperioden" to="/settings/cash-periods" />
+            <SettingsLink description="Bestehende Benutzer der Kasse zuordnen" icon={UsersRound} label="Mitglieder" to="/settings/members" />
             <SettingsLink description="Konten, Rollen und Zugänge" icon={UserRoundCog} label="Benutzer" to="/settings/users" />
           </AppCard>
         </section>

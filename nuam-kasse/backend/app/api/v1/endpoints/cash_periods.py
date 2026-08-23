@@ -1,48 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_admin, require_password_change_completed
+from app.api.dependencies.auth import require_cashbook_admin, require_cashbook_member
 from app.db.session import get_db
 from app.models.cash_period import CashPeriod, CashPeriodStatus
-from app.models.user import User
 from app.schemas.cash_period import (
+    CashPeriodArchiveItem,
     CashPeriodCloseRequest,
+    CashPeriodCloseResult,
     CashPeriodCreate,
     CashPeriodRead,
     CashPeriodSummary,
     CashPeriodUpdate,
 )
+from app.services.cashbook_service import CashbookAccess
 from app.services.cash_period_service import (
     CashPeriodServiceError,
-    close_cash_period,
+    close_cash_period_and_create_next,
     create_cash_period,
     get_active_cash_period,
     get_cash_period_by_id,
-    list_cash_periods,
+    list_cash_periods_with_summaries,
     update_cash_period,
 )
 from app.services.cash_summary_service import get_cash_period_summary
+from app.services.cash_period_export_service import CashPeriodExportError, build_cash_period_export
 
 router = APIRouter(prefix="/cash-periods", tags=["cash-periods"])
 
 
-def require_cash_period_admin(
-    admin: User = Depends(require_admin),
-    user: User = Depends(require_password_change_completed),
-) -> User:
-    return admin
-
-
 def _service_error(exc: CashPeriodServiceError) -> HTTPException:
     status_code = status.HTTP_409_CONFLICT if exc.conflict else status.HTTP_400_BAD_REQUEST
+    if exc.code == "cash_period_not_found":
+        status_code = status.HTTP_404_NOT_FOUND
     return HTTPException(
         status_code=status_code,
         detail={"code": exc.code, "message": exc.message},
     )
 
 
-def _get_cash_period(db: Session, cash_period_id: int) -> CashPeriod:
-    cash_period = get_cash_period_by_id(db, cash_period_id)
+def _get_cash_period(db: Session, cash_period_id: int, access: CashbookAccess) -> CashPeriod:
+    cash_period = get_cash_period_by_id(
+        db, cash_period_id, cashbook_id=access.cashbook.id
+    )
     if cash_period is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -51,8 +52,8 @@ def _get_cash_period(db: Session, cash_period_id: int) -> CashPeriod:
     return cash_period
 
 
-def _get_active_or_404(db: Session) -> CashPeriod:
-    cash_period = get_active_cash_period(db)
+def _get_active_or_404(db: Session, access: CashbookAccess) -> CashPeriod:
+    cash_period = get_active_cash_period(db, access.cashbook.id)
     if cash_period is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,52 +68,89 @@ def _get_active_or_404(db: Session) -> CashPeriod:
 @router.get("/current", response_model=CashPeriodRead)
 def read_current_cash_period(
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> CashPeriod:
-    return _get_active_or_404(db)
+    return _get_active_or_404(db, access)
 
 
 @router.get("/current/summary", response_model=CashPeriodSummary)
 def read_current_cash_period_summary(
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
-    return get_cash_period_summary(db, _get_active_or_404(db))
+    return get_cash_period_summary(db, _get_active_or_404(db, access))
 
 
-@router.get("", response_model=list[CashPeriodRead])
+@router.get("", response_model=list[CashPeriodArchiveItem])
 def read_cash_periods(
     status_filter: CashPeriodStatus | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_cash_period_admin),
-) -> list[CashPeriod]:
-    return list_cash_periods(db, status_filter=status_filter)
+    access: CashbookAccess = Depends(require_cashbook_member),
+) -> list[CashPeriodArchiveItem]:
+    return [
+        CashPeriodArchiveItem.model_validate(
+            {
+                **CashPeriodRead.model_validate(item["cash_period"]).model_dump(),
+                **{key: value for key, value in item.items() if key != "cash_period"},
+            }
+        )
+        for item in list_cash_periods_with_summaries(
+            db,
+            cashbook_id=access.cashbook.id,
+            status_filter=status_filter,
+        )
+    ]
 
 
 @router.get("/{cash_period_id}", response_model=CashPeriodRead)
 def read_cash_period(
     cash_period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_cash_period_admin),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> CashPeriod:
-    return _get_cash_period(db, cash_period_id)
+    return _get_cash_period(db, cash_period_id, access)
+
+
+@router.get("/{cash_period_id}/export.xlsx")
+def export_cash_period(
+    cash_period_id: int,
+    db: Session = Depends(get_db),
+    access: CashbookAccess = Depends(require_cashbook_admin),
+) -> StreamingResponse:
+    cash_period = _get_cash_period(db, cash_period_id, access)
+    try:
+        workbook = build_cash_period_export(
+            db, cashbook=access.cashbook, cash_period=cash_period
+        )
+    except CashPeriodExportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "cash_period_export_unavailable", "message": str(exc)},
+        ) from exc
+    filename = f"kassenbericht-{cash_period.id}.xlsx"
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("", response_model=CashPeriodRead, status_code=status.HTTP_201_CREATED)
 def create_cash_period_endpoint(
     payload: CashPeriodCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_cash_period_admin),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> CashPeriod:
     try:
         return create_cash_period(
             db,
+            cashbook=access.cashbook,
             name=payload.name,
             opening_amount=payload.opening_amount,
             currency=payload.currency,
             start_date=payload.start_date,
             end_date=payload.end_date,
-            created_by=admin,
+            created_by=access.user,
         )
     except CashPeriodServiceError as exc:
         raise _service_error(exc) from exc
@@ -123,29 +161,34 @@ def update_cash_period_endpoint(
     cash_period_id: int,
     payload: CashPeriodUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_cash_period_admin),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> CashPeriod:
-    cash_period = _get_cash_period(db, cash_period_id)
+    cash_period = _get_cash_period(db, cash_period_id, access)
     try:
         return update_cash_period(db, cash_period, **payload.model_dump(exclude_unset=True))
     except CashPeriodServiceError as exc:
         raise _service_error(exc) from exc
 
 
-@router.post("/{cash_period_id}/close", response_model=CashPeriodRead)
+@router.post("/{cash_period_id}/close", response_model=CashPeriodCloseResult)
 def close_cash_period_endpoint(
     cash_period_id: int,
     payload: CashPeriodCloseRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_cash_period_admin),
-) -> CashPeriod:
-    cash_period = _get_cash_period(db, cash_period_id)
+    access: CashbookAccess = Depends(require_cashbook_admin),
+) -> dict[str, object]:
     try:
-        return close_cash_period(
+        closed_period, new_period, summary = close_cash_period_and_create_next(
             db,
-            cash_period,
-            closed_by=admin,
+            cashbook=access.cashbook,
+            cash_period_id=cash_period_id,
+            closed_by=access.user,
             end_date=payload.end_date,
         )
     except CashPeriodServiceError as exc:
         raise _service_error(exc) from exc
+    return {
+        "closed_period": closed_period,
+        "new_period": new_period,
+        "summary": summary,
+    }

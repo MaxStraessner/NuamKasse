@@ -55,7 +55,8 @@ def get_cash_period_summary(db: Session, cash_period: CashPeriod) -> dict[str, o
     opening_amount = cash_period.opening_amount
     spent_amount = get_spent_amount(db, cash_period.id)
     income_amount = get_income_amount(db, cash_period.id)
-    remaining_amount = opening_amount + income_amount - spent_amount
+    net_amount = income_amount - spent_amount
+    remaining_amount = opening_amount + net_amount
     if remaining_amount < Decimal("0.00"):
         remaining_amount = Decimal("0.00")
     counts = get_expense_counts(db, cash_period.id)
@@ -65,6 +66,7 @@ def get_cash_period_summary(db: Session, cash_period: CashPeriod) -> dict[str, o
         "opening_amount": format_money(opening_amount),
         "spent_amount": format_money(spent_amount),
         "income_amount": format_money(income_amount),
+        "net_amount": format_money(net_amount),
         "remaining_amount": format_money(remaining_amount),
         "currency": cash_period.currency,
         "status": cash_period.status,

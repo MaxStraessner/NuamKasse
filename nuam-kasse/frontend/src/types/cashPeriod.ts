@@ -26,12 +26,27 @@ export type CashPeriodSummary = {
   opening_amount: string;
   spent_amount: string;
   income_amount: string;
+  net_amount: string;
   remaining_amount: string;
   currency: "THB";
   status: CashPeriodStatus;
   expense_count: number;
   active_expense_count: number;
   voided_expense_count: number;
+};
+
+export type CashPeriodArchiveItem = CashPeriod & {
+  income_amount: string;
+  spent_amount: string;
+  net_amount: string;
+  remaining_amount: string;
+  transaction_count: number;
+};
+
+export type CashPeriodCloseResult = {
+  closed_period: CashPeriod;
+  new_period: CashPeriod;
+  summary: CashPeriodSummary;
 };
 
 export type CashPeriodCreate = {

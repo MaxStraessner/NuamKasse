@@ -26,6 +26,11 @@ class Category(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    cashbook_id: Mapped[int] = mapped_column(
+        ForeignKey("cashbooks.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
@@ -73,3 +78,4 @@ class Category(Base):
 
     parent = relationship("Category", remote_side=[id], back_populates="children")
     children = relationship("Category", back_populates="parent")
+    cashbook = relationship("Cashbook")

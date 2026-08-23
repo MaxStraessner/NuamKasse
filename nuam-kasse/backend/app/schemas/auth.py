@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 
 from app.schemas.user import UserRead
+from app.models.cashbook import CashbookRole
 
 
 class LoginRequest(BaseModel):
@@ -15,4 +16,6 @@ class ChangePasswordRequest(BaseModel):
 
 
 class AuthUserResponse(UserRead):
-    pass
+    cashbook_id: int | None = None
+    cashbook_name: str | None = None
+    cashbook_role: CashbookRole | None = None
