@@ -110,6 +110,7 @@ class OverviewExpenseRead(BaseModel):
     voided_at: datetime | None = None
     voided_by: OverviewExpenseUser | None = None
     void_reason: str | None = None
+    note: str | None = None
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

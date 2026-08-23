@@ -53,6 +53,7 @@ class Expense(Base):
         index=True,
     )
     void_reason: Mapped[str] = mapped_column(String(200), nullable=True)
+    note: Mapped[str] = mapped_column(String(500), nullable=True)
 
     cash_period = relationship("CashPeriod")
     category = relationship("Category")

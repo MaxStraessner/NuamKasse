@@ -19,8 +19,20 @@ from app.services.auth_service import (
     delete_session,
     get_session_by_token,
 )
+from app.services.cashbook_service import get_cashbook_access
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _auth_user_response(db: Session, user: User) -> AuthUserResponse:
+    access = get_cashbook_access(db, user)
+    return AuthUserResponse.model_validate(user).model_copy(
+        update={
+            "cashbook_id": access.cashbook.id if access else None,
+            "cashbook_name": access.cashbook.name if access else None,
+            "cashbook_role": access.membership.role if access else None,
+        }
+    )
 
 
 def _set_session_cookie(response: Response, token: str, settings: Settings) -> None:
@@ -51,7 +63,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
-) -> User:
+) -> AuthUserResponse:
     try:
         user = authenticate_user(db, payload.username, payload.password)
     except AuthServiceError as exc:
@@ -62,7 +74,7 @@ def login(
 
     token, _ = create_session(db, user, settings)
     _set_session_cookie(response, token, settings)
-    return user
+    return _auth_user_response(db, user)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -81,9 +93,10 @@ def logout(
 
 @router.get("/me", response_model=AuthUserResponse)
 def read_current_user(
+    db: Session = Depends(get_db),
     user: User = Depends(require_authenticated_user),
-) -> User:
-    return user
+) -> AuthUserResponse:
+    return _auth_user_response(db, user)
 
 
 @router.post("/change-password", response_model=MessageResponse)

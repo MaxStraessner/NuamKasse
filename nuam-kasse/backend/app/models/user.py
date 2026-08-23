@@ -61,3 +61,8 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    cashbook_memberships = relationship(
+        "CashbookMembership",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

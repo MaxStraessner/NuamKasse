@@ -66,9 +66,24 @@ class CashPeriodSummary(BaseModel):
     opening_amount: str
     spent_amount: str
     income_amount: str
+    net_amount: str
     remaining_amount: str
     currency: str
     status: CashPeriodStatus
     expense_count: int
     active_expense_count: int
     voided_expense_count: int
+
+
+class CashPeriodArchiveItem(CashPeriodRead):
+    income_amount: str
+    spent_amount: str
+    net_amount: str
+    remaining_amount: str
+    transaction_count: int
+
+
+class CashPeriodCloseResult(BaseModel):
+    closed_period: CashPeriodRead
+    new_period: CashPeriodRead
+    summary: CashPeriodSummary

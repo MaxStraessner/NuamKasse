@@ -62,3 +62,22 @@ export async function apiRequest<TResponse>(
 
   return (await response.json()) as TResponse;
 }
+
+export async function apiDownload(path: string): Promise<Blob> {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const response = await fetch(`${apiBaseUrl}${normalizedPath}`, {
+    credentials: "include",
+    headers: { Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  });
+  if (!response.ok) {
+    let message = `API request failed with ${response.status}`;
+    try {
+      const data = (await response.json()) as { detail?: string | { message?: string } };
+      message = typeof data.detail === "string" ? data.detail : data.detail?.message || message;
+    } catch {
+      // Keep the generic message when the backend returned no JSON body.
+    }
+    throw new ApiError(message, response.status);
+  }
+  return response.blob();
+}

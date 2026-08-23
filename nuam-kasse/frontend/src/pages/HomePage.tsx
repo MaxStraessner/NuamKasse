@@ -43,6 +43,7 @@ export function HomePage() {
   const [selectedRootCategory, setSelectedRootCategory] = useState<Category | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseNote, setExpenseNote] = useState("");
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -174,6 +175,7 @@ export function HomePage() {
     setSelectedCategory(category);
     setSelectedRootCategory(rootCategory);
     setExpenseAmount("");
+    setExpenseNote("");
     setDialogError(null);
     setBookingError(null);
     setSuccessMessage(null);
@@ -190,6 +192,7 @@ export function HomePage() {
     );
     setSelectedCategory(null);
     setExpenseAmount("");
+    setExpenseNote("");
     setDialogError(null);
     if (!shouldReturnToSubcategories) {
       setSelectedRootCategory(null);
@@ -230,12 +233,14 @@ export function HomePage() {
       const response = await createExpense({
         category_id: selectedCategory.id,
         amount: normalizeMoneyInput(expenseAmount),
+        note: expenseNote.trim() || null,
       });
       setCashSummary(response.summary);
       setSuccessMessage(`${categoryTypeLabel(response.expense.transaction_type)} über ${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
       setSelectedCategory(null);
       setSelectedRootCategory(null);
       setExpenseAmount("");
+      setExpenseNote("");
       setBookingError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -272,7 +277,7 @@ export function HomePage() {
         {!isLoadingCashPeriod && hasNoActiveCashPeriod ? (
           <div className="cash-empty">
             <p>Zurzeit ist kein Betrag hinterlegt.</p>
-            {user?.role === "admin" ? (
+            {user?.cashbook_role === "admin" ? (
               <Link className="primary-link" to="/settings/cash-periods">
                 Neue Kassenperiode anlegen
               </Link>
@@ -318,7 +323,7 @@ export function HomePage() {
         {bookingError ? <p className="form-error" role="alert">{bookingError}</p> : null}
         {!isLoadingCategories && !categoryError && rootCategories.length === 0 ? (
           <p className="empty-state">
-            {user?.role === "admin"
+            {user?.cashbook_role === "admin"
               ? "Noch keine Kategorien vorhanden. Lege in den Einstellungen eine Kategorie an."
               : "Noch keine Kategorien verfügbar."}
           </p>
@@ -426,6 +431,15 @@ export function HomePage() {
                   <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
                 ))}
               </div>
+              <label className="form-field">
+                <span>Notiz optional</span>
+                <input
+                  maxLength={500}
+                  onChange={(event) => setExpenseNote(event.target.value)}
+                  placeholder="Kurze Beschreibung"
+                  value={expenseNote}
+                />
+              </label>
               <div className="expense-preview">
                 <div>
                   <span>Verbleibend vorher</span>

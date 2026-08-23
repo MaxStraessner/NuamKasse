@@ -19,7 +19,7 @@ class CashPeriod(Base):
     __table_args__ = (
         Index(
             "uq_cash_periods_active",
-            "status",
+            "cashbook_id",
             unique=True,
             sqlite_where=text("status = 'active'"),
             postgresql_where=text("status = 'active'"),
@@ -27,6 +27,11 @@ class CashPeriod(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    cashbook_id: Mapped[int] = mapped_column(
+        ForeignKey("cashbooks.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     opening_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="THB")
@@ -66,3 +71,4 @@ class CashPeriod(Base):
 
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     closed_by = relationship("User", foreign_keys=[closed_by_user_id])
+    cashbook = relationship("Cashbook")

@@ -2,11 +2,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_password_change_completed
+from app.api.dependencies.auth import require_cashbook_admin, require_cashbook_member
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.category import Category
-from app.models.user import User
 from app.schemas.category import (
     CategoryCatalogResponse,
     CategoryCreate,
@@ -30,12 +29,13 @@ from app.services.category_image_service import (
     remove_category_image,
     replace_category_image,
 )
+from app.services.cashbook_service import CashbookAccess
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
-def _get_category(db: Session, category_id: int, user: User) -> Category:
-    category = get_category_by_id(db, category_id, user_id=user.id)
+def _get_category(db: Session, category_id: int, access: CashbookAccess) -> Category:
+    category = get_category_by_id(db, category_id, cashbook_id=access.cashbook.id)
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -48,14 +48,19 @@ def _get_category(db: Session, category_id: int, user: User) -> Category:
 def read_categories(
     include_inactive: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> list[Category]:
-    return list_categories(db, user=user, include_inactive=include_inactive)
+    return list_categories(
+        db,
+        cashbook_id=access.cashbook.id,
+        created_by_user_id=access.user.id,
+        include_inactive=include_inactive,
+    )
 
 
 @router.get("/catalog", response_model=CategoryCatalogResponse)
 def read_category_catalog(
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     return get_category_catalog()
 
@@ -64,7 +69,7 @@ def read_category_catalog(
 def create_category_endpoint(
     payload: CategoryCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> Category:
     try:
         return create_category(
@@ -72,7 +77,8 @@ def create_category_endpoint(
             name=payload.name,
             icon_key=payload.icon_key,
             color_key=payload.color_key,
-            user_id=user.id,
+            cashbook_id=access.cashbook.id,
+            created_by_user_id=access.user.id,
             parent_category_id=payload.parent_category_id,
             sort_order=payload.sort_order,
             category_type=payload.category_type,
@@ -85,12 +91,12 @@ def create_category_endpoint(
 def reorder_categories_endpoint(
     payload: CategoryReorderRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> list[Category]:
     try:
         return reorder_categories(
             db,
-            user_id=user.id,
+            cashbook_id=access.cashbook.id,
             category_ids=payload.category_ids,
             parent_category_id=payload.parent_category_id,
         )
@@ -102,9 +108,9 @@ def reorder_categories_endpoint(
 def archive_category_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> Category:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     try:
         return update_category(db, category, is_active=False)
     except CategoryServiceError as exc:
@@ -115,9 +121,9 @@ def archive_category_endpoint(
 def restore_category_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> Category:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     try:
         return update_category(db, category, is_active=True)
     except CategoryServiceError as exc:
@@ -128,10 +134,10 @@ def restore_category_endpoint(
 def delete_category_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
     settings: Settings = Depends(get_settings),
 ) -> None:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     try:
         delete_category(db, category=category, settings=settings)
     except CategoryServiceError as exc:
@@ -143,9 +149,9 @@ def update_category_endpoint(
     category_id: int,
     payload: CategoryUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> Category:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     update_data = payload.model_dump(exclude_unset=True)
     try:
         return update_category(db, category, **update_data)
@@ -158,10 +164,10 @@ async def upload_category_image_endpoint(
     category_id: int,
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
     settings: Settings = Depends(get_settings),
 ) -> Category:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     content = await image.read(settings.category_image_max_bytes + 1)
     try:
         return replace_category_image(
@@ -179,10 +185,10 @@ async def upload_category_image_endpoint(
 def read_category_image_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_member),
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     path = get_category_preview_path(category, settings)
     if path is None:
         raise HTTPException(
@@ -203,8 +209,8 @@ def read_category_image_endpoint(
 def delete_category_image_endpoint(
     category_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_password_change_completed),
+    access: CashbookAccess = Depends(require_cashbook_admin),
     settings: Settings = Depends(get_settings),
 ) -> Category:
-    category = _get_category(db, category_id, user)
+    category = _get_category(db, category_id, access)
     return remove_category_image(db, category=category, settings=settings)

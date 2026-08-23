@@ -30,6 +30,14 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
             )
             connection.execute(
                 text(
+                    "INSERT INTO users "
+                    "(id, username, username_normalized, display_name, password_hash, role, is_active, "
+                    "must_change_password, created_at, updated_at) VALUES "
+                    "(2, 'member', 'member', 'Member', 'hash', 'member', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            connection.execute(
+                text(
                     "INSERT INTO categories "
                     "(id, user_id, name, name_normalized, icon_key, color_key, image_path, parent_category_id, "
                     "sort_order, is_active, created_at, updated_at) VALUES "
@@ -46,9 +54,25 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
             )
             connection.execute(
                 text(
+                    "INSERT INTO categories "
+                    "(id, user_id, name, name_normalized, icon_key, color_key, image_path, parent_category_id, "
+                    "sort_order, is_active, created_at, updated_at) VALUES "
+                    "(2, 2, 'Essen', 'essen', 'utensils', 'orange', NULL, NULL, 1, 1, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            connection.execute(
+                text(
                     "INSERT INTO expenses "
                     "(id, cash_period_id, category_id, amount, currency, created_by_user_id, created_at, is_voided) "
                     "VALUES (1, 1, 1, 25, 'THB', 1, CURRENT_TIMESTAMP, 0)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO expenses "
+                    "(id, cash_period_id, category_id, amount, currency, created_by_user_id, created_at, is_voided) "
+                    "VALUES (2, 1, 2, 40, 'THB', 2, CURRENT_TIMESTAMP, 0)"
                 )
             )
 
@@ -61,10 +85,38 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
             expense = connection.execute(
                 text("SELECT amount, category_id, transaction_type FROM expenses WHERE id = 1")
             ).one()
+            cashbook = connection.execute(
+                text("SELECT id, name, currency, created_by_user_id FROM cashbooks")
+            ).one()
+            memberships = connection.execute(
+                text("SELECT user_id, cashbook_id, role FROM cashbook_memberships ORDER BY user_id")
+            ).all()
+            category_rows = connection.execute(
+                text("SELECT id, user_id, cashbook_id FROM categories ORDER BY id")
+            ).all()
+            expense_rows = connection.execute(
+                text(
+                    "SELECT id, cash_period_id, category_id, created_by_user_id "
+                    "FROM expenses ORDER BY id"
+                )
+            ).all()
+            period = connection.execute(
+                text("SELECT id, cashbook_id, opening_amount, status FROM cash_periods WHERE id = 1")
+            ).one()
             assert category == ("Gehalt", "original.webp", "expense")
             assert str(expense.amount) in {"25", "25.00"}
             assert expense.category_id == 1
             assert expense.transaction_type == "expense"
+            assert cashbook.name == "Nuam Kasse"
+            assert cashbook.currency == "THB"
+            assert cashbook.created_by_user_id == 1
+            assert memberships == [(1, cashbook.id, "admin"), (2, cashbook.id, "member")]
+            assert category_rows == [(1, 1, cashbook.id), (2, 2, cashbook.id)]
+            assert expense_rows == [(1, 1, 1, 1), (2, 1, 2, 2)]
+            assert period.id == 1
+            assert period.cashbook_id == cashbook.id
+            assert str(period.opening_amount) in {"100", "100.00"}
+            assert period.status == "active"
             assert {column["name"] for column in inspect(connection).get_columns("categories")} >= {"category_type"}
             assert {column["name"] for column in inspect(connection).get_columns("expenses")} >= {"transaction_type"}
         engine.dispose()

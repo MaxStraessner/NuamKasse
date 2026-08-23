@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.user import User, UserRole, utc_now
 from app.models.user_session import UserSession
 from app.services.auth_service import get_session_by_token
+from app.services.cashbook_service import CashbookAccess, get_cashbook_access
 
 
 def get_current_session_and_user(
@@ -89,3 +90,33 @@ def require_password_change_completed(
             detail="password_change_required",
         )
     return user
+
+
+def require_cashbook_member(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+) -> CashbookAccess:
+    access = get_cashbook_access(db, user)
+    if access is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "cashbook_membership_required",
+                "message": "Dieser Benutzer ist keiner Kasse zugeordnet.",
+            },
+        )
+    return access
+
+
+def require_cashbook_admin(
+    access: CashbookAccess = Depends(require_cashbook_member),
+) -> CashbookAccess:
+    if not access.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "cashbook_admin_required",
+                "message": "Diese Funktion ist nur für den Administrator der Kasse verfügbar.",
+            },
+        )
+    return access

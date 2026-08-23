@@ -6,13 +6,14 @@ from pathlib import Path
 from PIL import Image
 
 from app.core.config import Settings
+from app.models.cashbook import Cashbook
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category, CategoryType
 from app.models.expense import Expense
 from app.models.user import User
 from app.models.user import UserRole
 from app.services.category_service import seed_default_categories
-from conftest import create_test_user
+from conftest import create_test_user, get_test_cashbook
 
 
 def login(client, username: str, password: str):
@@ -38,6 +39,7 @@ def create_test_category(
     if owner_id is None:
         owner_id = db_session.query(User).order_by(User.id.asc()).first().id
     category = Category(
+        cashbook_id=get_test_cashbook(db_session).id,
         user_id=owner_id,
         name=name.strip(),
         name_normalized=name.strip().casefold(),
@@ -240,7 +242,12 @@ def test_category_parent_validation_rejects_foreign_inactive_and_self_parent(cli
     own = create_test_category(db_session, name="Eigen", user_id=member.id)
     inactive = create_test_category(db_session, name="Alt", is_active=False, user_id=member.id)
     foreign = create_test_category(db_session, name="Fremd", user_id=admin.id)
-    login(client, "nuam", "member-pass")
+    foreign_cashbook = Cashbook(name="Fremde Kasse", currency="THB", created_by_user_id=admin.id)
+    db_session.add(foreign_cashbook)
+    db_session.flush()
+    foreign.cashbook_id = foreign_cashbook.id
+    db_session.commit()
+    login(client, "admin", "admin-pass")
 
     foreign_parent = client.post(
         "/api/v1/categories",
@@ -300,19 +307,17 @@ def test_admin_can_move_and_reorder_subcategories(client, db_session):
     assert [item["id"] for item in reordered.json() if item["parent_category_id"] == health.id] == [doctor.id]
 
 
-def test_user_can_create_category_and_invalid_name_icon_and_color_are_rejected(client, db_session):
-    create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
-    login(client, "nuam", "member-pass")
+def test_admin_can_create_category_and_invalid_name_icon_and_color_are_rejected(client, db_session):
+    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
+    login(client, "admin", "admin-pass")
 
     member = client.post(
         "/api/v1/categories",
         json={"name": "Essen", "icon_key": "utensils", "color_key": "orange"},
     )
-    login(client, "nuam", "member-pass")
+    login(client, "admin", "admin-pass")
     assert member.status_code == 201
 
-    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
-    login(client, "admin", "admin-pass")
     blank = client.post(
         "/api/v1/categories",
         json={"name": "   ", "icon_key": "utensils", "color_key": "orange"},
@@ -372,6 +377,7 @@ def test_category_archive_restore_delete_and_delete_guards(client, db_session):
     login(client, "admin", "admin-pass")
 
     cash_period = CashPeriod(
+        cashbook_id=get_test_cashbook(db_session).id,
         name="Juli 2026",
         opening_amount=Decimal("100.00"),
         currency="THB",
@@ -423,7 +429,7 @@ def test_update_rejects_foreign_unknown_category_and_duplicate_name(client, db_s
     missing = client.patch("/api/v1/categories/9999", json={"name": "Neu"})
     duplicate = client.patch(f"/api/v1/categories/{second.id}", json={"name": " essen "})
 
-    assert foreign.status_code == 404
+    assert foreign.status_code == 403
     assert missing.status_code == 404
     assert duplicate.status_code == 400
 
@@ -464,7 +470,7 @@ def test_admin_can_reorder_categories_transactionally(client, db_session):
     assert (third.sort_order, first.sort_order, second.sort_order) == (1, 2, 3)
 
 
-def test_member_can_reorder_and_read_catalog_for_own_categories(client, db_session):
+def test_member_cannot_reorder_but_can_read_catalog(client, db_session):
     create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
     category = create_test_category(db_session, name="Essen")
     login(client, "nuam", "member-pass")
@@ -472,7 +478,7 @@ def test_member_can_reorder_and_read_catalog_for_own_categories(client, db_sessi
     reorder = client.put("/api/v1/categories/reorder", json={"category_ids": [category.id]})
     catalog = client.get("/api/v1/categories/catalog")
 
-    assert reorder.status_code == 200
+    assert reorder.status_code == 403
     assert catalog.status_code == 200
 
 
@@ -512,8 +518,8 @@ def test_seed_default_categories_is_idempotent_and_does_not_overwrite(client, db
     assert db_session.query(Category).count() == 1
 
 
-def test_user_can_upload_root_and_subcategory_images(client, db_session, settings: Settings):
-    user = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+def test_admin_can_upload_root_and_subcategory_images(client, db_session, settings: Settings):
+    user = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     root = create_test_category(db_session, name="Gesundheit", icon_key="heart-pulse", color_key="red", user_id=user.id)
     child = create_test_category(
         db_session,
@@ -523,7 +529,7 @@ def test_user_can_upload_root_and_subcategory_images(client, db_session, setting
         parent_category_id=root.id,
         user_id=user.id,
     )
-    login(client, "nuam", "member-pass")
+    login(client, "admin", "admin-pass")
 
     root_upload = upload_image(client, root.id)
     child_upload = upload_image(client, child.id, filename="apotheke.webp", content=image_bytes("WEBP"), mime="image/webp")
@@ -539,9 +545,9 @@ def test_user_can_upload_root_and_subcategory_images(client, db_session, setting
 
 
 def test_category_image_can_be_read_replaced_and_deleted(client, db_session):
-    create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     category = create_test_category(db_session, name="Essen")
-    login(client, "nuam", "member-pass")
+    login(client, "admin", "admin-pass")
 
     uploaded = upload_image(client, category.id)
     image = client.get(f"/api/v1/categories/{category.id}/image")
@@ -563,11 +569,16 @@ def test_category_image_can_be_read_replaced_and_deleted(client, db_session):
 
 
 def test_category_image_upload_rejects_invalid_too_large_and_foreign_files(client, db_session, settings: Settings):
-    owner = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    owner = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     other = create_test_user(db_session, username="other", password="other-pass", role=UserRole.member)
     own = create_test_category(db_session, name="Eigen", user_id=owner.id)
     foreign = create_test_category(db_session, name="Fremd", user_id=other.id)
-    login(client, "nuam", "member-pass")
+    foreign_cashbook = Cashbook(name="Fremde Kasse", currency="THB", created_by_user_id=other.id)
+    db_session.add(foreign_cashbook)
+    db_session.flush()
+    foreign.cashbook_id = foreign_cashbook.id
+    db_session.commit()
+    login(client, "admin", "admin-pass")
 
     invalid = upload_image(client, own.id, content=b"<svg></svg>", filename="bad.svg", mime="image/svg+xml")
     too_large = upload_image(client, own.id, content=b"x" * (settings.category_image_max_bytes + 1))
@@ -581,10 +592,10 @@ def test_category_image_upload_rejects_invalid_too_large_and_foreign_files(clien
 
 
 def test_missing_category_image_file_returns_404_and_category_delete_removes_files(client, db_session, settings: Settings):
-    create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
+    create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     missing_file_category = create_test_category(db_session, name="Fehlt")
     deletable = create_test_category(db_session, name="Leer", sort_order=2)
-    login(client, "nuam", "member-pass")
+    login(client, "admin", "admin-pass")
 
     upload_image(client, missing_file_category.id)
     db_session.refresh(missing_file_category)

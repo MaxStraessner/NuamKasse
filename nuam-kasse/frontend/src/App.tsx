@@ -6,6 +6,7 @@ import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
 import { CategoryAdminPage } from "./pages/CategoryAdminPage";
 import { CashPeriodAdminPage } from "./pages/CashPeriodAdminPage";
+import { CashbookMembersPage } from "./pages/CashbookMembersPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -47,6 +48,10 @@ const router = createBrowserRouter([
             element: <SettingsPage />,
           },
           {
+            path: "settings/cash-periods",
+            element: <CashPeriodAdminPage />,
+          },
+          {
             element: <AdminRoute />,
             children: [
               {
@@ -58,8 +63,8 @@ const router = createBrowserRouter([
                 element: <UserAdminPage />,
               },
               {
-                path: "settings/cash-periods",
-                element: <CashPeriodAdminPage />,
+                path: "settings/members",
+                element: <CashbookMembersPage />,
               },
             ],
           },

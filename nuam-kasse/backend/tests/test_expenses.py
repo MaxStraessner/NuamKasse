@@ -5,7 +5,7 @@ from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category, CategoryType
 from app.models.expense import Expense
 from app.models.user import User, UserRole
-from conftest import create_test_user
+from conftest import create_test_user, get_test_cashbook
 
 
 def login(client, username: str, password: str = "password-123"):
@@ -25,6 +25,7 @@ def create_category(
     if owner_id is None:
         owner_id = db_session.query(User).order_by(User.id.asc()).first().id
     category = Category(
+        cashbook_id=get_test_cashbook(db_session).id,
         user_id=owner_id,
         name=name,
         name_normalized=name.casefold(),
@@ -49,6 +50,7 @@ def create_cash_period(
     status: CashPeriodStatus = CashPeriodStatus.active,
 ) -> CashPeriod:
     cash_period = CashPeriod(
+        cashbook_id=get_test_cashbook(db_session).id,
         name="Juli 2026",
         opening_amount=opening_amount,
         currency="THB",
@@ -173,8 +175,8 @@ def test_create_expense_requires_active_cash_period_and_active_category(client, 
     assert missing_category.status_code == 404
     assert inactive.status_code == 409
     assert inactive.json()["detail"]["code"] == "category_inactive"
-    assert foreign_category.status_code == 404
-    assert foreign_category.json()["detail"]["code"] == "category_not_found"
+    assert foreign_category.status_code == 409
+    assert foreign_category.json()["detail"]["code"] == "category_inactive"
 
 
 def test_create_expense_requires_subcategory_when_root_has_active_children(client, db_session):
@@ -268,8 +270,8 @@ def test_current_expenses_are_sorted_filtered_and_hide_voided_for_members(client
 
     assert [item["id"] for item in member_response.json()] == [second.id, child.id, first.id]
     assert [item["id"] for item in member_filtered.json()] == [child.id, first.id]
-    assert member_foreign_filter.status_code == 404
-    assert member_foreign_filter.json()["detail"]["code"] == "category_not_found"
+    assert member_foreign_filter.status_code == 200
+    assert [item["id"] for item in member_foreign_filter.json()] == [second.id]
     assert [item["id"] for item in admin_response.json()] == [voided.id, second.id, child.id, first.id]
     assert [item["created_by"]["id"] for item in admin_user_filter.json()] == [member.id, member.id]
 

@@ -4,7 +4,7 @@ from decimal import Decimal
 from app.models import CashPeriod, Category, Expense, UserRole
 from app.models.cash_period import CashPeriodStatus
 from app.models.user import User
-from tests.conftest import create_test_user
+from tests.conftest import create_test_user, get_test_cashbook
 
 
 def login(client, username: str, password: str = "password-123"):
@@ -20,6 +20,7 @@ def create_cash_period(
     opening_amount: Decimal = Decimal("1000.00"),
 ) -> CashPeriod:
     cash_period = CashPeriod(
+        cashbook_id=get_test_cashbook(db).id,
         name=name,
         opening_amount=opening_amount,
         currency="THB",
@@ -50,6 +51,7 @@ def create_category(
     parent_category_id: int | None = None,
 ) -> Category:
     category = Category(
+        cashbook_id=get_test_cashbook(db).id,
         user_id=user_id,
         name=name,
         name_normalized=name.casefold(),
@@ -282,7 +284,7 @@ def test_overview_current_requires_login_completed_password_and_active_period(cl
     assert no_period.json()["detail"]["code"] == "no_active_cash_period"
 
 
-def test_admin_can_read_historical_overview_and_member_cannot(client, db_session):
+def test_admin_and_member_can_read_historical_overview(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
     closed = create_cash_period(
@@ -303,8 +305,9 @@ def test_admin_can_read_historical_overview_and_member_cannot(client, db_session
     )
 
     login(client, "nuam")
-    forbidden = client.get(f"/api/v1/overview/cash-periods/{closed.id}")
-    assert forbidden.status_code == 403
+    member_response = client.get(f"/api/v1/overview/cash-periods/{closed.id}")
+    assert member_response.status_code == 200
+    assert member_response.json()["summary"]["cash_period"]["id"] == closed.id
 
     login(client, "admin")
     response = client.get(f"/api/v1/overview/cash-periods/{closed.id}")
@@ -330,8 +333,8 @@ def test_expense_list_filters_sorting_pagination_and_admin_voided_access(client,
     assert member_list.status_code == 200
     assert member_list.json()["total"] == 1
     assert [item["id"] for item in member_list.json()["items"]] == [first.id]
-    assert foreign_category.status_code == 404
-    assert foreign_category.json()["detail"]["code"] == "category_not_found"
+    assert foreign_category.status_code == 200
+    assert [item["id"] for item in foreign_category.json()["items"]] == [second.id]
 
     login(client, "admin")
     admin_list = client.get(
@@ -383,4 +386,4 @@ def test_expense_list_date_user_validation_and_historical_permission(client, db_
     assert invalid_sort.json()["detail"]["code"] == "invalid_sort"
     assert invalid_category.status_code == 404
     assert invalid_category.json()["detail"]["code"] == "category_not_found"
-    assert closed_for_member.status_code == 403
+    assert closed_for_member.status_code == 200

@@ -44,6 +44,7 @@ class ExpenseUserRead(BaseModel):
 class ExpenseCreate(BaseModel):
     category_id: int
     amount: str = Field(min_length=1, max_length=20)
+    note: str | None = Field(default=None, max_length=500)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +68,7 @@ class ExpenseRead(BaseModel):
     voided_at: datetime | None
     voided_by: ExpenseUserRead | None
     void_reason: str | None
+    note: str | None
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

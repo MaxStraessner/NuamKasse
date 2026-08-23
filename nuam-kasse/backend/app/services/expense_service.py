@@ -7,7 +7,7 @@ from app.core.money import MoneyError, format_money, parse_money, validate_curre
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import CategoryType
 from app.models.expense import Expense
-from app.models.user import User, UserRole, utc_now
+from app.models.user import User, utc_now
 from app.services.category_service import (
     can_book_directly,
     get_category_by_id,
@@ -33,12 +33,15 @@ class ExpenseServiceError(ValueError):
         self.extra = extra or {}
 
 
-def _active_cash_period_for_update():
-    return select(CashPeriod).where(CashPeriod.status == CashPeriodStatus.active).with_for_update()
+def _active_cash_period_for_update(cashbook_id: int):
+    return select(CashPeriod).where(
+        CashPeriod.cashbook_id == cashbook_id,
+        CashPeriod.status == CashPeriodStatus.active,
+    ).with_for_update()
 
 
-def _get_active_cash_period_locked(db: Session) -> CashPeriod:
-    cash_period = db.scalar(_active_cash_period_for_update())
+def _get_active_cash_period_locked(db: Session, cashbook_id: int) -> CashPeriod:
+    cash_period = db.scalar(_active_cash_period_for_update(cashbook_id))
     if cash_period is None:
         raise ExpenseServiceError(
             "Es ist keine aktive Kassenperiode vorhanden.",
@@ -59,6 +62,17 @@ def _validate_void_reason(reason: str | None) -> str | None:
     return clean_reason
 
 
+def _validate_note(note: str | None) -> str | None:
+    if note is None:
+        return None
+    clean_note = note.strip()
+    if not clean_note:
+        return None
+    if len(clean_note) > 500:
+        raise ExpenseServiceError("Die Notiz darf höchstens 500 Zeichen lang sein.")
+    return clean_note
+
+
 def _get_remaining_amount(db: Session, cash_period: CashPeriod) -> Decimal:
     summary = get_cash_period_summary(db, cash_period)
     return Decimal(str(summary["remaining_amount"]))
@@ -70,8 +84,10 @@ def create_expense(
     category_id: int,
     amount: str | Decimal,
     created_by: User,
+    cashbook_id: int,
+    note: str | None = None,
 ) -> tuple[Expense, dict[str, object]]:
-    cash_period = _get_active_cash_period_locked(db)
+    cash_period = _get_active_cash_period_locked(db, cashbook_id)
     if cash_period.status != CashPeriodStatus.active:
         raise ExpenseServiceError(
             "Die Kassenperiode ist bereits abgeschlossen.",
@@ -79,7 +95,7 @@ def create_expense(
             status_code=409,
         )
 
-    category = get_category_by_id(db, category_id, user_id=created_by.id)
+    category = get_category_by_id(db, category_id, cashbook_id=cashbook_id)
     if category is None:
         raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
     if not category.is_active:
@@ -118,6 +134,7 @@ def create_expense(
         transaction_type=transaction_type,
         currency=currency,
         created_by_user_id=created_by.id,
+        note=_validate_note(note),
     )
     db.add(expense)
     db.commit()
@@ -129,29 +146,35 @@ def list_current_expenses(
     db: Session,
     *,
     user: User,
+    cashbook_id: int,
+    is_admin: bool,
     limit: int = 20,
     offset: int = 0,
     category_id: int | None = None,
     created_by_user_id: int | None = None,
     include_voided: bool = False,
 ) -> list[Expense]:
-    cash_period = _get_active_cash_period_locked(db)
+    cash_period = _get_active_cash_period_locked(db, cashbook_id)
     query = select(Expense).where(Expense.cash_period_id == cash_period.id)
     if category_id is not None:
-        category = get_category_by_id(db, category_id, user_id=user.id)
+        category = get_category_by_id(db, category_id, cashbook_id=cashbook_id)
         if category is None:
             raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
         query = query.where(Expense.category_id.in_(get_category_filter_ids(db, category)))
     if created_by_user_id is not None:
         query = query.where(Expense.created_by_user_id == created_by_user_id)
-    if user.role != UserRole.admin or not include_voided:
+    if not is_admin or not include_voided:
         query = query.where(Expense.is_voided.is_(False))
     query = query.order_by(Expense.created_at.desc(), Expense.id.desc()).offset(offset).limit(limit)
     return list(db.scalars(query))
 
 
-def get_expense_by_id(db: Session, expense_id: int) -> Expense | None:
-    return db.get(Expense, expense_id)
+def get_expense_by_id(db: Session, expense_id: int, *, cashbook_id: int) -> Expense | None:
+    return db.scalar(
+        select(Expense)
+        .join(CashPeriod, CashPeriod.id == Expense.cash_period_id)
+        .where(Expense.id == expense_id, CashPeriod.cashbook_id == cashbook_id)
+    )
 
 
 def void_expense(
@@ -159,11 +182,16 @@ def void_expense(
     *,
     expense: Expense,
     voided_by: User,
+    cashbook_id: int,
+    is_admin: bool,
     reason: str | None = None,
 ) -> tuple[Expense, dict[str, object]]:
     cash_period = db.scalar(
         select(CashPeriod)
-        .where(CashPeriod.id == expense.cash_period_id)
+        .where(
+            CashPeriod.id == expense.cash_period_id,
+            CashPeriod.cashbook_id == cashbook_id,
+        )
         .with_for_update()
     )
     if cash_period is None:
@@ -180,7 +208,7 @@ def void_expense(
             code="expense_already_voided",
             status_code=409,
         )
-    if voided_by.role != UserRole.admin and expense.created_by_user_id != voided_by.id:
+    if not is_admin and expense.created_by_user_id != voided_by.id:
         raise ExpenseServiceError(
             "Diese Buchung darf nicht storniert werden.",
             code="expense_void_forbidden",
