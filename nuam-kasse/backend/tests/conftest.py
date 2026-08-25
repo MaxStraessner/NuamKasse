@@ -82,7 +82,12 @@ def create_test_user(
     db.refresh(user)
     cashbook = db.query(Cashbook).order_by(Cashbook.id.asc()).first()
     if cashbook is None:
-        cashbook = Cashbook(name="Testkasse", currency="THB", created_by_user_id=user.id)
+        cashbook = Cashbook(
+            name="Testkasse",
+            currency="THB",
+            created_by_user_id=user.id,
+            category_owner_user_id=user.id,
+        )
         db.add(cashbook)
         db.flush()
     has_admin = db.query(CashbookMembership).filter_by(

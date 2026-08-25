@@ -11,9 +11,9 @@ from app.core.category_icons import (
 )
 from app.core.config import Settings
 from app.models.category import Category, CategoryType
-from app.models.cashbook import Cashbook, CashbookMembership, CashbookRole
+from app.models.cashbook import Cashbook, CashbookMembership
 from app.models.expense import Expense
-from app.models.user import User, utc_now
+from app.models.user import utc_now
 from app.services.category_image_service import delete_category_image_paths
 
 
@@ -128,14 +128,25 @@ def _validate_color(color_key: str) -> str:
     return clean_color
 
 
-def _owner_filter(cashbook_id: int):
-    return Category.cashbook_id == cashbook_id
+def _owner_filter(cashbook_id: int, category_owner_user_id: int):
+    return (
+        Category.cashbook_id == cashbook_id,
+        Category.user_id == category_owner_user_id,
+    )
 
 
-def _parent_filter(parent_category_id: int | None, cashbook_id: int):
+def _parent_filter(
+    parent_category_id: int | None,
+    cashbook_id: int,
+    category_owner_user_id: int,
+):
     if parent_category_id is None:
-        return Category.parent_category_id.is_(None), _owner_filter(cashbook_id)
-    return Category.parent_category_id == parent_category_id, _owner_filter(cashbook_id)
+        return Category.parent_category_id.is_(None), *_owner_filter(
+            cashbook_id, category_owner_user_id
+        )
+    return Category.parent_category_id == parent_category_id, *_owner_filter(
+        cashbook_id, category_owner_user_id
+    )
 
 
 def is_root_category(category: Category) -> bool:
@@ -206,6 +217,7 @@ def _validate_parent(
     db: Session,
     *,
     cashbook_id: int,
+    category_owner_user_id: int,
     parent_category_id: int | None,
     category_id: int | None = None,
 ) -> Category | None:
@@ -216,7 +228,10 @@ def _validate_parent(
     parent = db.get(Category, parent_category_id)
     if parent is None:
         raise CategoryServiceError("Oberkategorie nicht gefunden.")
-    if parent.cashbook_id != cashbook_id:
+    if (
+        parent.cashbook_id != cashbook_id
+        or parent.user_id != category_owner_user_id
+    ):
         raise CategoryServiceError("Oberkategorie nicht gefunden.")
     if parent.parent_category_id is not None:
         raise CategoryServiceError("Unterkategorien dürfen keine weiteren Unterkategorien besitzen.")
@@ -229,13 +244,14 @@ def ensure_unique_category_name(
     db: Session,
     name: str,
     cashbook_id: int,
+    category_owner_user_id: int,
     parent_category_id: int | None = None,
     exclude_category_id: int | None = None,
 ) -> tuple[str, str]:
     clean_name, normalized = _validate_name(name)
     query = select(Category).where(
         Category.name_normalized == normalized,
-        *_parent_filter(parent_category_id, cashbook_id),
+        *_parent_filter(parent_category_id, cashbook_id, category_owner_user_id),
     )
     existing = db.scalar(query)
     if existing and existing.id != exclude_category_id:
@@ -243,8 +259,17 @@ def ensure_unique_category_name(
     return clean_name, normalized
 
 
-def next_sort_order(db: Session, cashbook_id: int, parent_category_id: int | None = None) -> int:
-    highest = db.scalar(select(func.max(Category.sort_order)).where(*_parent_filter(parent_category_id, cashbook_id)))
+def next_sort_order(
+    db: Session,
+    cashbook_id: int,
+    category_owner_user_id: int,
+    parent_category_id: int | None = None,
+) -> int:
+    highest = db.scalar(
+        select(func.max(Category.sort_order)).where(
+            *_parent_filter(parent_category_id, cashbook_id, category_owner_user_id)
+        )
+    )
     return int(highest or 0) + 1
 
 
@@ -252,13 +277,17 @@ def list_categories(
     db: Session,
     *,
     cashbook_id: int,
-    created_by_user_id: int,
+    category_owner_user_id: int,
     include_inactive: bool = False,
 ) -> list[Category]:
     ensure_default_categories_for_cashbook(
-        db, cashbook_id=cashbook_id, created_by_user_id=created_by_user_id
+        db,
+        cashbook_id=cashbook_id,
+        category_owner_user_id=category_owner_user_id,
     )
-    query = select(Category).where(Category.cashbook_id == cashbook_id)
+    query = select(Category).where(
+        *_owner_filter(cashbook_id, category_owner_user_id)
+    )
     if not include_inactive:
         query = query.where(Category.is_active.is_(True))
     query = query.order_by(
@@ -270,11 +299,22 @@ def list_categories(
     return list(db.scalars(query))
 
 
-def get_category_by_id(db: Session, category_id: int, *, cashbook_id: int | None = None) -> Category | None:
+def get_category_by_id(
+    db: Session,
+    category_id: int,
+    *,
+    cashbook_id: int | None = None,
+    category_owner_user_id: int | None = None,
+) -> Category | None:
     category = db.get(Category, category_id)
     if category is None:
         return None
     if cashbook_id is not None and category.cashbook_id != cashbook_id:
+        return None
+    if (
+        category_owner_user_id is not None
+        and category.user_id != category_owner_user_id
+    ):
         return None
     return category
 
@@ -286,23 +326,36 @@ def create_category(
     icon_key: str,
     color_key: str,
     cashbook_id: int,
-    created_by_user_id: int,
+    category_owner_user_id: int,
     parent_category_id: int | None = None,
     sort_order: int | None = None,
     category_type: CategoryType = CategoryType.expense,
 ) -> Category:
-    parent = _validate_parent(db, cashbook_id=cashbook_id, parent_category_id=parent_category_id)
-    clean_name, normalized = ensure_unique_category_name(db, name, cashbook_id, parent_category_id)
+    parent = _validate_parent(
+        db,
+        cashbook_id=cashbook_id,
+        category_owner_user_id=category_owner_user_id,
+        parent_category_id=parent_category_id,
+    )
+    clean_name, normalized = ensure_unique_category_name(
+        db,
+        name,
+        cashbook_id,
+        category_owner_user_id,
+        parent_category_id,
+    )
     clean_icon = _validate_icon(icon_key)
     clean_color = _validate_color(color_key)
-    order = sort_order if sort_order is not None else next_sort_order(db, cashbook_id, parent_category_id)
+    order = sort_order if sort_order is not None else next_sort_order(
+        db, cashbook_id, category_owner_user_id, parent_category_id
+    )
     if order < 1:
         raise CategoryServiceError("Die Sortierung muss bei 1 beginnen.")
 
     category = Category(
         cashbook_id=cashbook_id,
         name=clean_name,
-        user_id=created_by_user_id,
+        user_id=category_owner_user_id,
         name_normalized=normalized,
         icon_key=clean_icon,
         color_key=clean_color,
@@ -334,6 +387,7 @@ def update_category(
         next_parent = _validate_parent(
             db,
             cashbook_id=category.cashbook_id,
+            category_owner_user_id=category.user_id,
             parent_category_id=next_parent_category_id,
             category_id=category.id,
         )
@@ -357,6 +411,7 @@ def update_category(
             db,
             name,
             category.cashbook_id,
+            category.user_id,
             next_parent_category_id,
             exclude_category_id=category.id,
         )
@@ -371,7 +426,12 @@ def update_category(
 
     if category.parent_category_id != next_parent_category_id:
         category.parent_category_id = next_parent_category_id
-        category.sort_order = next_sort_order(db, category.cashbook_id, next_parent_category_id)
+        category.sort_order = next_sort_order(
+            db,
+            category.cashbook_id,
+            category.user_id,
+            next_parent_category_id,
+        )
         if next_parent is not None:
             category.category_type = next_parent.category_type
 
@@ -400,17 +460,29 @@ def reorder_categories(
     db: Session,
     *,
     cashbook_id: int,
+    category_owner_user_id: int,
     category_ids: list[int],
     parent_category_id: int | None = None,
 ) -> list[Category]:
     if len(category_ids) != len(set(category_ids)):
         raise CategoryServiceError("Jede Kategorie darf nur einmal sortiert werden.")
 
-    _validate_parent(db, cashbook_id=cashbook_id, parent_category_id=parent_category_id)
+    _validate_parent(
+        db,
+        cashbook_id=cashbook_id,
+        category_owner_user_id=category_owner_user_id,
+        parent_category_id=parent_category_id,
+    )
     categories = list(
         db.scalars(
             select(Category)
-            .where(*_parent_filter(parent_category_id, cashbook_id))
+            .where(
+                *_parent_filter(
+                    parent_category_id,
+                    cashbook_id,
+                    category_owner_user_id,
+                )
+            )
             .order_by(Category.id.asc())
         )
     )
@@ -430,7 +502,9 @@ def reorder_categories(
         category.updated_at = now
 
     db.commit()
-    return list(db.scalars(select(Category).where(Category.cashbook_id == cashbook_id).order_by(
+    return list(db.scalars(select(Category).where(
+        *_owner_filter(cashbook_id, category_owner_user_id)
+    ).order_by(
         Category.parent_category_id.asc(),
         Category.sort_order.asc(),
         Category.name_normalized.asc(),
@@ -472,10 +546,15 @@ def ensure_default_categories_for_cashbook(
     db: Session,
     *,
     cashbook_id: int,
-    created_by_user_id: int,
+    category_owner_user_id: int,
 ) -> tuple[int, int]:
     existing_count = int(
-        db.scalar(select(func.count(Category.id)).where(Category.cashbook_id == cashbook_id)) or 0
+        db.scalar(
+            select(func.count(Category.id)).where(
+                *_owner_filter(cashbook_id, category_owner_user_id)
+            )
+        )
+        or 0
     )
     if existing_count:
         return 0, existing_count
@@ -489,7 +568,7 @@ def ensure_default_categories_for_cashbook(
             cashbook_id=cashbook_id,
             name=root_name,
             name_normalized=normalized,
-            user_id=created_by_user_id,
+            user_id=category_owner_user_id,
             icon_key=str(item["icon_key"]),
             color_key=str(item["color_key"]),
             category_type=CategoryType.expense,
@@ -505,7 +584,7 @@ def ensure_default_categories_for_cashbook(
                 cashbook_id=cashbook_id,
                 name=clean_child_name,
                 name_normalized=normalize_category_name(clean_child_name),
-                user_id=created_by_user_id,
+                user_id=category_owner_user_id,
                 icon_key=str(item["icon_key"]),
                 color_key=str(item["color_key"]),
                 category_type=CategoryType.expense,
@@ -530,25 +609,20 @@ def seed_default_categories(db: Session, user_id: int | None = None) -> tuple[in
         return ensure_default_categories_for_cashbook(
             db,
             cashbook_id=membership.cashbook_id,
-            created_by_user_id=user_id,
+            category_owner_user_id=membership.cashbook.category_owner_user_id,
         )
 
     cashbook_ids = list(db.scalars(select(Cashbook.id).order_by(Cashbook.id.asc())))
     created = 0
     existing = 0
     for cashbook_id in cashbook_ids:
-        admin_user_id = db.scalar(
-            select(CashbookMembership.user_id).where(
-                CashbookMembership.cashbook_id == cashbook_id,
-                CashbookMembership.role == CashbookRole.admin,
-            )
-        )
-        if admin_user_id is None:
+        cashbook = db.get(Cashbook, cashbook_id)
+        if cashbook is None:
             continue
         cashbook_created, cashbook_existing = ensure_default_categories_for_cashbook(
             db,
             cashbook_id=cashbook_id,
-            created_by_user_id=admin_user_id,
+            category_owner_user_id=cashbook.category_owner_user_id,
         )
         created += cashbook_created
         existing += cashbook_existing

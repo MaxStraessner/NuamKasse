@@ -85,6 +85,7 @@ def create_expense(
     amount: str | Decimal,
     created_by: User,
     cashbook_id: int,
+    category_owner_user_id: int,
     note: str | None = None,
 ) -> tuple[Expense, dict[str, object]]:
     cash_period = _get_active_cash_period_locked(db, cashbook_id)
@@ -95,7 +96,12 @@ def create_expense(
             status_code=409,
         )
 
-    category = get_category_by_id(db, category_id, cashbook_id=cashbook_id)
+    category = get_category_by_id(
+        db,
+        category_id,
+        cashbook_id=cashbook_id,
+        category_owner_user_id=category_owner_user_id,
+    )
     if category is None:
         raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
     if not category.is_active:
@@ -147,6 +153,7 @@ def list_current_expenses(
     *,
     user: User,
     cashbook_id: int,
+    category_owner_user_id: int,
     is_admin: bool,
     limit: int = 20,
     offset: int = 0,
@@ -157,7 +164,12 @@ def list_current_expenses(
     cash_period = _get_active_cash_period_locked(db, cashbook_id)
     query = select(Expense).where(Expense.cash_period_id == cash_period.id)
     if category_id is not None:
-        category = get_category_by_id(db, category_id, cashbook_id=cashbook_id)
+        category = get_category_by_id(
+            db,
+            category_id,
+            cashbook_id=cashbook_id,
+            category_owner_user_id=category_owner_user_id,
+        )
         if category is None:
             raise ExpenseServiceError("Kategorie nicht gefunden.", code="category_not_found", status_code=404)
         query = query.where(Expense.category_id.in_(get_category_filter_ids(db, category)))

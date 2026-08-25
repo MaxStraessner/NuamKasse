@@ -24,12 +24,18 @@ class Cashbook(Base):
         nullable=True,
         index=True,
     )
+    category_owner_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     created_by = relationship("User", foreign_keys=[created_by_user_id])
+    category_owner = relationship("User", foreign_keys=[category_owner_user_id])
     memberships = relationship(
         "CashbookMembership", back_populates="cashbook", cascade="all, delete-orphan"
     )

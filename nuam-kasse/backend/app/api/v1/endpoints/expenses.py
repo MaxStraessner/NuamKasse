@@ -46,6 +46,7 @@ def create_expense_endpoint(
             note=payload.note,
             created_by=access.user,
             cashbook_id=access.cashbook.id,
+            category_owner_user_id=access.cashbook.category_owner_user_id,
         )
     except ExpenseServiceError as exc:
         raise _service_error(exc) from exc
@@ -67,6 +68,7 @@ def read_current_expenses(
             db,
             user=access.user,
             cashbook_id=access.cashbook.id,
+            category_owner_user_id=access.cashbook.category_owner_user_id,
             is_admin=access.is_admin,
             limit=limit,
             offset=offset,
