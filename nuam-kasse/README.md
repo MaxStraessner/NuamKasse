@@ -106,13 +106,15 @@ Wichtige Variablen:
 ## Lokaler Start mit Docker Compose
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
+
+Der lokale Stack verwendet fest den Compose-Projektnamen `nuam-kasse-local`. Seine Container, das Netzwerk `nuam-kasse-local_nuam_internal` und die Volumes `nuam-kasse-local_postgres_data` sowie `nuam-kasse-local_category_uploads` gehoeren ausschliesslich zu Nuam Kasse. PostgreSQL hat keinen Host-Port; Frontend und Backend sind nur ueber localhost erreichbar.
 
 Lokale URLs:
 
-- Frontend: http://localhost:8080
-- Backend Health Check: http://localhost:8000/api/v1/health
+- Frontend: http://localhost:8080 (`127.0.0.1:8080`)
+- Backend Health Check: http://localhost:8000/api/v1/health (`127.0.0.1:8000`)
 - OpenAPI Docs: http://localhost:8000/api/v1/docs
 
 Das Frontend ruft den echten Backend-Health-Check ueber `/api/v1/health` auf. Im Docker-Setup leitet Nginx diese Route an den Backend-Container weiter.
