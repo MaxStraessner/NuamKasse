@@ -35,7 +35,12 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 def _get_category(db: Session, category_id: int, access: CashbookAccess) -> Category:
-    category = get_category_by_id(db, category_id, cashbook_id=access.cashbook.id)
+    category = get_category_by_id(
+        db,
+        category_id,
+        cashbook_id=access.cashbook.id,
+        category_owner_user_id=access.cashbook.category_owner_user_id,
+    )
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -53,7 +58,7 @@ def read_categories(
     return list_categories(
         db,
         cashbook_id=access.cashbook.id,
-        created_by_user_id=access.user.id,
+        category_owner_user_id=access.cashbook.category_owner_user_id,
         include_inactive=include_inactive,
     )
 
@@ -78,7 +83,7 @@ def create_category_endpoint(
             icon_key=payload.icon_key,
             color_key=payload.color_key,
             cashbook_id=access.cashbook.id,
-            created_by_user_id=access.user.id,
+            category_owner_user_id=access.cashbook.category_owner_user_id,
             parent_category_id=payload.parent_category_id,
             sort_order=payload.sort_order,
             category_type=payload.category_type,
@@ -97,6 +102,7 @@ def reorder_categories_endpoint(
         return reorder_categories(
             db,
             cashbook_id=access.cashbook.id,
+            category_owner_user_id=access.cashbook.category_owner_user_id,
             category_ids=payload.category_ids,
             parent_category_id=payload.parent_category_id,
         )

@@ -33,6 +33,15 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
                     "INSERT INTO users "
                     "(id, username, username_normalized, display_name, password_hash, role, is_active, "
                     "must_change_password, created_at, updated_at) VALUES "
+                    "(3, 'rich-admin', 'rich-admin', 'Rich Admin', 'hash', 'admin', 1, 0, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO users "
+                    "(id, username, username_normalized, display_name, password_hash, role, is_active, "
+                    "must_change_password, created_at, updated_at) VALUES "
                     "(2, 'member', 'member', 'Member', 'hash', 'member', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 )
             )
@@ -42,6 +51,17 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
                     "(id, user_id, name, name_normalized, icon_key, color_key, image_path, parent_category_id, "
                     "sort_order, is_active, created_at, updated_at) VALUES "
                     "(1, 1, 'Gehalt', 'gehalt', 'wallet', 'green', 'original.webp', NULL, 1, 1, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO categories "
+                    "(id, user_id, name, name_normalized, icon_key, color_key, image_path, parent_category_id, "
+                    "sort_order, is_active, created_at, updated_at) VALUES "
+                    "(3, 3, 'Lebensmittel', 'lebensmittel', 'utensils', 'orange', 'rich-1.webp', NULL, 1, 1, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                    "(4, 3, 'Einnahmen', 'einnahmen', 'wallet', 'green', 'rich-2.webp', NULL, 2, 1, "
                     "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 )
             )
@@ -86,7 +106,10 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
                 text("SELECT amount, category_id, transaction_type FROM expenses WHERE id = 1")
             ).one()
             cashbook = connection.execute(
-                text("SELECT id, name, currency, created_by_user_id FROM cashbooks")
+                text(
+                    "SELECT id, name, currency, created_by_user_id, category_owner_user_id "
+                    "FROM cashbooks"
+                )
             ).one()
             memberships = connection.execute(
                 text("SELECT user_id, cashbook_id, role FROM cashbook_memberships ORDER BY user_id")
@@ -110,8 +133,18 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
             assert cashbook.name == "Nuam Kasse"
             assert cashbook.currency == "THB"
             assert cashbook.created_by_user_id == 1
-            assert memberships == [(1, cashbook.id, "admin"), (2, cashbook.id, "member")]
-            assert category_rows == [(1, 1, cashbook.id), (2, 2, cashbook.id)]
+            assert cashbook.category_owner_user_id == 3
+            assert memberships == [
+                (1, cashbook.id, "admin"),
+                (2, cashbook.id, "member"),
+                (3, cashbook.id, "member"),
+            ]
+            assert category_rows == [
+                (1, 1, cashbook.id),
+                (2, 2, cashbook.id),
+                (3, 3, cashbook.id),
+                (4, 3, cashbook.id),
+            ]
             assert expense_rows == [(1, 1, 1, 1), (2, 1, 2, 2)]
             assert period.id == 1
             assert period.cashbook_id == cashbook.id

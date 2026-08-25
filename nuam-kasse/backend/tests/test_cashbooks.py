@@ -140,7 +140,12 @@ def test_membership_tenant_boundary_blocks_foreign_ids(client, db_session):
     db_session.add(expense)
     outsider_membership = db_session.query(CashbookMembership).filter_by(user_id=outsider.id).one()
     db_session.delete(outsider_membership)
-    second_cashbook = Cashbook(name="Andere Kasse", currency="THB", created_by_user_id=outsider.id)
+    second_cashbook = Cashbook(
+        name="Andere Kasse",
+        currency="THB",
+        created_by_user_id=outsider.id,
+        category_owner_user_id=outsider.id,
+    )
     db_session.add(second_cashbook)
     db_session.flush()
     db_session.add(

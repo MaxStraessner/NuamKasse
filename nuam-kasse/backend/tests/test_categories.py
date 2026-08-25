@@ -83,6 +83,83 @@ def test_member_can_list_active_categories_sorted(client, db_session):
     assert [item["is_active"] for item in response.json()] == [False, True, True]
 
 
+def test_shared_cashbook_uses_one_preserved_category_structure_for_all_members(client, db_session):
+    admin = create_test_user(
+        db_session,
+        username="admin",
+        password="admin-pass",
+        role=UserRole.admin,
+    )
+    member = create_test_user(
+        db_session,
+        username="nuam",
+        password="member-pass",
+        role=UserRole.member,
+    )
+    first = create_test_category(
+        db_session,
+        name="Lebensmittel",
+        sort_order=1,
+        user_id=admin.id,
+    )
+    second = create_test_category(
+        db_session,
+        name="Einnahmen",
+        icon_key="wallet",
+        color_key="green",
+        sort_order=2,
+        user_id=admin.id,
+        category_type=CategoryType.income,
+    )
+    legacy_duplicate = create_test_category(
+        db_session,
+        name="Lebensmittel",
+        sort_order=1,
+        user_id=member.id,
+    )
+    cash_period = CashPeriod(
+        cashbook_id=get_test_cashbook(db_session).id,
+        name="August 2026",
+        opening_amount=Decimal("100.00"),
+        currency="THB",
+        start_date=date(2026, 8, 1),
+        status=CashPeriodStatus.active,
+        created_by_user_id=admin.id,
+    )
+    db_session.add(cash_period)
+    db_session.commit()
+
+    login(client, "admin", "admin-pass")
+    admin_categories = client.get("/api/v1/categories")
+    login(client, "nuam", "member-pass")
+    member_categories = client.get("/api/v1/categories")
+
+    assert admin_categories.status_code == 200
+    assert member_categories.status_code == 200
+    assert admin_categories.json() == member_categories.json()
+    assert [item["id"] for item in member_categories.json()] == [first.id, second.id]
+    assert legacy_duplicate.id not in {item["id"] for item in member_categories.json()}
+    hidden_booking = client.post(
+        "/api/v1/expenses",
+        json={"category_id": legacy_duplicate.id, "amount": "1.00"},
+    )
+    shared_booking = client.post(
+        "/api/v1/expenses",
+        json={"category_id": first.id, "amount": "1.00"},
+    )
+    assert hidden_booking.status_code == 404
+    assert shared_booking.status_code == 201
+    assert shared_booking.json()["expense"]["created_by"]["id"] == member.id
+
+    login(client, "admin", "admin-pass")
+    created = client.post(
+        "/api/v1/categories",
+        json={"name": "Neu", "icon_key": "gift", "color_key": "pink"},
+    )
+    assert created.status_code == 201
+    assert db_session.get(Category, created.json()["id"]).user_id == admin.id
+
+
 def test_admin_can_include_inactive_categories(client, db_session):
     create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     active = create_test_category(db_session, name="Essen", sort_order=1)
@@ -239,10 +316,15 @@ def test_admin_can_create_subcategories_and_reject_invalid_hierarchy(client, db_
 def test_category_parent_validation_rejects_foreign_inactive_and_self_parent(client, db_session):
     admin = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
-    own = create_test_category(db_session, name="Eigen", user_id=member.id)
-    inactive = create_test_category(db_session, name="Alt", is_active=False, user_id=member.id)
+    own = create_test_category(db_session, name="Eigen", user_id=admin.id)
+    inactive = create_test_category(db_session, name="Alt", is_active=False, user_id=admin.id)
     foreign = create_test_category(db_session, name="Fremd", user_id=admin.id)
-    foreign_cashbook = Cashbook(name="Fremde Kasse", currency="THB", created_by_user_id=admin.id)
+    foreign_cashbook = Cashbook(
+        name="Fremde Kasse",
+        currency="THB",
+        created_by_user_id=admin.id,
+        category_owner_user_id=admin.id,
+    )
     db_session.add(foreign_cashbook)
     db_session.flush()
     foreign.cashbook_id = foreign_cashbook.id
@@ -420,8 +502,8 @@ def test_category_archive_restore_delete_and_delete_guards(client, db_session):
 def test_update_rejects_foreign_unknown_category_and_duplicate_name(client, db_session):
     member = create_test_user(db_session, username="nuam", password="member-pass", role=UserRole.member)
     admin = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
-    first = create_test_category(db_session, name="Essen", user_id=admin.id)
-    second = create_test_category(db_session, name="Bank", icon_key="landmark", color_key="blue", sort_order=2, user_id=admin.id)
+    first = create_test_category(db_session, name="Essen", user_id=member.id)
+    second = create_test_category(db_session, name="Bank", icon_key="landmark", color_key="blue", sort_order=2, user_id=member.id)
     login(client, "nuam", "member-pass")
     foreign = client.patch(f"/api/v1/categories/{first.id}", json={"name": "Neu"})
 
@@ -573,7 +655,12 @@ def test_category_image_upload_rejects_invalid_too_large_and_foreign_files(clien
     other = create_test_user(db_session, username="other", password="other-pass", role=UserRole.member)
     own = create_test_category(db_session, name="Eigen", user_id=owner.id)
     foreign = create_test_category(db_session, name="Fremd", user_id=other.id)
-    foreign_cashbook = Cashbook(name="Fremde Kasse", currency="THB", created_by_user_id=other.id)
+    foreign_cashbook = Cashbook(
+        name="Fremde Kasse",
+        currency="THB",
+        created_by_user_id=other.id,
+        category_owner_user_id=other.id,
+    )
     db_session.add(foreign_cashbook)
     db_session.flush()
     foreign.cashbook_id = foreign_cashbook.id

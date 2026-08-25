@@ -91,7 +91,7 @@ def create_expense_row(
 def test_member_can_create_expense_and_summary_uses_real_spending(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
-    category = create_category(db_session, user_id=member.id)
+    category = create_category(db_session, user_id=admin.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
     login(client, "nuam")
 
@@ -221,12 +221,12 @@ def test_create_expense_validates_amount_and_remaining_amount(client, db_session
 def test_current_expenses_are_sorted_filtered_and_hide_voided_for_members(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
-    category = create_category(db_session, user_id=member.id)
+    category = create_category(db_session, user_id=admin.id)
     child_category = create_category(
         db_session,
         name="Baeckerei",
         parent_category_id=category.id,
-        user_id=member.id,
+        user_id=admin.id,
     )
     other_category = create_category(db_session, name="Einkauf", user_id=admin.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
@@ -280,7 +280,7 @@ def test_void_expense_permissions_and_summary(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     member = create_test_user(db_session, username="nuam", role=UserRole.member)
     other_member = create_test_user(db_session, username="nok", role=UserRole.member)
-    category = create_category(db_session, user_id=member.id)
+    category = create_category(db_session, user_id=admin.id)
     cash_period = create_cash_period(db_session, created_by_user_id=admin.id, opening_amount=Decimal("1000.00"))
     own_expense = create_expense_row(
         db_session,

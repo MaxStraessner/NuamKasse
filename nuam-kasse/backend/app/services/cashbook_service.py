@@ -50,7 +50,12 @@ def bootstrap_first_cashbook(db: Session, user: User) -> CashbookMembership | No
         return None
     if user.role != UserRole.admin:
         return None
-    cashbook = Cashbook(name="Nuam Kasse", currency="THB", created_by_user_id=user.id)
+    cashbook = Cashbook(
+        name="Nuam Kasse",
+        currency="THB",
+        created_by_user_id=user.id,
+        category_owner_user_id=user.id,
+    )
     db.add(cashbook)
     db.flush()
     membership = CashbookMembership(
