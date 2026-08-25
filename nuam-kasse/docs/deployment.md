@@ -8,6 +8,7 @@ Feature-Branch -> Pull Request -> CI -> Merge in main
   -> eingeschraenkter SSH-Befehl
   -> /usr/local/sbin/nuamkasse-deploy
   -> Health- und Commit-Bestaetigung
+  -> lokales main per Fast-Forward synchronisieren
 ```
 
 Direkte Feature-Branch-Deployments, manuelle SCP-/Docker-Updates und die Hostinger-Projekt-Updatefunktion sind fuer Nuam Kasse nicht zulaessig.
@@ -63,6 +64,7 @@ Kuenftige Kurzanweisung: **„Erstelle den Pull Request auf GitHub.“**
 7. Der exakte Commit wird in ein eigenes Release-Verzeichnis ausgecheckt; Images tragen den vollen Commit-Tag.
 8. Alembic laeuft einmalig als Migrationsservice. Danach werden nur Backend und Frontend aktualisiert.
 9. Container-Health, API-Health, Image-Tags und Revisionslabels muessen den Zielcommit bestaetigen.
+10. Nach dem bestaetigten Deployment lokal `git switch main` und `git pull --ff-only origin main` ausfuehren.
 
 Kuenftige Kurzanweisung nach geprueftem Merge: **„Deploye den aktuellen Stand von main auf die VPS.“**
 

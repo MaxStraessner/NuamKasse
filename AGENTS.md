@@ -4,7 +4,8 @@ Diese Regeln gelten fuer das gesamte Repository. Die Anwendung liegt unter `nuam
 
 ## Entwicklung und Pruefung
 
-- Lokaler Start: `cd nuam-kasse && docker compose up --build`
+- Lokaler Start: `cd nuam-kasse && docker compose up -d --build`
+- Der lokale Compose-Stack heisst verbindlich `nuam-kasse-local`, nutzt nur die eigenen Netzwerke und Volumes und bindet Frontend/Backend ausschliesslich an `127.0.0.1:8080` beziehungsweise `127.0.0.1:8000`. PostgreSQL wird nicht auf dem Host veroeffentlicht.
 - Backend-Test: `cd nuam-kasse/backend && pytest -q`
 - Backend-Syntaxcheck: `cd nuam-kasse/backend && python -m compileall -q app tests`
 - Frontend-Test: `cd nuam-kasse/frontend && npm ci && npm test`
@@ -21,6 +22,7 @@ Vor einem Pull Request muessen alle fuer die Aenderung relevanten Tests, Lint-/T
 - Commits sind klein, thematisch geschlossen und beschreiben die Wirkung im Imperativ. Keine fremden Aenderungen mitstagen.
 - Pull Requests zielen grundsaetzlich auf `main`, beschreiben Umfang, Risiken und Pruefnachweise und werden erst nach erfolgreicher CI gemergt.
 - Kein Force Push auf `main`. Kein direktes Deployment eines Feature Branches.
+- Nach einem bestaetigten VPS-Deployment wird der lokale Stand mit `git switch main` und `git pull --ff-only origin main` wieder auf den deployten `main` synchronisiert.
 - Codex darf fremde, unversionierte oder nicht zum Auftrag gehoerende Aenderungen niemals ueberschreiben, zuruecksetzen oder ungefragt committen.
 - Passwoerter, Tokens, `.env`-Dateien und private Schluessel duerfen niemals committed oder in Logs ausgegeben werden.
 
