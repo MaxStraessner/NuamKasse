@@ -241,6 +241,9 @@ Datenmodell:
 
 - `users`: Benutzername, normalisierter eindeutiger Benutzername, Anzeigename, Argon2-Passwort-Hash, Rolle, Aktivstatus, Pflicht-Passwortwechsel und Zeitstempel.
 - `user_sessions`: serverseitige Sitzung mit Benutzerbezug, Hash des Sitzungsschluessels, Ablaufzeit und letzter Verwendung.
+- `cashbook_memberships`: Kassenmitgliedschaft sowie Periodenmodus `all`, `selected` oder `current_and_future`.
+- `cash_period_permissions`: explizite Periodenfreigaben fuer den Modus `selected`.
+- `admin_audit_logs`: ausfuehrender Administrator, betroffener Benutzer, Aktion, sichere Metadaten und Zeitpunkt. Passwoerter werden nie protokolliert.
 
 Sicherheitsentscheidungen:
 
@@ -250,6 +253,10 @@ Sicherheitsentscheidungen:
 - Cookies verwenden `SameSite=Lax`; in Produktion muss `SESSION_COOKIE_SECURE=true` gesetzt werden.
 - Rollen- und Passwortwechsel-Pruefungen werden verbindlich im Backend durchgesetzt.
 - Der letzte aktive Administrator kann nicht deaktiviert oder zum Mitglied herabgestuft werden.
+- Globale Administratorrechte erlauben die Benutzerverwaltung, gewaehren aber nicht automatisch Zugriff auf fremde Kassen.
+- Die Kassenrolle bleibt davon getrennt; vor Deaktivierung oder Herabstufung der letzten aktiven Kassenadministration muss ein Ersatz bestimmt werden.
+- Ein administrativer Passwortreset widerruft alle bestehenden Sitzungen des betroffenen Benutzers.
+- Benutzerkonten werden zum Schutz historischer Buchungen deaktiviert und nicht physisch geloescht.
 
 API-Endpunkte:
 
@@ -261,20 +268,28 @@ API-Endpunkte:
 - `POST /api/v1/users`
 - `PATCH /api/v1/users/{user_id}`
 - `POST /api/v1/users/{user_id}/reset-password`
+- `PUT /api/v1/users/{user_id}/access`
+- `GET /api/v1/users/access-options`
+- `GET /api/v1/users/audit-log`
 
 CLI-Befehle:
 
 ```bash
-python -m app.scripts.create_admin
+python -m app.scripts.create_admin --username <name> --display-name <anzeige>
+python -m app.scripts.create_admin --username <name> --promote-existing
 python -m app.scripts.reset_password
 ```
 
 Im Docker-Setup:
 
 ```bash
-docker compose exec backend python -m app.scripts.create_admin
+docker compose exec backend python -m app.scripts.create_admin --username <name> --display-name <anzeige>
+docker compose exec backend python -m app.scripts.create_admin --username <name> --promote-existing
+docker compose exec backend python -m app.scripts.create_admin --username <name> --promote-existing --reset-password --generate-password
 docker compose exec backend python -m app.scripts.reset_password
 ```
+
+Das Passwort wird verdeckt interaktiv abgefragt oder aus der nur fuer den Prozess gesetzten Variable `NUAM_ADMIN_PASSWORD` gelesen. Mit `--generate-password` wird ein starkes Passwort erzeugt und genau einmal ausgegeben. Fuer einen vorhandenen Benutzer kann `--reset-password` bewusst mit `--promote-existing` kombiniert werden. Keine dieser Zugangsdaten gehoert in Git, Dockerfile, Compose oder Migrationen. Derselbe Befehl ist nach einem spaeteren, separat freigegebenen Deployment in der produktiven Backend-Instanz verwendbar.
 
 Einrichtungsablauf:
 
@@ -406,10 +421,15 @@ Seit dem Buchungsmodul gilt:
 
 Fachliche Regeln:
 
-- Alle Benutzer greifen auf dieselben Kassenperioden zu.
+- Kassenmitgliedschaft ist die Voraussetzung fuer jeden Periodenzugriff.
+- Pro Kasse kann die bestehende Kassenrolle `member` oder `admin` in derselben Zugriffsverwaltung uebertragen werden.
+- Bestehende Mitgliedschaften behalten durch die additive Migration den Modus `all`.
+- `all` erlaubt alle vorhandenen und neuen Perioden der Kasse.
+- `selected` erlaubt nur explizit gewaehlte Perioden.
+- `current_and_future` setzt eine persistierte Startgrenze auf die bei Vergabe aktive Periode und erlaubt diese sowie spaeter beginnende Perioden automatisch.
 - Es darf immer nur eine aktive Kassenperiode geben.
-- Normale Benutzer duerfen die aktive Kassenperiode und deren Zusammenfassung lesen.
-- Nur Administratoren duerfen Kassenperioden anlegen, bearbeiten, abschliessen und die Historie sehen.
+- Mitglieder duerfen nur freigegebene Perioden und deren Inhalte lesen.
+- Kassenadministratoren duerfen Kassenperioden anlegen, bearbeiten und abschliessen; die serverseitige Periodenpruefung bleibt fuer vorhandene Perioden wirksam.
 - Abgeschlossene Kassenperioden bleiben dauerhaft gespeichert.
 - Abgeschlossene Kassenperioden duerfen nicht mehr bearbeitet oder reaktiviert werden.
 - Kassenperioden werden nicht geloescht.
@@ -452,10 +472,10 @@ API-Endpunkte:
 
 - `GET /api/v1/cash-periods/current`: aktive Kassenperiode fuer angemeldete Benutzer.
 - `GET /api/v1/cash-periods/current/summary`: Zusammenfassung der aktiven Kassenperiode.
-- `GET /api/v1/cash-periods`: Historie und aktive Periode, nur fuer Administratoren.
+- `GET /api/v1/cash-periods`: nur die fuer den Benutzer freigegebenen aktiven und historischen Perioden.
 - `GET /api/v1/cash-periods?status=active`
 - `GET /api/v1/cash-periods?status=closed`
-- `GET /api/v1/cash-periods/{cash_period_id}`: einzelne Periode, nur fuer Administratoren.
+- `GET /api/v1/cash-periods/{cash_period_id}`: einzelne Periode mit serverseitiger Periodenpruefung.
 - `POST /api/v1/cash-periods`: neue aktive Kassenperiode anlegen, nur fuer Administratoren.
 - `PATCH /api/v1/cash-periods/{cash_period_id}`: aktive Periode bearbeiten, nur fuer Administratoren.
 - `POST /api/v1/cash-periods/{cash_period_id}/close`: aktive Periode abschliessen, nur fuer Administratoren.

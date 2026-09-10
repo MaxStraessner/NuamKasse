@@ -1,5 +1,12 @@
 import { apiRequest } from "./apiClient";
-import type { User, UserCreateInput, UserUpdateInput } from "../types/user";
+import type {
+  AdminAuditLog,
+  CashbookAccessOption,
+  User,
+  UserCashbookAccessInput,
+  UserCreateInput,
+  UserUpdateInput,
+} from "../types/user";
 
 export function listUsers(): Promise<User[]> {
   return apiRequest<User[]>("/users");
@@ -21,4 +28,22 @@ export function resetUserPassword(
     method: "POST",
     body: input,
   });
+}
+
+export function listCashbookAccessOptions(): Promise<CashbookAccessOption[]> {
+  return apiRequest<CashbookAccessOption[]>("/users/access-options");
+}
+
+export function updateUserAccess(
+  id: number,
+  cashbookAccesses: UserCashbookAccessInput[],
+): Promise<User> {
+  return apiRequest<User>(`/users/${id}/access`, {
+    method: "PUT",
+    body: { cashbook_accesses: cashbookAccesses },
+  });
+}
+
+export function listUserAuditLog(id: number): Promise<AdminAuditLog[]> {
+  return apiRequest<AdminAuditLog[]>(`/users/audit-log?target_user_id=${id}&limit=50`);
 }

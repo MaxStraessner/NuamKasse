@@ -7,6 +7,8 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.user import User, UserRole, utc_now
 from app.models.user_session import UserSession
+from app.models.cash_period import CashPeriod
+from app.services.access_control_service import membership_can_access_cash_period
 from app.services.auth_service import get_session_by_token
 from app.services.cashbook_service import CashbookAccess, get_cashbook_access
 
@@ -121,3 +123,18 @@ def require_cashbook_admin(
             },
         )
     return access
+
+
+def ensure_cash_period_access(
+    db: Session,
+    access: CashbookAccess,
+    cash_period: CashPeriod,
+) -> None:
+    if not membership_can_access_cash_period(db, access.membership, cash_period):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "cash_period_access_required",
+                "message": "Für diese Kassenperiode besteht keine Berechtigung.",
+            },
+        )

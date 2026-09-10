@@ -28,7 +28,7 @@ export function SettingsPage() {
 
       <AppCard className="account-card">
         <div className="account-card__avatar" aria-hidden="true">{user?.display_name?.slice(0, 1).toUpperCase()}</div>
-        <div><strong>{user?.display_name}</strong><span>@{user?.username} · {user?.cashbook_role === "admin" ? "Administrator" : "Mitglied"}</span></div>
+        <div><strong>{user?.display_name}</strong><span>@{user?.username} · {user?.role === "admin" ? "Administrator" : "Mitglied"}</span></div>
       </AppCard>
 
       <section className="settings-section" aria-labelledby="security-settings">
@@ -46,13 +46,13 @@ export function SettingsPage() {
         </AppCard>
       </section>
 
-      {user?.cashbook_role === "admin" ? (
+      {user?.role === "admin" || user?.cashbook_role === "admin" ? (
         <section className="settings-section" aria-labelledby="admin-settings">
-          <h2 id="admin-settings">Verwaltung</h2>
+          <h2 id="admin-settings">Administration</h2>
           <AppCard className="settings-menu">
-            <SettingsLink description="Einnahmen- und Ausgabenbereiche verwalten" icon={Layers3} label="Kategorien" to="/settings/categories" />
-            <SettingsLink description="Bestehende Benutzer der Kasse zuordnen" icon={UsersRound} label="Mitglieder" to="/settings/members" />
-            <SettingsLink description="Konten, Rollen und Zugänge" icon={UserRoundCog} label="Benutzer" to="/settings/users" />
+            {user?.cashbook_role === "admin" ? <SettingsLink description="Einnahmen- und Ausgabenbereiche verwalten" icon={Layers3} label="Kategorien" to="/settings/categories" /> : null}
+            {user?.cashbook_role === "admin" ? <SettingsLink description="Bestehende Benutzer der Kasse zuordnen" icon={UsersRound} label="Mitglieder" to="/settings/members" /> : null}
+            {user?.role === "admin" ? <SettingsLink description="Konten, Rollen, Kassen und Perioden" icon={UserRoundCog} label="Benutzer" to="/settings/users" /> : null}
           </AppCard>
         </section>
       ) : null}

@@ -1,7 +1,7 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -11,6 +11,12 @@ from app.models.user import utc_now
 class CashbookRole(str, enum.Enum):
     admin = "admin"
     member = "member"
+
+
+class PeriodAccessMode(str, enum.Enum):
+    all = "all"
+    selected = "selected"
+    current_and_future = "current_and_future"
 
 
 class Cashbook(Base):
@@ -59,7 +65,19 @@ class CashbookMembership(Base):
     role: Mapped[CashbookRole] = mapped_column(
         Enum(CashbookRole, native_enum=False), nullable=False, default=CashbookRole.member
     )
+    period_access_mode: Mapped[PeriodAccessMode] = mapped_column(
+        Enum(PeriodAccessMode, native_enum=False),
+        nullable=False,
+        default=PeriodAccessMode.all,
+        server_default=PeriodAccessMode.all.value,
+    )
+    period_access_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     cashbook = relationship("Cashbook", back_populates="memberships")
     user = relationship("User", back_populates="cashbook_memberships")
+    period_permissions = relationship(
+        "CashPeriodPermission",
+        back_populates="membership",
+        cascade="all, delete-orphan",
+    )

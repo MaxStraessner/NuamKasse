@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_cashbook_admin, require_cashbook_member
+from app.api.dependencies.auth import (
+    ensure_cash_period_access,
+    require_cashbook_admin,
+    require_cashbook_member,
+)
 from app.db.session import get_db
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.schemas.cash_period import (
@@ -20,6 +24,7 @@ from app.schemas.cash_period import (
     CashPeriodUpdate,
 )
 from app.services.cashbook_service import CashbookAccess
+from app.services.access_control_service import membership_can_access_cash_period
 from app.services.cash_period_service import (
     CashPeriodServiceError,
     close_cash_period,
@@ -55,6 +60,7 @@ def _get_cash_period(db: Session, cash_period_id: int, access: CashbookAccess) -
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "cash_period_not_found", "message": "Kassenperiode nicht gefunden."},
         )
+    ensure_cash_period_access(db, access, cash_period)
     return cash_period
 
 
@@ -68,6 +74,7 @@ def _get_active_or_404(db: Session, access: CashbookAccess) -> CashPeriod:
                 "message": "Es ist keine aktive Kassenperiode vorhanden.",
             },
         )
+    ensure_cash_period_access(db, access, cash_period)
     return cash_period
 
 
@@ -105,6 +112,7 @@ def read_cash_periods(
             cashbook_id=access.cashbook.id,
             status_filter=status_filter,
         )
+        if membership_can_access_cash_period(db, access.membership, item["cash_period"])
     ]
 
 
@@ -204,6 +212,7 @@ def close_cash_period_endpoint(
     db: Session = Depends(get_db),
     access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> dict[str, object]:
+    _get_cash_period(db, cash_period_id, access)
     try:
         closed_period, summary = close_cash_period(
             db,

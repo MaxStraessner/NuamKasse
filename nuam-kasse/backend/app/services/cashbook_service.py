@@ -11,6 +11,8 @@ from app.models.cashbook import Cashbook, CashbookMembership, CashbookRole
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, UserRole
 from app.services.cash_summary_service import get_cash_period_summary
+from app.services.access_control_service import membership_can_access_cash_period
+from app.services.audit_service import record_admin_action
 
 
 class CashbookServiceError(ValueError):
@@ -108,7 +110,13 @@ def list_member_candidates(db: Session, cashbook_id: int) -> list[User]:
     )
 
 
-def add_cashbook_member(db: Session, *, cashbook: Cashbook, user_id: int) -> CashbookMembership:
+def add_cashbook_member(
+    db: Session,
+    *,
+    cashbook: Cashbook,
+    user_id: int,
+    actor: User | None = None,
+) -> CashbookMembership:
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise CashbookServiceError(
@@ -126,6 +134,14 @@ def add_cashbook_member(db: Session, *, cashbook: Cashbook, user_id: int) -> Cas
         role=CashbookRole.member,
     )
     db.add(membership)
+    db.flush()
+    record_admin_action(
+        db,
+        actor=actor,
+        target=user,
+        action="user.cashbook_access_changed",
+        details={"cashbook_id": cashbook.id, "change": "added", "period_access_mode": "all"},
+    )
     try:
         db.commit()
     except IntegrityError as exc:
@@ -157,7 +173,13 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
             )
         )
         current_balance = "0.00"
-        if active_period is not None:
+        visible_active_period = (
+            active_period
+            if active_period is not None
+            and membership_can_access_cash_period(db, membership, active_period)
+            else None
+        )
+        if visible_active_period is not None:
             current_balance = str(get_cash_period_summary(db, active_period)["remaining_amount"])
         result.append(
             {
@@ -167,7 +189,7 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
                 "currency": cashbook.currency,
                 "role": membership.role,
                 "current_balance": current_balance,
-                "active_period_id": active_period.id if active_period else None,
+                "active_period_id": visible_active_period.id if visible_active_period else None,
             }
         )
     return result
@@ -228,6 +250,13 @@ def create_cashbook(
                 role=CashbookRole.member,
             )
         )
+        record_admin_action(
+            db,
+            actor=created_by,
+            target=member,
+            action="user.cashbook_access_changed",
+            details={"cashbook_id": cashbook.id, "change": "added", "period_access_mode": "all"},
+        )
     period_start = start_date or date.today()
     period = CashPeriod(
         cashbook_id=cashbook.id,
@@ -257,6 +286,7 @@ def remove_cashbook_member(
     *,
     cashbook: Cashbook,
     user_id: int,
+    actor: User | None = None,
 ) -> None:
     membership = db.scalar(
         select(CashbookMembership).where(
@@ -274,5 +304,13 @@ def remove_cashbook_member(
             code="cashbook_admin_required",
             status_code=409,
         )
+    target = membership.user
+    record_admin_action(
+        db,
+        actor=actor,
+        target=target,
+        action="user.cashbook_access_changed",
+        details={"cashbook_id": cashbook.id, "change": "removed"},
+    )
     db.delete(membership)
     db.commit()

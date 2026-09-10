@@ -51,7 +51,7 @@ export function PublicOnlyRoute() {
 export function AdminRoute() {
   const auth = useAuth();
 
-  if (auth.user?.cashbook_role !== "admin") {
+  if (auth.user?.role !== "admin") {
     return <Navigate to="/settings" replace />;
   }
 
