@@ -39,6 +39,13 @@ class CashPeriodCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CashPeriodStartRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    start_date: date | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class CashPeriodRead(BaseModel):
     id: int
     name: str
@@ -52,10 +59,21 @@ class CashPeriodRead(BaseModel):
     updated_at: datetime
     closed_at: datetime | None
     closed_by: CashPeriodUserRead | None
+    closed_opening_amount: Decimal | None = None
+    closed_income_amount: Decimal | None = None
+    closed_expense_amount: Decimal | None = None
+    closed_balance_amount: Decimal | None = None
+    closed_booking_count: int | None = None
 
-    @field_serializer("opening_amount")
-    def serialize_opening_amount(self, value: Decimal) -> str:
-        return format_money(value)
+    @field_serializer(
+        "opening_amount",
+        "closed_opening_amount",
+        "closed_income_amount",
+        "closed_expense_amount",
+        "closed_balance_amount",
+    )
+    def serialize_money(self, value: Decimal | None) -> str | None:
+        return format_money(value) if value is not None else None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,5 +103,4 @@ class CashPeriodArchiveItem(CashPeriodRead):
 
 class CashPeriodCloseResult(BaseModel):
     closed_period: CashPeriodRead
-    new_period: CashPeriodRead
     summary: CashPeriodSummary

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +9,7 @@ class CashbookRead(BaseModel):
     id: int
     name: str
     currency: str
+    description: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,3 +44,19 @@ class CashbookMemberCreate(BaseModel):
     user_id: int = Field(gt=0)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class CashbookCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    opening_amount: str = Field(min_length=1, max_length=20)
+    description: str | None = Field(default=None, max_length=1000)
+    member_user_ids: list[int] = Field(default_factory=list)
+    start_date: date | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CashbookListItem(CashbookRead):
+    role: CashbookRole
+    current_balance: str
+    active_period_id: int | None

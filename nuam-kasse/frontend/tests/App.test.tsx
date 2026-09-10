@@ -1514,7 +1514,7 @@ describe("Cash periods", () => {
     expect(screen.queryByText("Kassenperioden")).not.toBeInTheDocument();
   });
 
-  test("admin can create and edit a cash period", async () => {
+  test("admin can edit an active cash period", async () => {
     let cashPeriods: CashPeriod[] = [activeCashPeriod];
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
@@ -1528,11 +1528,6 @@ describe("Cash periods", () => {
       }
       if (url.endsWith("/cash-periods") && options?.method === "GET") {
         return jsonResponse(cashPeriods);
-      }
-      if (url.endsWith("/cash-periods") && options?.method === "POST") {
-        const created = { ...activeCashPeriod, id: 3, name: "August 2026", start_date: "2026-08-01" };
-        cashPeriods = [created, ...cashPeriods];
-        return jsonResponse(created, 201);
       }
       if (url.includes("/cash-periods/1") && options?.method === "PATCH") {
         const patch = JSON.parse(String(options.body)) as Partial<typeof activeCashPeriod>;
@@ -1552,13 +1547,6 @@ describe("Cash periods", () => {
     expect(await screen.findByRole("heading", { name: "Kassenperioden" })).toBeInTheDocument();
     expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Neu" }));
-    fireEvent.change(screen.getByLabelText("Beginn"), { target: { value: "2026-08-01" } });
-    fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "21000.00" } });
-    fireEvent.click(screen.getByRole("button", { name: "Kassenperiode anlegen" }));
-    expect(await screen.findByText("Kassenperiode wurde angelegt.")).toBeInTheDocument();
-    expect(screen.getByText("August 2026")).toBeInTheDocument();
-
     const julyCard = screen.getByText("Juli 2026").closest(".app-card");
     expect(julyCard).not.toBeNull();
     fireEvent.click(within(julyCard as HTMLElement).getByRole("button", { name: "Bearbeiten" }));
@@ -1569,7 +1557,7 @@ describe("Cash periods", () => {
     expect(screen.getByText("Juli korrigiert")).toBeInTheDocument();
   });
 
-  test("admin can close an active cash period and closed period has no edit action", async () => {
+  test("admin can close an active cash period and start the next period", async () => {
     let cashPeriods: CashPeriod[] = [activeCashPeriod];
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
@@ -1586,13 +1574,16 @@ describe("Cash periods", () => {
       }
       if (url.includes("/cash-periods/1/close") && options?.method === "POST") {
         const closedPeriod = { ...closedCashPeriod, id: 1, name: "Juli 2026" };
-        const newPeriod = { ...activeCashPeriod, id: 3, name: "August 2026", start_date: "2026-08-01" };
-        cashPeriods = [closedPeriod, newPeriod];
+        cashPeriods = [closedPeriod];
         return jsonResponse({
           closed_period: closedPeriod,
-          new_period: newPeriod,
           summary: { ...spentCashSummary, status: "closed" },
         });
+      }
+      if (url.endsWith("/cash-periods/start") && options?.method === "POST") {
+        const newPeriod = { ...activeCashPeriod, id: 3, name: "August 2026", opening_amount: "19875.00", start_date: "2026-08-01" };
+        cashPeriods = [newPeriod, ...cashPeriods];
+        return jsonResponse(newPeriod, 201);
       }
       if (url.endsWith("/categories")) {
         return jsonResponse([essenCategory]);
@@ -1604,12 +1595,14 @@ describe("Cash periods", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
     fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Kassenperiode abschließen" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Kassenperiode abschließen" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Kasse abschließen" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Kassenperiode endgültig abschließen" }));
 
-    expect(await screen.findByText(/Kassenperiode wurde abgeschlossen.*August 2026 ist jetzt aktiv/)).toBeInTheDocument();
+    expect(await screen.findByText(/Kassenperiode abgeschlossen.*Endbestand/)).toBeInTheDocument();
     expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
     expect(screen.getByText("Juli 2026")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Neue Kassenperiode starten" }));
+    expect(await screen.findByText(/August 2026 wurde mit.*Anfangsbestand gestartet/)).toBeInTheDocument();
   });
 
   test("create form shows validation and conflict errors", async () => {
@@ -1624,7 +1617,7 @@ describe("Cash periods", () => {
         return jsonResponse(activeCashPeriod);
       }
       if (url.endsWith("/cash-periods") && options?.method === "GET") {
-        return jsonResponse([activeCashPeriod]);
+        return jsonResponse([]);
       }
       if (url.endsWith("/cash-periods") && options?.method === "POST") {
         return jsonResponse(

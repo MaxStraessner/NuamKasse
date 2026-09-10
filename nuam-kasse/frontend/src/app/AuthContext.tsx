@@ -8,7 +8,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import { ApiError } from "../services/apiClient";
+import { ApiError, setActiveCashbookId } from "../services/apiClient";
 import {
   changePassword as changePasswordRequest,
   fetchCurrentUser,
@@ -28,6 +28,7 @@ type AuthContextValue = {
   login: (input: LoginInput) => Promise<User>;
   logout: () => Promise<void>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
+  selectCashbook: (cashbookId: number) => Promise<User | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -86,6 +87,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [refreshUser],
   );
 
+  const selectCashbook = useCallback(async (cashbookId: number) => {
+    setActiveCashbookId(cashbookId);
+    return refreshUser();
+  }, [refreshUser]);
+
   const value = useMemo(
     () => ({
       user,
@@ -96,8 +102,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       login,
       logout,
       changePassword,
+      selectCashbook,
     }),
-    [changePassword, error, isLoading, login, logout, refreshUser, user],
+    [changePassword, error, isLoading, login, logout, refreshUser, selectCashbook, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

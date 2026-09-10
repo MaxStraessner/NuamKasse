@@ -106,7 +106,17 @@ def test_closed_period_export_contains_analytics_charts_categories_and_all_booki
     assert workbook.sheetnames == ["Übersicht", "Kategorien", "Buchungen"]
     assert repeated_workbook.sheetnames == workbook.sheetnames
     assert len(workbook["Übersicht"]._charts) >= 2
-    assert workbook["Übersicht"]["A1"].value == "Kassenbericht"
+    chart_references = " ".join(
+        series.val.numRef.f
+        for chart in workbook["Übersicht"]._charts
+        for series in chart.ser
+        if series.val is not None and series.val.numRef is not None
+    )
+    assert "'Übersicht'!$H$4:$H$5" in chart_references
+    assert "'Übersicht'!$B$19" in chart_references
+    assert "'Übersicht'!$K$4:$K$5" in chart_references
+    assert "'Übersicht'!$L$4:$L$5" in chart_references
+    assert workbook["Übersicht"]["A1"].value == "Nuam Kasse"
     metric_values = {
         workbook["Übersicht"].cell(row, 1).value: workbook["Übersicht"].cell(row, 2).value
         for row in range(10, 16)
@@ -122,11 +132,12 @@ def test_closed_period_export_contains_analytics_charts_categories_and_all_booki
 
     booking_rows = list(workbook["Buchungen"].iter_rows(min_row=4, values_only=True))
     assert len(booking_rows) == 2
-    assert {row[1] for row in booking_rows} == {admin.display_name, member.display_name}
-    assert {row[6] for row in booking_rows} == {"Wochenmarkt", "Einlage"}
+    assert {row[7] for row in booking_rows} == {admin.display_name, member.display_name}
+    assert {row[5] for row in booking_rows} == {"Wochenmarkt", "Einlage"}
+    assert {row[6] for row in booking_rows} == {250, 500}
 
 
-def test_active_period_cannot_be_exported(client, db_session):
+def test_active_period_can_be_exported(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     period = CashPeriod(
         cashbook_id=get_test_cashbook(db_session).id,
@@ -143,5 +154,7 @@ def test_active_period_cannot_be_exported(client, db_session):
 
     response = client.get(f"/api/v1/cash-periods/{period.id}/export.xlsx")
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "cash_period_export_unavailable"
+    assert response.status_code == 200
+    workbook = load_workbook(BytesIO(response.content), data_only=False)
+    assert workbook["Übersicht"]["B6"].value == "Laufende Kassenperiode"
+    assert workbook.sheetnames == ["Übersicht", "Kategorien", "Buchungen"]

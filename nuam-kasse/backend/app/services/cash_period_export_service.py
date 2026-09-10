@@ -4,7 +4,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, PieChart, Reference
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -47,7 +47,7 @@ def _plain_datetime(value: datetime | None) -> datetime | None:
 
 
 def _period_range(cash_period: CashPeriod) -> str:
-    end_date = cash_period.end_date.strftime("%d.%m.%Y") if cash_period.end_date else "ohne Enddatum"
+    end_date = cash_period.end_date.strftime("%d.%m.%Y") if cash_period.end_date else "heute"
     return f"{cash_period.start_date:%d.%m.%Y} – {end_date}"
 
 
@@ -173,9 +173,6 @@ def build_cash_period_export(
     cashbook: Cashbook,
     cash_period: CashPeriod,
 ) -> BytesIO:
-    if cash_period.status != CashPeriodStatus.closed:
-        raise CashPeriodExportError("Nur abgeschlossene Kassenperioden können exportiert werden.")
-
     summary = get_cash_period_summary(db, cash_period)
     expenses = _load_expenses(db, cash_period.id)
     categories = _category_analytics(expenses)
@@ -186,18 +183,24 @@ def build_cash_period_export(
     workbook = Workbook()
     overview = workbook.active
     overview.title = "Übersicht"
-    _style_title(overview, "Kassenbericht", 8)
+    _style_title(overview, "Nuam Kasse", 12)
+    status_label = (
+        "Laufende Kassenperiode"
+        if cash_period.status == CashPeriodStatus.active
+        else "Abgeschlossen"
+    )
     metadata = (
         ("Kasse", cashbook.name),
         ("Periode", cash_period.name),
         ("Zeitraum", _period_range(cash_period)),
+        ("Status", status_label),
         ("Abgeschlossen am", _plain_datetime(cash_period.closed_at)),
         ("Anzahl Buchungen", summary["active_expense_count"]),
     )
     for row_index, (label, value) in enumerate(metadata, 3):
         overview.cell(row_index, 1, label).font = Font(bold=True, color="173F5F")
         overview.cell(row_index, 2, value)
-    overview["B6"].number_format = "dd.mm.yyyy hh:mm"
+    overview["B7"].number_format = "dd.mm.yyyy hh:mm"
 
     overview["A9"] = "Kennzahl"
     overview["B9"] = "Wert"
@@ -229,18 +232,21 @@ def build_cash_period_export(
     overview["H5"] = _as_number(summary["spent_amount"])
     overview["H4"].number_format = money_format
     overview["H5"].number_format = money_format
-    comparison_chart = BarChart()
-    comparison_chart.title = "Einnahmen gegenüber Ausgaben"
-    comparison_chart.y_axis.title = currency
-    comparison_chart.height = 7
-    comparison_chart.width = 12
-    comparison_chart.add_data(Reference(overview, min_col=8, min_row=3, max_row=5), titles_from_data=True)
-    comparison_chart.set_categories(Reference(overview, min_col=7, min_row=4, max_row=5))
-    overview.add_chart(comparison_chart, "D8")
+    if Decimal(str(summary["income_amount"])) or Decimal(str(summary["spent_amount"])):
+        comparison_chart = BarChart()
+        comparison_chart.title = "Einnahmen und Ausgaben im Vergleich"
+        comparison_chart.y_axis.title = currency
+        comparison_chart.height = 7
+        comparison_chart.width = 12
+        comparison_chart.add_data(Reference(overview, min_col=8, min_row=3, max_row=5), titles_from_data=True)
+        comparison_chart.set_categories(Reference(overview, min_col=7, min_row=4, max_row=5))
+        overview.add_chart(comparison_chart, "D8")
 
     expense_by_root: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for item in categories:
-        expense_by_root[str(item["root"])] += Decimal(str(item["expense"]))
+        amount = Decimal(str(item["expense"]))
+        if amount > 0:
+            expense_by_root[str(item["root"])] += amount
     chart_start = 18
     overview.cell(chart_start, 1, "Oberkategorie")
     overview.cell(chart_start, 2, "Ausgaben")
@@ -265,6 +271,38 @@ def build_cash_period_export(
         )
         overview.add_chart(expense_chart, "D24")
 
+    daily: dict[object, dict[str, Decimal]] = defaultdict(
+        lambda: {"income": Decimal("0.00"), "expense": Decimal("0.00")}
+    )
+    for expense in expenses:
+        if expense.is_voided:
+            continue
+        key = expense.created_at.date()
+        target = "income" if expense.transaction_type == CategoryType.income else "expense"
+        daily[key][target] += expense.amount
+    if len(daily) >= 2:
+        overview["J3"] = "Datum"
+        overview["K3"] = "Einnahmen"
+        overview["L3"] = "Ausgaben"
+        _style_header(overview[3][9:12])
+        for row_index, (day, amounts) in enumerate(sorted(daily.items()), 4):
+            overview.cell(row_index, 10, day).number_format = "dd.mm.yyyy"
+            overview.cell(row_index, 11, _as_number(amounts["income"])).number_format = money_format
+            overview.cell(row_index, 12, _as_number(amounts["expense"])).number_format = money_format
+        trend_chart = LineChart()
+        trend_chart.title = "Entwicklung über die Kassenperiode"
+        trend_chart.y_axis.title = currency
+        trend_chart.height = 8
+        trend_chart.width = 12
+        trend_chart.add_data(
+            Reference(overview, min_col=11, max_col=12, min_row=3, max_row=3 + len(daily)),
+            titles_from_data=True,
+        )
+        trend_chart.set_categories(
+            Reference(overview, min_col=10, min_row=4, max_row=3 + len(daily))
+        )
+        overview.add_chart(trend_chart, "D40")
+
     user_start = chart_start + max(len(expense_by_root), 1) + 3
     overview.cell(user_start, 1, "Erfasst von")
     overview.cell(user_start, 2, "Einnahmen")
@@ -284,7 +322,7 @@ def build_cash_period_export(
     overview.page_setup.orientation = "landscape"
     overview.page_setup.fitToWidth = 1
     overview.sheet_properties.pageSetUpPr.fitToPage = True
-    _fit_columns(overview, {1: 24, 2: 22, 3: 16, 4: 16, 5: 14, 7: 18, 8: 18})
+    _fit_columns(overview, {1: 24, 2: 22, 3: 16, 4: 16, 5: 14, 7: 18, 8: 18, 10: 14, 11: 18, 12: 18})
 
     category_sheet = workbook.create_sheet("Kategorien")
     _style_title(category_sheet, "Kategorienanalyse", 6)
@@ -326,50 +364,53 @@ def build_cash_period_export(
     _fit_columns(category_sheet, {1: 26, 2: 28, 3: 18, 4: 18, 5: 18, 6: 14})
 
     transaction_sheet = workbook.create_sheet("Buchungen")
-    _style_title(transaction_sheet, "Buchungen", 10)
+    _style_title(transaction_sheet, "Buchungen", 11)
     transaction_headers = (
         "Datum",
-        "Erfasst von",
-        "Typ",
-        "Oberkategorie",
+        "Uhrzeit",
+        "Art",
+        "Kategorie",
         "Unterkategorie",
+        "Beschreibung",
         "Betrag",
-        "Notiz",
+        "Erfasst von",
         "Status",
         "Storniert am",
         "Stornierungsgrund",
     )
     for column_index, header in enumerate(transaction_headers, 1):
         transaction_sheet.cell(3, column_index, header)
-    _style_header(transaction_sheet[3][0:10])
+    _style_header(transaction_sheet[3][0:11])
     for row_index, expense in enumerate(expenses, 4):
         parent = expense.category.parent
-        transaction_sheet.cell(row_index, 1, _plain_datetime(expense.created_at)).number_format = "dd.mm.yyyy hh:mm"
-        transaction_sheet.cell(row_index, 2, expense.created_by.display_name)
+        created_at = _plain_datetime(expense.created_at)
+        transaction_sheet.cell(row_index, 1, created_at.date()).number_format = "dd.mm.yyyy"
+        transaction_sheet.cell(row_index, 2, created_at.time()).number_format = "hh:mm"
         transaction_sheet.cell(row_index, 3, "Einnahme" if expense.transaction_type == CategoryType.income else "Ausgabe")
         transaction_sheet.cell(row_index, 4, parent.name if parent else expense.category.name)
         transaction_sheet.cell(row_index, 5, expense.category.name if parent else "—")
-        transaction_sheet.cell(row_index, 6, _as_number(expense.amount)).number_format = money_format
-        transaction_sheet.cell(row_index, 7, expense.note or "")
-        transaction_sheet.cell(row_index, 8, "Storniert" if expense.is_voided else "Gültig")
-        transaction_sheet.cell(row_index, 9, _plain_datetime(expense.voided_at)).number_format = "dd.mm.yyyy hh:mm"
-        transaction_sheet.cell(row_index, 10, expense.void_reason or "")
+        transaction_sheet.cell(row_index, 6, expense.note or "")
+        transaction_sheet.cell(row_index, 7, _as_number(expense.amount)).number_format = money_format
+        transaction_sheet.cell(row_index, 8, expense.created_by.display_name)
+        transaction_sheet.cell(row_index, 9, "Storniert" if expense.is_voided else "Gültig")
+        transaction_sheet.cell(row_index, 10, _plain_datetime(expense.voided_at)).number_format = "dd.mm.yyyy hh:mm"
+        transaction_sheet.cell(row_index, 11, expense.void_reason or "")
     _add_table(
         transaction_sheet,
         name="BuchungenListe",
         start_row=3,
         end_row=3 + len(expenses),
-        end_column=10,
+        end_column=11,
     )
     transaction_sheet.freeze_panes = "A4"
-    transaction_sheet.auto_filter.ref = f"A3:J{max(3, 3 + len(expenses))}"
+    transaction_sheet.auto_filter.ref = f"A3:K{max(3, 3 + len(expenses))}"
     transaction_sheet.sheet_view.showGridLines = False
     transaction_sheet.page_setup.orientation = "landscape"
     transaction_sheet.page_setup.fitToWidth = 1
     transaction_sheet.sheet_properties.pageSetUpPr.fitToPage = True
     _fit_columns(
         transaction_sheet,
-        {1: 20, 2: 22, 3: 14, 4: 24, 5: 26, 6: 18, 7: 34, 8: 14, 9: 20, 10: 30},
+        {1: 14, 2: 10, 3: 14, 4: 24, 5: 26, 6: 34, 7: 18, 8: 22, 9: 14, 10: 20, 11: 30},
     )
 
     output = BytesIO()

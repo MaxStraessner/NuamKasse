@@ -1,9 +1,19 @@
 import { apiRequest } from "./apiClient";
 import type {
   Cashbook,
+  CashbookCreate,
+  CashbookListItem,
   CashbookMemberCandidate,
   CashbookMembership,
 } from "../types/cashbook";
+
+export function listCashbooks(): Promise<CashbookListItem[]> {
+  return apiRequest<CashbookListItem[]>("/cashbooks");
+}
+
+export function createCashbook(payload: CashbookCreate): Promise<Cashbook> {
+  return apiRequest<Cashbook>("/cashbooks", { method: "POST", body: payload });
+}
 
 export function getCurrentCashbook(): Promise<Cashbook> {
   return apiRequest<Cashbook>("/cashbooks/current");

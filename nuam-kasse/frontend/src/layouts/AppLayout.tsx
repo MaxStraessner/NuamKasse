@@ -1,4 +1,4 @@
-import { CircleUserRound } from "lucide-react";
+import { CircleUserRound, WalletCards } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
@@ -14,6 +14,9 @@ export function AppLayout() {
     <div className="app-shell">
       <div className="user-strip">
         <span>Hallo, {user?.display_name}</span>
+        <Link className="cashbook-switch" aria-label="Kasse wechseln" to="/cashbooks">
+          <WalletCards aria-hidden="true" />{user?.cashbook_name || "Kasse wählen"}
+        </Link>
         <Link aria-label="Konto und Einstellungen öffnen" to="/settings">
           <CircleUserRound aria-hidden="true" />
         </Link>

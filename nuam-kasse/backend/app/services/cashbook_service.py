@@ -1,11 +1,16 @@
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.money import MoneyError, parse_money
 from app.models.cashbook import Cashbook, CashbookMembership, CashbookRole
+from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, UserRole
+from app.services.cash_summary_service import get_cash_period_summary
 
 
 class CashbookServiceError(ValueError):
@@ -27,14 +32,19 @@ class CashbookAccess:
         return self.membership.role == CashbookRole.admin
 
 
-def get_membership_for_user(db: Session, user_id: int) -> CashbookMembership | None:
-    return db.scalar(
-        select(CashbookMembership).where(CashbookMembership.user_id == user_id)
-    )
+def get_membership_for_user(
+    db: Session, user_id: int, cashbook_id: int | None = None
+) -> CashbookMembership | None:
+    query = select(CashbookMembership).where(CashbookMembership.user_id == user_id)
+    if cashbook_id is not None:
+        query = query.where(CashbookMembership.cashbook_id == cashbook_id)
+    return db.scalar(query.order_by(CashbookMembership.id.asc()))
 
 
-def get_cashbook_access(db: Session, user: User) -> CashbookAccess | None:
-    membership = get_membership_for_user(db, user.id)
+def get_cashbook_access(
+    db: Session, user: User, cashbook_id: int | None = None
+) -> CashbookAccess | None:
+    membership = get_membership_for_user(db, user.id, cashbook_id)
     if membership is None:
         return None
     cashbook = db.get(Cashbook, membership.cashbook_id)
@@ -82,8 +92,10 @@ def list_cashbook_members(db: Session, cashbook_id: int) -> list[CashbookMembers
     )
 
 
-def list_member_candidates(db: Session) -> list[User]:
-    assigned_user_ids = select(CashbookMembership.user_id)
+def list_member_candidates(db: Session, cashbook_id: int) -> list[User]:
+    assigned_user_ids = select(CashbookMembership.user_id).where(
+        CashbookMembership.cashbook_id == cashbook_id
+    )
     return list(
         db.scalars(
             select(User)
@@ -102,7 +114,7 @@ def add_cashbook_member(db: Session, *, cashbook: Cashbook, user_id: int) -> Cas
         raise CashbookServiceError(
             "Benutzer nicht gefunden.", code="user_not_found", status_code=404
         )
-    if get_membership_for_user(db, user.id) is not None:
+    if get_membership_for_user(db, user.id, cashbook.id) is not None:
         raise CashbookServiceError(
             "Dieser Benutzer gehört bereits einer Kasse an.",
             code="membership_exists",
@@ -125,6 +137,119 @@ def add_cashbook_member(db: Session, *, cashbook: Cashbook, user_id: int) -> Cas
         ) from exc
     db.refresh(membership)
     return membership
+
+
+def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
+    memberships = list(
+        db.scalars(
+            select(CashbookMembership)
+            .where(CashbookMembership.user_id == user.id)
+            .order_by(CashbookMembership.id.asc())
+        )
+    )
+    result: list[dict[str, object]] = []
+    for membership in memberships:
+        cashbook = membership.cashbook
+        active_period = db.scalar(
+            select(CashPeriod).where(
+                CashPeriod.cashbook_id == cashbook.id,
+                CashPeriod.status == CashPeriodStatus.active,
+            )
+        )
+        current_balance = "0.00"
+        if active_period is not None:
+            current_balance = str(get_cash_period_summary(db, active_period)["remaining_amount"])
+        result.append(
+            {
+                "id": cashbook.id,
+                "name": cashbook.name,
+                "description": cashbook.description,
+                "currency": cashbook.currency,
+                "role": membership.role,
+                "current_balance": current_balance,
+                "active_period_id": active_period.id if active_period else None,
+            }
+        )
+    return result
+
+
+def create_cashbook(
+    db: Session,
+    *,
+    created_by: User,
+    name: str,
+    opening_amount: str | Decimal,
+    description: str | None = None,
+    member_user_ids: list[int] | None = None,
+    start_date: date | None = None,
+) -> Cashbook:
+    clean_name = name.strip()
+    if not clean_name:
+        raise CashbookServiceError("Der Name der Kasse darf nicht leer sein.")
+    clean_description = description.strip() if description else None
+    if clean_description and len(clean_description) > 1000:
+        raise CashbookServiceError("Die Beschreibung darf höchstens 1000 Zeichen lang sein.")
+    try:
+        amount = parse_money(opening_amount)
+    except MoneyError as exc:
+        raise CashbookServiceError(str(exc)) from exc
+
+    requested_ids = set(member_user_ids or [])
+    requested_ids.discard(created_by.id)
+    members = list(db.scalars(select(User).where(User.id.in_(requested_ids)))) if requested_ids else []
+    if len(members) != len(requested_ids) or any(not member.is_active for member in members):
+        raise CashbookServiceError(
+            "Mindestens ein ausgewählter Benutzer ist nicht verfügbar.",
+            code="cashbook_member_invalid",
+            status_code=400,
+        )
+
+    cashbook = Cashbook(
+        name=clean_name,
+        description=clean_description,
+        currency="THB",
+        created_by_user_id=created_by.id,
+        category_owner_user_id=created_by.id,
+    )
+    db.add(cashbook)
+    db.flush()
+    db.add(
+        CashbookMembership(
+            cashbook_id=cashbook.id,
+            user_id=created_by.id,
+            role=CashbookRole.admin,
+        )
+    )
+    for member in members:
+        db.add(
+            CashbookMembership(
+                cashbook_id=cashbook.id,
+                user_id=member.id,
+                role=CashbookRole.member,
+            )
+        )
+    period_start = start_date or date.today()
+    period = CashPeriod(
+        cashbook_id=cashbook.id,
+        name=f"Start {period_start:%d.%m.%Y}",
+        opening_amount=amount,
+        currency=cashbook.currency,
+        start_date=period_start,
+        status=CashPeriodStatus.active,
+        created_by_user_id=created_by.id,
+    )
+    db.add(period)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise CashbookServiceError(
+            "Die Kasse konnte nicht angelegt werden.",
+            code="cashbook_create_conflict",
+            status_code=409,
+        ) from exc
+    db.refresh(cashbook)
+    return cashbook
 
 
 def remove_cashbook_member(

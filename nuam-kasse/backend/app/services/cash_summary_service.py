@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.money import format_money
-from app.models.cash_period import CashPeriod
+from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import CategoryType
 from app.models.expense import Expense
 
@@ -52,14 +52,31 @@ def get_expense_counts(db: Session, cash_period_id: int) -> dict[str, int]:
 
 
 def get_cash_period_summary(db: Session, cash_period: CashPeriod) -> dict[str, object]:
-    opening_amount = cash_period.opening_amount
-    spent_amount = get_spent_amount(db, cash_period.id)
-    income_amount = get_income_amount(db, cash_period.id)
+    use_snapshot = (
+        cash_period.status == CashPeriodStatus.closed
+        and cash_period.closed_opening_amount is not None
+        and cash_period.closed_income_amount is not None
+        and cash_period.closed_expense_amount is not None
+        and cash_period.closed_balance_amount is not None
+    )
+    opening_amount = (
+        cash_period.closed_opening_amount if use_snapshot else cash_period.opening_amount
+    )
+    spent_amount = (
+        cash_period.closed_expense_amount if use_snapshot else get_spent_amount(db, cash_period.id)
+    )
+    income_amount = (
+        cash_period.closed_income_amount if use_snapshot else get_income_amount(db, cash_period.id)
+    )
     net_amount = income_amount - spent_amount
-    remaining_amount = opening_amount + net_amount
+    remaining_amount = (
+        cash_period.closed_balance_amount if use_snapshot else opening_amount + net_amount
+    )
     if remaining_amount < Decimal("0.00"):
         remaining_amount = Decimal("0.00")
     counts = get_expense_counts(db, cash_period.id)
+    if use_snapshot and cash_period.closed_booking_count is not None:
+        counts["active_expense_count"] = cash_period.closed_booking_count
     return {
         "cash_period_id": cash_period.id,
         "name": cash_period.name,

@@ -152,6 +152,19 @@ def test_income_migration_preserves_categories_expenses_and_defaults(tmp_path, m
             assert period.status == "active"
             assert {column["name"] for column in inspect(connection).get_columns("categories")} >= {"category_type"}
             assert {column["name"] for column in inspect(connection).get_columns("expenses")} >= {"transaction_type"}
+            assert {column["name"] for column in inspect(connection).get_columns("cash_periods")} >= {
+                "closed_opening_amount",
+                "closed_income_amount",
+                "closed_expense_amount",
+                "closed_balance_amount",
+                "closed_booking_count",
+            }
+            membership_unique_columns = {
+                tuple(item["column_names"])
+                for item in inspect(connection).get_unique_constraints("cashbook_memberships")
+            }
+            assert ("cashbook_id", "user_id") in membership_unique_columns
+            assert ("user_id",) not in membership_unique_columns
         engine.dispose()
     finally:
         get_settings.cache_clear()

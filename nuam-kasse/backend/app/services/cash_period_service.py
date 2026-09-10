@@ -208,14 +208,15 @@ def _period_name(value: date) -> str:
     return f"{GERMAN_MONTHS[value.month - 1]} {value.year}"
 
 
-def close_cash_period_and_create_next(
+def close_cash_period(
     db: Session,
     *,
     cashbook: Cashbook,
     cash_period_id: int,
     closed_by: User,
     end_date: date | None = None,
-) -> tuple[CashPeriod, CashPeriod, dict[str, object]]:
+) -> tuple[CashPeriod, dict[str, object]]:
+    db.scalar(select(Cashbook).where(Cashbook.id == cashbook.id).with_for_update())
     cash_period = db.scalar(
         select(CashPeriod)
         .where(
@@ -237,27 +238,20 @@ def close_cash_period_and_create_next(
 
     close_date = end_date or date.today()
     _validate_dates(cash_period.start_date, close_date)
+    if close_date > date.today():
+        raise CashPeriodServiceError("Das Abschlussdatum darf nicht in der Zukunft liegen.")
     summary = get_cash_period_summary(db, cash_period)
-    opening_amount = Decimal(str(summary["remaining_amount"]))
     now = utc_now()
     cash_period.end_date = close_date
     cash_period.status = CashPeriodStatus.closed
     cash_period.closed_at = now
     cash_period.closed_by_user_id = closed_by.id
+    cash_period.closed_opening_amount = Decimal(str(summary["opening_amount"]))
+    cash_period.closed_income_amount = Decimal(str(summary["income_amount"]))
+    cash_period.closed_expense_amount = Decimal(str(summary["spent_amount"]))
+    cash_period.closed_balance_amount = Decimal(str(summary["remaining_amount"]))
+    cash_period.closed_booking_count = int(summary["active_expense_count"])
     cash_period.updated_at = now
-    db.flush()
-
-    next_start = _next_period_start(close_date)
-    next_period = CashPeriod(
-        cashbook_id=cashbook.id,
-        name=_period_name(next_start),
-        opening_amount=opening_amount,
-        currency=cash_period.currency,
-        start_date=next_start,
-        status=CashPeriodStatus.active,
-        created_by_user_id=closed_by.id,
-    )
-    db.add(next_period)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -268,5 +262,64 @@ def close_cash_period_and_create_next(
             conflict=True,
         ) from exc
     db.refresh(cash_period)
+    return cash_period, summary
+
+
+def start_next_cash_period(
+    db: Session,
+    *,
+    cashbook: Cashbook,
+    created_by: User,
+    name: str | None = None,
+    start_date: date | None = None,
+) -> CashPeriod:
+    db.scalar(select(Cashbook).where(Cashbook.id == cashbook.id).with_for_update())
+    if get_active_cash_period(db, cashbook.id) is not None:
+        raise CashPeriodServiceError(
+            "Es existiert bereits eine aktive Kassenperiode.",
+            code="active_cash_period_exists",
+            conflict=True,
+        )
+    previous_period = db.scalar(
+        select(CashPeriod)
+        .where(
+            CashPeriod.cashbook_id == cashbook.id,
+            CashPeriod.status == CashPeriodStatus.closed,
+        )
+        .order_by(CashPeriod.closed_at.desc(), CashPeriod.id.desc())
+        .limit(1)
+    )
+    if previous_period is None:
+        raise CashPeriodServiceError(
+            "Es gibt keine abgeschlossene Kassenperiode als Ausgangspunkt.",
+            code="closed_cash_period_required",
+            conflict=True,
+        )
+    opening_amount = (
+        previous_period.closed_balance_amount
+        if previous_period.closed_balance_amount is not None
+        else Decimal(str(get_cash_period_summary(db, previous_period)["remaining_amount"]))
+    )
+    next_start = start_date or _next_period_start(previous_period.end_date or date.today())
+    clean_name = _validate_name(name) if name is not None else _period_name(next_start)
+    next_period = CashPeriod(
+        cashbook_id=cashbook.id,
+        name=clean_name,
+        opening_amount=opening_amount,
+        currency=cashbook.currency,
+        start_date=next_start,
+        status=CashPeriodStatus.active,
+        created_by_user_id=created_by.id,
+    )
+    db.add(next_period)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise CashPeriodServiceError(
+            "Die Kassenperiode wurde parallel verändert. Bitte lade die Ansicht neu.",
+            code="cash_period_start_conflict",
+            conflict=True,
+        ) from exc
     db.refresh(next_period)
-    return cash_period, next_period, summary
+    return next_period
