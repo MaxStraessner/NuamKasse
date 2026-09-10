@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -95,8 +95,9 @@ def require_password_change_completed(
 def require_cashbook_member(
     db: Session = Depends(get_db),
     user: User = Depends(require_password_change_completed),
+    cashbook_id: int | None = Header(default=None, alias="X-Cashbook-ID"),
 ) -> CashbookAccess:
-    access = get_cashbook_access(db, user)
+    access = get_cashbook_access(db, user, cashbook_id)
     if access is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

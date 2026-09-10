@@ -1,3 +1,7 @@
+import re
+import unicodedata
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -11,17 +15,19 @@ from app.schemas.cash_period import (
     CashPeriodCloseResult,
     CashPeriodCreate,
     CashPeriodRead,
+    CashPeriodStartRequest,
     CashPeriodSummary,
     CashPeriodUpdate,
 )
 from app.services.cashbook_service import CashbookAccess
 from app.services.cash_period_service import (
     CashPeriodServiceError,
-    close_cash_period_and_create_next,
+    close_cash_period,
     create_cash_period,
     get_active_cash_period,
     get_cash_period_by_id,
     list_cash_periods_with_summaries,
+    start_next_cash_period,
     update_cash_period,
 )
 from app.services.cash_summary_service import get_cash_period_summary
@@ -111,11 +117,29 @@ def read_cash_period(
     return _get_cash_period(db, cash_period_id, access)
 
 
+@router.post("/start", response_model=CashPeriodRead, status_code=status.HTTP_201_CREATED)
+def start_cash_period_endpoint(
+    payload: CashPeriodStartRequest,
+    db: Session = Depends(get_db),
+    access: CashbookAccess = Depends(require_cashbook_admin),
+) -> CashPeriod:
+    try:
+        return start_next_cash_period(
+            db,
+            cashbook=access.cashbook,
+            created_by=access.user,
+            name=payload.name,
+            start_date=payload.start_date,
+        )
+    except CashPeriodServiceError as exc:
+        raise _service_error(exc) from exc
+
+
 @router.get("/{cash_period_id}/export.xlsx")
 def export_cash_period(
     cash_period_id: int,
     db: Session = Depends(get_db),
-    access: CashbookAccess = Depends(require_cashbook_admin),
+    access: CashbookAccess = Depends(require_cashbook_member),
 ) -> StreamingResponse:
     cash_period = _get_cash_period(db, cash_period_id, access)
     try:
@@ -127,7 +151,10 @@ def export_cash_period(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "cash_period_export_unavailable", "message": str(exc)},
         ) from exc
-    filename = f"kassenbericht-{cash_period.id}.xlsx"
+    normalized_name = unicodedata.normalize("NFKD", access.cashbook.name).encode("ascii", "ignore").decode()
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", normalized_name).strip("_") or "Kasse"
+    export_end = cash_period.end_date or date.today()
+    filename = f"Nuam_Kasse_{safe_name}_{cash_period.start_date.isoformat()}_bis_{export_end.isoformat()}.xlsx"
     return StreamingResponse(
         workbook,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -178,7 +205,7 @@ def close_cash_period_endpoint(
     access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> dict[str, object]:
     try:
-        closed_period, new_period, summary = close_cash_period_and_create_next(
+        closed_period, summary = close_cash_period(
             db,
             cashbook=access.cashbook,
             cash_period_id=cash_period_id,
@@ -189,6 +216,5 @@ def close_cash_period_endpoint(
         raise _service_error(exc) from exc
     return {
         "closed_period": closed_period,
-        "new_period": new_period,
         "summary": summary,
     }

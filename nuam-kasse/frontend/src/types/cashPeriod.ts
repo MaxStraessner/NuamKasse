@@ -18,6 +18,11 @@ export type CashPeriod = {
   updated_at: string;
   closed_at: string | null;
   closed_by: CashPeriodUser | null;
+  closed_opening_amount?: string | null;
+  closed_income_amount?: string | null;
+  closed_expense_amount?: string | null;
+  closed_balance_amount?: string | null;
+  closed_booking_count?: number | null;
 };
 
 export type CashPeriodSummary = {
@@ -45,7 +50,6 @@ export type CashPeriodArchiveItem = CashPeriod & {
 
 export type CashPeriodCloseResult = {
   closed_period: CashPeriod;
-  new_period: CashPeriod;
   summary: CashPeriodSummary;
 };
 

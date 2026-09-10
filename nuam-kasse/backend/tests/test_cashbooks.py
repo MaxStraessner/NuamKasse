@@ -165,11 +165,74 @@ def test_membership_tenant_boundary_blocks_foreign_ids(client, db_session):
     assert client.get(f"/api/v1/cash-periods/{period.id}/export.xlsx").status_code == 404
 
 
-def test_member_cannot_close_or_export_period(client, db_session):
+def test_member_cannot_close_but_can_export_period(client, db_session):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     create_test_user(db_session, username="nuam", role=UserRole.member)
     period = create_period(db_session, admin.id)
     login(client, "nuam")
 
     assert client.post(f"/api/v1/cash-periods/{period.id}/close", json={}).status_code == 403
-    assert client.get(f"/api/v1/cash-periods/{period.id}/export.xlsx").status_code == 403
+    assert client.get(f"/api/v1/cash-periods/{period.id}/export.xlsx").status_code == 200
+
+
+def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    original_cashbook = get_test_cashbook(db_session)
+    original_period = create_period(db_session, admin.id)
+    original_counts = {
+        "cashbooks": db_session.query(Cashbook).count(),
+        "periods": db_session.query(CashPeriod).count(),
+        "expenses": db_session.query(Expense).count(),
+        "categories": db_session.query(Category).count(),
+    }
+    login(client, "admin")
+
+    created = client.post(
+        "/api/v1/cashbooks",
+        json={
+            "name": "Restaurant",
+            "opening_amount": "12450.00",
+            "description": "Abendkasse",
+        },
+    )
+
+    assert created.status_code == 201
+    new_cashbook_id = created.json()["id"]
+    listed = client.get("/api/v1/cashbooks")
+    assert listed.status_code == 200
+    assert {item["name"] for item in listed.json()} == {"Testkasse", "Restaurant"}
+    restaurant = next(item for item in listed.json() if item["id"] == new_cashbook_id)
+    assert restaurant["current_balance"] == "12450.00"
+    assert restaurant["active_period_id"] is not None
+
+    selected = client.get(
+        "/api/v1/cash-periods/current",
+        headers={"X-Cashbook-ID": str(new_cashbook_id)},
+    )
+    assert selected.status_code == 200
+    assert selected.json()["opening_amount"] == "12450.00"
+    assert db_session.query(CashbookMembership).filter_by(user_id=admin.id).count() == 2
+    assert db_session.get(CashPeriod, original_period.id).cashbook_id == original_cashbook.id
+    assert db_session.query(Cashbook).count() == original_counts["cashbooks"] + 1
+    assert db_session.query(CashPeriod).count() == original_counts["periods"] + 1
+    assert db_session.query(Expense).count() == original_counts["expenses"]
+    assert db_session.query(Category).count() == original_counts["categories"]
+
+
+def test_cashbook_header_cannot_cross_membership_boundary(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    outsider = create_test_user(db_session, username="outsider", role=UserRole.member)
+    login(client, "admin")
+    created = client.post(
+        "/api/v1/cashbooks",
+        json={"name": "Nur Admin", "opening_amount": "100.00"},
+    )
+    assert created.status_code == 201
+
+    login(client, "outsider")
+    blocked = client.get(
+        "/api/v1/cash-periods/current",
+        headers={"X-Cashbook-ID": str(created.json()["id"])},
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["code"] == "cashbook_membership_required"

@@ -68,6 +68,11 @@ class CashPeriod(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    closed_opening_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    closed_income_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    closed_expense_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    closed_balance_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    closed_booking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     closed_by = relationship("User", foreign_keys=[closed_by_user_id])

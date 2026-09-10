@@ -1,4 +1,4 @@
-import { ChevronRight, KeyRound, Layers3, LogOut, PiggyBank, ShieldCheck, UserRoundCog, UsersRound } from "lucide-react";
+import { ChevronRight, KeyRound, Layers3, LogOut, PiggyBank, ShieldCheck, UserRoundCog, UsersRound, WalletCards } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { APP_VERSION } from "../app/appVersion";
@@ -41,6 +41,7 @@ export function SettingsPage() {
       <section className="settings-section" aria-labelledby="cashbook-settings">
         <h2 id="cashbook-settings">Gemeinsame Kasse</h2>
         <AppCard className="settings-menu">
+          <SettingsLink description="Kassen auswählen und neue Kasse anlegen" icon={WalletCards} label="Meine Kassen" to="/cashbooks" />
           <SettingsLink description="Aktive und abgeschlossene Zeiträume" icon={PiggyBank} label="Kassenperioden und Archiv" to="/settings/cash-periods" />
         </AppCard>
       </section>

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,6 +18,7 @@ class Cashbook(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="THB")
     created_by_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -45,7 +46,6 @@ class CashbookMembership(Base):
     __tablename__ = "cashbook_memberships"
     __table_args__ = (
         UniqueConstraint("cashbook_id", "user_id", name="uq_cashbook_memberships_cashbook_user"),
-        UniqueConstraint("user_id", name="uq_cashbook_memberships_user_id"),
         Index("ix_cashbook_memberships_cashbook_role", "cashbook_id", "role"),
     )
 

@@ -12,6 +12,23 @@ export class ApiError extends Error {
   }
 }
 
+const activeCashbookStorageKey = "nuam-kasse-active-cashbook";
+
+export function getActiveCashbookId(): number | null {
+  const value = window.localStorage.getItem(activeCashbookStorageKey);
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function setActiveCashbookId(cashbookId: number): void {
+  window.localStorage.setItem(activeCashbookStorageKey, String(cashbookId));
+}
+
+function cashbookHeader(): Record<string, string> {
+  const cashbookId = getActiveCashbookId();
+  return cashbookId ? { "X-Cashbook-ID": String(cashbookId) } : {};
+}
+
 type ApiRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
@@ -34,6 +51,7 @@ export async function apiRequest<TResponse>(
     credentials: "include",
     headers: {
       Accept: "application/json",
+      ...cashbookHeader(),
       ...(body != null && !isFormData ? { "Content-Type": "application/json" } : {}),
     },
     body: requestBody,
@@ -67,7 +85,10 @@ export async function apiDownload(path: string): Promise<Blob> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const response = await fetch(`${apiBaseUrl}${normalizedPath}`, {
     credentials: "include",
-    headers: { Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    headers: {
+      Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ...cashbookHeader(),
+    },
   });
   if (!response.ok) {
     let message = `API request failed with ${response.status}`;

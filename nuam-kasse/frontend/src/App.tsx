@@ -7,6 +7,7 @@ import { AppLayout } from "./layouts/AppLayout";
 import { CategoryAdminPage } from "./pages/CategoryAdminPage";
 import { CashPeriodAdminPage } from "./pages/CashPeriodAdminPage";
 import { CashbookMembersPage } from "./pages/CashbookMembersPage";
+import { CashbooksPage } from "./pages/CashbooksPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -38,6 +39,10 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <HomePage />,
+          },
+          {
+            path: "cashbooks",
+            element: <CashbooksPage />,
           },
           {
             path: "overview",

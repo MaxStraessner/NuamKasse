@@ -24,8 +24,13 @@ from app.services.cashbook_service import get_cashbook_access
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _auth_user_response(db: Session, user: User) -> AuthUserResponse:
-    access = get_cashbook_access(db, user)
+def _requested_cashbook_id(request: Request) -> int | None:
+    value = request.headers.get("X-Cashbook-ID", "")
+    return int(value) if value.isdigit() else None
+
+
+def _auth_user_response(db: Session, user: User, request: Request) -> AuthUserResponse:
+    access = get_cashbook_access(db, user, _requested_cashbook_id(request))
     return AuthUserResponse.model_validate(user).model_copy(
         update={
             "cashbook_id": access.cashbook.id if access else None,
@@ -60,6 +65,7 @@ def _clear_session_cookie(response: Response, settings: Settings) -> None:
 @router.post("/login", response_model=AuthUserResponse)
 def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -74,7 +80,7 @@ def login(
 
     token, _ = create_session(db, user, settings)
     _set_session_cookie(response, token, settings)
-    return _auth_user_response(db, user)
+    return _auth_user_response(db, user, request)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -93,10 +99,11 @@ def logout(
 
 @router.get("/me", response_model=AuthUserResponse)
 def read_current_user(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_authenticated_user),
 ) -> AuthUserResponse:
-    return _auth_user_response(db, user)
+    return _auth_user_response(db, user, request)
 
 
 @router.post("/change-password", response_model=MessageResponse)

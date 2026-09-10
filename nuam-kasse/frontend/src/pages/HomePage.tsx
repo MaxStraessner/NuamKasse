@@ -294,6 +294,9 @@ export function HomePage() {
               Startbetrag: {formatThaiBaht(cashSummary.opening_amount, cashSummary.currency)}
               {cashSummary.income_amount !== "0.00" ? ` · Einnahmen: ${formatThaiBaht(cashSummary.income_amount, cashSummary.currency)}` : ""}
             </small>
+            {user?.cashbook_role === "admin" ? (
+              <Link className="danger-link" to="/settings/cash-periods">Kasse abschließen</Link>
+            ) : null}
           </div>
         ) : null}
       </AppCard>

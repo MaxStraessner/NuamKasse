@@ -316,7 +316,7 @@ def test_closed_cash_period_cannot_be_updated_or_closed_again(client, db_session
     assert close.status_code == 409
 
 
-def test_admin_can_close_cash_period_and_create_next_one(client, db_session):
+def test_admin_can_close_cash_period_then_start_next_one(client, db_session):
     admin = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     cash_period = create_test_cash_period(db_session, created_by_user_id=admin.id)
     category = Category(
@@ -349,17 +349,29 @@ def test_admin_can_close_cash_period_and_create_next_one(client, db_session):
         f"/api/v1/cash-periods/{cash_period.id}/close",
         json={"end_date": "2026-07-31"},
     )
-    current = client.get("/api/v1/cash-periods/current")
+    current_after_close = client.get("/api/v1/cash-periods/current")
     assert close.status_code == 200
     assert close.json()["closed_period"]["status"] == "closed"
     assert close.json()["closed_period"]["end_date"] == "2026-07-31"
     assert close.json()["closed_period"]["closed_at"] is not None
     assert close.json()["closed_period"]["closed_by"]["display_name"] == "Admin"
-    assert close.json()["new_period"]["status"] == "active"
     assert close.json()["summary"]["remaining_amount"] == "19874.50"
-    assert close.json()["new_period"]["opening_amount"] == "19874.50"
+    assert close.json()["closed_period"]["closed_opening_amount"] == "20000.00"
+    assert close.json()["closed_period"]["closed_expense_amount"] == "125.50"
+    assert close.json()["closed_period"]["closed_balance_amount"] == "19874.50"
+    assert close.json()["closed_period"]["closed_booking_count"] == 1
+    assert current_after_close.status_code == 404
+
+    started = client.post("/api/v1/cash-periods/start", json={})
+    current = client.get("/api/v1/cash-periods/current")
+    assert started.status_code == 201
+    assert started.json()["status"] == "active"
+    assert started.json()["opening_amount"] == "19874.50"
     assert current.status_code == 200
-    assert current.json()["id"] == close.json()["new_period"]["id"]
+    assert current.json()["id"] == started.json()["id"]
+    assert db_session.query(Expense).filter_by(cash_period_id=started.json()["id"]).count() == 0
+    assert db_session.query(Expense).filter_by(cash_period_id=cash_period.id).count() == 1
+    assert db_session.get(Category, category.id).name == "Essen"
     active_count = db_session.scalar(
         select(func.count(CashPeriod.id)).where(CashPeriod.status == CashPeriodStatus.active)
     )
@@ -378,9 +390,14 @@ def test_close_rejects_end_date_before_start_and_member(client, db_session):
         f"/api/v1/cash-periods/{cash_period.id}/close",
         json={"end_date": "2026-06-30"},
     )
+    future_date = client.post(
+        f"/api/v1/cash-periods/{cash_period.id}/close",
+        json={"end_date": "2999-01-01"},
+    )
 
     assert member.status_code == 403
     assert bad_date.status_code == 400
+    assert future_date.status_code == 400
 
 
 def test_database_prevents_two_active_cash_periods(db_session):

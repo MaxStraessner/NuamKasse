@@ -1,9 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_cashbook_admin, require_cashbook_member
+from app.api.dependencies.auth import (
+    require_cashbook_admin,
+    require_cashbook_member,
+    require_password_change_completed,
+)
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.cashbook import (
+    CashbookCreate,
+    CashbookListItem,
     CashbookMemberCandidateRead,
     CashbookMemberCreate,
     CashbookMembershipRead,
@@ -13,6 +20,8 @@ from app.services.cashbook_service import (
     CashbookAccess,
     CashbookServiceError,
     add_cashbook_member,
+    create_cashbook,
+    list_cashbooks_for_user,
     list_cashbook_members,
     list_member_candidates,
     remove_cashbook_member,
@@ -26,6 +35,34 @@ def _service_error(exc: CashbookServiceError) -> HTTPException:
         status_code=exc.status_code,
         detail={"code": exc.code, "message": exc.message},
     )
+
+
+@router.get("", response_model=list[CashbookListItem])
+def read_cashbooks(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+):
+    return list_cashbooks_for_user(db, user)
+
+
+@router.post("", response_model=CashbookRead, status_code=status.HTTP_201_CREATED)
+def create_cashbook_endpoint(
+    payload: CashbookCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+):
+    try:
+        return create_cashbook(
+            db,
+            created_by=user,
+            name=payload.name,
+            opening_amount=payload.opening_amount,
+            description=payload.description,
+            member_user_ids=payload.member_user_ids,
+            start_date=payload.start_date,
+        )
+    except CashbookServiceError as exc:
+        raise _service_error(exc) from exc
 
 
 @router.get("/current", response_model=CashbookRead)
@@ -48,7 +85,7 @@ def read_member_candidates(
     db: Session = Depends(get_db),
     access: CashbookAccess = Depends(require_cashbook_admin),
 ):
-    return list_member_candidates(db)
+    return list_member_candidates(db, access.cashbook.id)
 
 
 @router.post(

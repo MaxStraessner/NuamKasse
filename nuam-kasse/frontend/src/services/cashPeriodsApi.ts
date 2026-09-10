@@ -43,6 +43,13 @@ export function closeCashPeriod(cashPeriodId: number, endDate?: string): Promise
   });
 }
 
+export function startCashPeriod(payload: { name?: string; start_date?: string } = {}): Promise<CashPeriod> {
+  return apiRequest<CashPeriod>("/cash-periods/start", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function downloadCashPeriodExport(cashPeriodId: number): Promise<Blob> {
   return apiDownload(`/cash-periods/${cashPeriodId}/export.xlsx`);
 }
