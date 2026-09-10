@@ -213,10 +213,23 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
     assert selected.json()["opening_amount"] == "12450.00"
     assert db_session.query(CashbookMembership).filter_by(user_id=admin.id).count() == 2
     assert db_session.get(CashPeriod, original_period.id).cashbook_id == original_cashbook.id
+    new_cashbook_category_count = db_session.query(Category).filter_by(
+        cashbook_id=new_cashbook_id,
+    ).count()
     assert db_session.query(Cashbook).count() == original_counts["cashbooks"] + 1
     assert db_session.query(CashPeriod).count() == original_counts["periods"] + 1
     assert db_session.query(Expense).count() == original_counts["expenses"]
-    assert db_session.query(Category).count() == original_counts["categories"]
+    assert new_cashbook_category_count > 0
+    assert db_session.query(Category).count() == original_counts["categories"] + new_cashbook_category_count
+
+    categories_before_read = db_session.query(Category).count()
+    categories = client.get(
+        "/api/v1/categories",
+        headers={"X-Cashbook-ID": str(new_cashbook_id)},
+    )
+    assert categories.status_code == 200
+    assert len(categories.json()) == new_cashbook_category_count
+    assert db_session.query(Category).count() == categories_before_read
 
 
 def test_cashbook_header_cannot_cross_membership_boundary(client, db_session):

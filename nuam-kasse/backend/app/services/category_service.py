@@ -280,11 +280,6 @@ def list_categories(
     category_owner_user_id: int,
     include_inactive: bool = False,
 ) -> list[Category]:
-    ensure_default_categories_for_cashbook(
-        db,
-        cashbook_id=cashbook_id,
-        category_owner_user_id=category_owner_user_id,
-    )
     query = select(Category).where(
         *_owner_filter(cashbook_id, category_owner_user_id)
     )
@@ -559,8 +554,23 @@ def ensure_default_categories_for_cashbook(
     if existing_count:
         return 0, existing_count
 
+    created = stage_default_categories_for_cashbook(
+        db,
+        cashbook_id=cashbook_id,
+        category_owner_user_id=category_owner_user_id,
+    )
+    db.commit()
+    return created, 0
+
+
+def stage_default_categories_for_cashbook(
+    db: Session,
+    *,
+    cashbook_id: int,
+    category_owner_user_id: int,
+) -> int:
+    """Add defaults to the current transaction without committing it."""
     created = 0
-    existing = 0
     for root_index, item in enumerate(DEFAULT_CATEGORY_STRUCTURE, 1):
         root_name = str(item["name"])
         normalized = normalize_category_name(root_name)
@@ -595,8 +605,7 @@ def ensure_default_categories_for_cashbook(
             db.add(child)
             created += 1
 
-    db.commit()
-    return created, existing
+    return created
 
 
 def seed_default_categories(db: Session, user_id: int | None = None) -> tuple[int, int]:

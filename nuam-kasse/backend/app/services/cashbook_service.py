@@ -10,6 +10,7 @@ from app.core.money import MoneyError, parse_money
 from app.models.cashbook import Cashbook, CashbookMembership, CashbookRole
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, UserRole
+from app.services.category_service import stage_default_categories_for_cashbook
 from app.services.cash_summary_service import get_cash_period_summary
 from app.services.access_control_service import membership_can_access_cash_period
 from app.services.audit_service import record_admin_action
@@ -70,6 +71,11 @@ def bootstrap_first_cashbook(db: Session, user: User) -> CashbookMembership | No
     )
     db.add(cashbook)
     db.flush()
+    stage_default_categories_for_cashbook(
+        db,
+        cashbook_id=cashbook.id,
+        category_owner_user_id=user.id,
+    )
     membership = CashbookMembership(
         cashbook_id=cashbook.id,
         user_id=user.id,
@@ -235,6 +241,11 @@ def create_cashbook(
     )
     db.add(cashbook)
     db.flush()
+    stage_default_categories_for_cashbook(
+        db,
+        cashbook_id=cashbook.id,
+        category_owner_user_id=created_by.id,
+    )
     db.add(
         CashbookMembership(
             cashbook_id=cashbook.id,
