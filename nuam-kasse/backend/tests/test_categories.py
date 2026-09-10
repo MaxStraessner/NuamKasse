@@ -600,6 +600,25 @@ def test_seed_default_categories_is_idempotent_and_does_not_overwrite(client, db
     assert db_session.query(Category).count() == 1
 
 
+def test_listing_empty_cashbook_does_not_seed_defaults(client, db_session):
+    create_test_user(
+        db_session,
+        username="admin",
+        password="admin-pass",
+        role=UserRole.admin,
+    )
+    login(client, "admin", "admin-pass")
+
+    before_count = db_session.query(Category).count()
+    response = client.get("/api/v1/categories")
+    after_count = db_session.query(Category).count()
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert before_count == 0
+    assert after_count == before_count
+
+
 def test_admin_can_upload_root_and_subcategory_images(client, db_session, settings: Settings):
     user = create_test_user(db_session, username="admin", password="admin-pass", role=UserRole.admin)
     root = create_test_category(db_session, name="Gesundheit", icon_key="heart-pulse", color_key="red", user_id=user.id)

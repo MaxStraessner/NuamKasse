@@ -419,14 +419,33 @@ describe("App authentication", () => {
   });
 
   test("admin sees user management and can create a user", async () => {
+    let submittedBody: Record<string, unknown> | null = null;
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(adminUser);
+      }
+      if (url.endsWith("/users/access-options")) {
+        return jsonResponse([
+          {
+            id: 1,
+            name: "Nuam Kasse",
+            periods: [
+              {
+                id: 7,
+                name: "September 2026",
+                start_date: "2026-09-01",
+                end_date: null,
+                status: "active",
+              },
+            ],
+          },
+        ]);
       }
       if (url.endsWith("/users") && (!options?.method || options.method === "GET")) {
         return jsonResponse([adminUser]);
       }
       if (url.endsWith("/users") && options?.method === "POST") {
+        submittedBody = JSON.parse(String(options.body));
         return jsonResponse({ ...memberUser, must_change_password: true }, 201);
       }
       if (url.endsWith("/categories")) {
@@ -440,17 +459,34 @@ describe("App authentication", () => {
     fireEvent.click(await screen.findByRole("link", { name: /^Einstellungen$/i }));
     fireEvent.click(await screen.findByRole("link", { name: /Benutzer.*Konten/i }));
     expect(await screen.findByRole("heading", { name: "Benutzer" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Benutzer hinzufügen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Benutzer anlegen" }));
     fireEvent.change(screen.getByLabelText("Benutzername"), { target: { value: "nuam" } });
     fireEvent.change(screen.getByLabelText("Anzeigename"), { target: { value: "Nuam" } });
     fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "temp-pass-123" } });
     fireEvent.change(screen.getByLabelText("Passwort wiederholen"), {
       target: { value: "temp-pass-123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Benutzer anlegen" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Nuam Kasse/ }));
+    fireEvent.change(screen.getByLabelText("Kassenrolle Nuam Kasse"), {
+      target: { value: "admin" },
+    });
+    fireEvent.change(screen.getByLabelText("Periodenzugriff Nuam Kasse"), {
+      target: { value: "current_and_future" },
+    });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Benutzer anlegen" }));
 
-    expect(await screen.findByText(/Benutzer wurde angelegt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Benutzer wurde.*angelegt/)).toBeInTheDocument();
     expect(screen.getByText("Nuam")).toBeInTheDocument();
+    expect(submittedBody).toMatchObject({
+      cashbook_accesses: [
+        {
+          cashbook_id: 1,
+          cashbook_role: "admin",
+          period_access_mode: "current_and_future",
+          period_ids: [],
+        },
+      ],
+    });
   });
 
   test("cashbook admin can add an existing user as member", async () => {
@@ -513,11 +549,41 @@ describe("App authentication", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
     expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
-    expect(screen.queryByText("Verwaltung")).not.toBeInTheDocument();
+    expect(screen.queryByText("Administration")).not.toBeInTheDocument();
     expect(screen.queryByText("Kategorien")).not.toBeInTheDocument();
     expect(screen.queryByText("Benutzer")).not.toBeInTheDocument();
     expect(screen.queryByText("Mitglieder")).not.toBeInTheDocument();
     expect(screen.getByText("Kassenperioden und Archiv")).toBeInTheDocument();
+  });
+
+  test("member cannot open user administration by direct URL", async () => {
+    window.history.pushState({}, "", "/settings/users");
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(memberUser);
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Benutzer" })).not.toBeInTheDocument();
+  });
+
+  test("global administrator sees user administration without cashbook admin role", async () => {
+    const globalAdmin = { ...adminUser, cashbook_role: "member" };
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(globalAdmin);
+      if (url.endsWith("/users/access-options")) return jsonResponse([]);
+      if (url.endsWith("/users")) return jsonResponse([globalAdmin]);
+      return jsonResponse({});
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
+    expect(await screen.findByText("Administration")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Benutzer.*Konten/i }));
+    expect(await screen.findByRole("heading", { name: "Benutzer" })).toBeInTheDocument();
   });
 
   test("user with required password change is redirected and can change password", async () => {
@@ -1559,15 +1625,29 @@ describe("Cash periods", () => {
 
   test("admin can close an active cash period and start the next period", async () => {
     let cashPeriods: CashPeriod[] = [activeCashPeriod];
+    let currentCashPeriod = activeCashPeriod;
+    let currentCashSummary = activeCashSummary;
+    let categoryCalls = 0;
+    const configuredCategories = [
+      {
+        ...bankCategory,
+        sort_order: 1,
+        has_custom_image: true,
+        image_url: "/api/v1/categories/2/image?v=stable",
+        image_updated_at: "2026-06-29T12:00:00Z",
+      },
+      { ...essenCategory, sort_order: 2 },
+      apothekeCategory,
+    ];
     mockFetch((url, options) => {
       if (url.endsWith("/auth/me")) {
         return jsonResponse(adminUser);
       }
       if (url.endsWith("/cash-periods/current/summary")) {
-        return jsonResponse(activeCashSummary);
+        return jsonResponse(currentCashSummary);
       }
       if (url.endsWith("/cash-periods/current")) {
-        return jsonResponse(activeCashPeriod);
+        return jsonResponse(currentCashPeriod);
       }
       if (url.endsWith("/cash-periods") && options?.method === "GET") {
         return jsonResponse(cashPeriods);
@@ -1583,15 +1663,30 @@ describe("Cash periods", () => {
       if (url.endsWith("/cash-periods/start") && options?.method === "POST") {
         const newPeriod = { ...activeCashPeriod, id: 3, name: "August 2026", opening_amount: "19875.00", start_date: "2026-08-01" };
         cashPeriods = [newPeriod, ...cashPeriods];
+        currentCashPeriod = newPeriod;
+        currentCashSummary = { ...activeCashSummary, cash_period_id: newPeriod.id, name: newPeriod.name, opening_amount: newPeriod.opening_amount, remaining_amount: newPeriod.opening_amount };
         return jsonResponse(newPeriod, 201);
       }
       if (url.endsWith("/categories")) {
-        return jsonResponse([essenCategory]);
+        categoryCalls += 1;
+        return jsonResponse(configuredCategories);
       }
       return jsonResponse({});
     });
 
+    window.history.pushState({}, "", "/");
     render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Start" }));
+    expect(await screen.findByLabelText("Kategorie Bank")).toHaveAttribute("data-has-custom-image", "true");
+    expect(screen.getByAltText("Bild der Kategorie Bank")).toHaveAttribute(
+      "src",
+      "/api/v1/categories/2/image?v=stable",
+    );
+    expect(screen.getAllByRole("button", { name: /^Kategorie / }).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Kategorie Bank",
+      "Kategorie Essen",
+    ]);
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
     fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
@@ -1603,6 +1698,18 @@ describe("Cash periods", () => {
     expect(screen.getByText("Juli 2026")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Neue Kassenperiode starten" }));
     expect(await screen.findByText(/August 2026 wurde mit.*Anfangsbestand gestartet/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Start" }));
+    await waitFor(() => expect(categoryCalls).toBe(2));
+    expect(screen.getAllByRole("button", { name: /^Kategorie / }).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Kategorie Bank",
+      "Kategorie Essen",
+    ]);
+    expect(screen.getByLabelText("Kategorie Bank")).toHaveAttribute("data-has-custom-image", "true");
+    expect(screen.getByAltText("Bild der Kategorie Bank")).toHaveAttribute(
+      "src",
+      "/api/v1/categories/2/image?v=stable",
+    );
   });
 
   test("create form shows validation and conflict errors", async () => {

@@ -99,7 +99,12 @@ def create_cashbook_member(
     access: CashbookAccess = Depends(require_cashbook_admin),
 ):
     try:
-        return add_cashbook_member(db, cashbook=access.cashbook, user_id=payload.user_id)
+        return add_cashbook_member(
+            db,
+            cashbook=access.cashbook,
+            user_id=payload.user_id,
+            actor=access.user,
+        )
     except CashbookServiceError as exc:
         raise _service_error(exc) from exc
 
@@ -111,7 +116,12 @@ def delete_cashbook_member(
     access: CashbookAccess = Depends(require_cashbook_admin),
 ) -> Response:
     try:
-        remove_cashbook_member(db, cashbook=access.cashbook, user_id=user_id)
+        remove_cashbook_member(
+            db,
+            cashbook=access.cashbook,
+            user_id=user_id,
+            actor=access.user,
+        )
     except CashbookServiceError as exc:
         raise _service_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

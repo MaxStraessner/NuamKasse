@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_cashbook_member
+from app.api.dependencies.auth import ensure_cash_period_access, require_cashbook_member
 from app.db.session import get_db
 from app.schemas.overview import CashPeriodOverview, PaginatedOverviewExpenses
 from app.services.overview_service import (
@@ -14,6 +14,7 @@ from app.services.overview_service import (
     list_cash_period_expenses,
 )
 from app.services.cashbook_service import CashbookAccess
+from app.services.cash_period_service import get_active_cash_period
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
@@ -31,6 +32,9 @@ def read_current_overview(
     access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
     try:
+        cash_period = get_active_cash_period(db, access.cashbook.id)
+        if cash_period is not None:
+            ensure_cash_period_access(db, access, cash_period)
         return get_current_overview(
             db,
             access.user,
@@ -51,6 +55,7 @@ def read_cash_period_overview(
         cash_period = get_overview_cash_period_by_id(
             db, cash_period_id, cashbook_id=access.cashbook.id
         )
+        ensure_cash_period_access(db, access, cash_period)
         return get_cash_period_overview(
             db, cash_period, user=access.user, is_admin=access.is_admin
         )
@@ -76,6 +81,7 @@ def read_cash_period_expenses(
         cash_period = get_overview_cash_period_by_id(
             db, cash_period_id, cashbook_id=access.cashbook.id
         )
+        ensure_cash_period_access(db, access, cash_period)
         return list_cash_period_expenses(
             db,
             cash_period=cash_period,

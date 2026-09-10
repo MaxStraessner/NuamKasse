@@ -1,14 +1,16 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from app.core.config import Settings
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category, CategoryType
 from app.models.expense import Expense
-from app.models.user import UserRole
+from app.models.user import UserRole, utc_now
 from conftest import create_test_user, get_test_cashbook
 
 
@@ -376,6 +378,194 @@ def test_admin_can_close_cash_period_then_start_next_one(client, db_session):
         select(func.count(CashPeriod.id)).where(CashPeriod.status == CashPeriodStatus.active)
     )
     assert active_count == 1
+
+
+def test_categories_and_home_configuration_survive_three_period_transitions(
+    client,
+    db_session,
+    settings: Settings,
+):
+    admin = create_test_user(
+        db_session,
+        username="admin",
+        password="admin-pass",
+        role=UserRole.admin,
+    )
+    cashbook = get_test_cashbook(db_session)
+    first_period = create_test_cash_period(
+        db_session,
+        name="Mai 2026",
+        start_date=date(2026, 5, 1),
+        created_by_user_id=admin.id,
+    )
+    income = Category(
+        cashbook_id=cashbook.id,
+        user_id=cashbook.category_owner_user_id,
+        name="Einnahmen individuell",
+        name_normalized="einnahmen individuell",
+        icon_key="wallet",
+        color_key="green",
+        category_type=CategoryType.income,
+        sort_order=1,
+        is_active=True,
+    )
+    expense = Category(
+        cashbook_id=cashbook.id,
+        user_id=cashbook.category_owner_user_id,
+        name="Ernährung individuell",
+        name_normalized="ernährung individuell",
+        icon_key="utensils",
+        color_key="orange",
+        category_type=CategoryType.expense,
+        sort_order=2,
+        is_active=True,
+    )
+    db_session.add_all([income, expense])
+    db_session.flush()
+    child = Category(
+        cashbook_id=cashbook.id,
+        user_id=cashbook.category_owner_user_id,
+        name="Markt individuell",
+        name_normalized="markt individuell",
+        icon_key="shopping-cart",
+        color_key="orange",
+        category_type=CategoryType.expense,
+        parent_category_id=expense.id,
+        sort_order=7,
+        is_active=True,
+    )
+    db_session.add(child)
+    db_session.flush()
+
+    image_directory = Path(settings.category_image_storage_path) / str(admin.id) / str(expense.id)
+    image_directory.mkdir(parents=True, exist_ok=True)
+    original_path = image_directory / "preserved.original.png"
+    preview_path = image_directory / "preserved.preview.webp"
+    original_bytes = b"stable-original-image"
+    preview_bytes = b"stable-preview-image"
+    original_path.write_bytes(original_bytes)
+    preview_path.write_bytes(preview_bytes)
+    expense.image_path = original_path.relative_to(settings.category_image_storage_path).as_posix()
+    expense.image_preview_path = preview_path.relative_to(settings.category_image_storage_path).as_posix()
+    expense.image_original_name = "individuell.png"
+    expense.image_mime_type = "image/png"
+    expense.image_size = len(original_bytes)
+    expense.image_width = 120
+    expense.image_height = 80
+    expense.image_updated_at = utc_now()
+    historical_expense = Expense(
+        cash_period_id=first_period.id,
+        category_id=child.id,
+        amount=Decimal("125.50"),
+        transaction_type=CategoryType.expense,
+        currency="THB",
+        created_by_user_id=admin.id,
+    )
+    db_session.add(historical_expense)
+    db_session.commit()
+    login(client, "admin", "admin-pass")
+
+    def category_snapshot() -> list[tuple[object, ...]]:
+        return [
+            (
+                category.id,
+                category.cashbook_id,
+                category.user_id,
+                category.name,
+                category.name_normalized,
+                category.icon_key,
+                category.color_key,
+                category.category_type,
+                category.parent_category_id,
+                category.sort_order,
+                category.is_active,
+                category.archived_at,
+                category.image_path,
+                category.image_preview_path,
+                category.image_original_name,
+                category.image_mime_type,
+                category.image_size,
+                category.image_width,
+                category.image_height,
+                category.image_updated_at,
+            )
+            for category in db_session.scalars(select(Category).order_by(Category.id.asc()))
+        ]
+
+    before_snapshot = category_snapshot()
+    before_categories = client.get("/api/v1/categories")
+    before_image = client.get(f"/api/v1/categories/{expense.id}/image")
+    assert before_categories.status_code == 200
+    assert before_image.status_code == 200
+    before_home_configuration = [
+        (
+            item["id"],
+            item["parent_category_id"],
+            item["sort_order"],
+            item["category_type"],
+            item["image_url"],
+        )
+        for item in before_categories.json()
+    ]
+
+    transitions = (
+        (date(2026, 5, 31), date(2026, 6, 1), "Juni 2026"),
+        (date(2026, 6, 30), date(2026, 7, 1), "Juli 2026"),
+        (date(2026, 7, 31), date(2026, 8, 1), "August 2026"),
+    )
+    try:
+        for end_date, start_date, name in transitions:
+            active_period = db_session.scalar(
+                select(CashPeriod).where(CashPeriod.status == CashPeriodStatus.active)
+            )
+            assert active_period is not None
+            closed = client.post(
+                f"/api/v1/cash-periods/{active_period.id}/close",
+                json={"end_date": end_date.isoformat()},
+            )
+            started = client.post(
+                "/api/v1/cash-periods/start",
+                json={"name": name, "start_date": start_date.isoformat()},
+            )
+            categories_after_transition = client.get("/api/v1/categories")
+            image_after_transition = client.get(f"/api/v1/categories/{expense.id}/image")
+
+            assert closed.status_code == 200
+            assert started.status_code == 201
+            assert categories_after_transition.status_code == 200
+            assert category_snapshot() == before_snapshot
+            assert [
+                (
+                    item["id"],
+                    item["parent_category_id"],
+                    item["sort_order"],
+                    item["category_type"],
+                    item["image_url"],
+                )
+                for item in categories_after_transition.json()
+            ] == before_home_configuration
+            assert image_after_transition.status_code == 200
+            assert image_after_transition.content == preview_bytes
+
+        category_ids = [item[0] for item in category_snapshot()]
+        assert category_ids == [item[0] for item in before_snapshot]
+        assert len(category_ids) == len(set(category_ids))
+        assert db_session.get(Category, child.id).parent_category_id == expense.id
+        assert db_session.get(Category, income.id).category_type == CategoryType.income
+        preserved_expense = db_session.get(Expense, historical_expense.id)
+        assert preserved_expense is not None
+        assert preserved_expense.cash_period_id == first_period.id
+        assert preserved_expense.category_id == child.id
+        assert db_session.query(CashPeriod).count() == 4
+        assert db_session.query(Category).count() == len(before_snapshot)
+    finally:
+        original_path.unlink(missing_ok=True)
+        preview_path.unlink(missing_ok=True)
+        for directory in (image_directory, image_directory.parent):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
 
 
 def test_close_rejects_end_date_before_start_and_member(client, db_session):

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import require_cashbook_member
+from app.api.dependencies.auth import ensure_cash_period_access, require_cashbook_member
 from app.db.session import get_db
 from app.models.expense import Expense
+from app.models.cash_period import CashPeriod
 from app.schemas.expense import ExpenseCreate, ExpenseMutationResponse, ExpenseRead, ExpenseVoidRequest
 from app.services.expense_service import (
     ExpenseServiceError,
@@ -13,6 +14,7 @@ from app.services.expense_service import (
     void_expense,
 )
 from app.services.cashbook_service import CashbookAccess
+from app.services.cash_period_service import get_active_cash_period
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -29,7 +31,17 @@ def _get_expense(db: Session, expense_id: int, access: CashbookAccess) -> Expens
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "expense_not_found", "message": "Buchung nicht gefunden."},
         )
+    cash_period = db.get(CashPeriod, expense.cash_period_id)
+    if cash_period is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kassenperiode nicht gefunden.")
+    ensure_cash_period_access(db, access, cash_period)
     return expense
+
+
+def _ensure_active_period_access(db: Session, access: CashbookAccess) -> None:
+    cash_period = get_active_cash_period(db, access.cashbook.id)
+    if cash_period is not None:
+        ensure_cash_period_access(db, access, cash_period)
 
 
 @router.post("", response_model=ExpenseMutationResponse, status_code=status.HTTP_201_CREATED)
@@ -38,6 +50,7 @@ def create_expense_endpoint(
     db: Session = Depends(get_db),
     access: CashbookAccess = Depends(require_cashbook_member),
 ) -> dict[str, object]:
+    _ensure_active_period_access(db, access)
     try:
         expense, summary = create_expense(
             db,
@@ -63,6 +76,7 @@ def read_current_expenses(
     db: Session = Depends(get_db),
     access: CashbookAccess = Depends(require_cashbook_member),
 ) -> list[Expense]:
+    _ensure_active_period_access(db, access)
     try:
         return list_current_expenses(
             db,
