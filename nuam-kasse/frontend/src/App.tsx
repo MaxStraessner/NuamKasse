@@ -13,6 +13,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { ResponsiveHomePage } from "./pages/ResponsiveHomePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UserAdminPage } from "./pages/UserAdminPage";
 
@@ -39,7 +40,7 @@ const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <HomePage />,
+            element: <ResponsiveHomePage />,
           },
           {
             path: "book",
