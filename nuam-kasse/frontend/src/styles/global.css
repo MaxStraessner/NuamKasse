@@ -3754,3 +3754,216 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.app-shell--desktop .desktop-current-period {
+  margin-bottom: var(--space-5);
+}
+
+.app-shell--desktop .desktop-current-period__header,
+.app-shell--desktop .desktop-current-period__actions,
+.app-shell--desktop .desktop-start-period {
+  display: flex;
+  align-items: center;
+}
+
+.app-shell--desktop .desktop-current-period__header {
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.app-shell--desktop .desktop-current-period__header > div:first-child {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.app-shell--desktop .desktop-current-period__header h2,
+.app-shell--desktop .desktop-start-period h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  letter-spacing: -0.02em;
+}
+
+.app-shell--desktop .desktop-current-period__header p,
+.app-shell--desktop .desktop-start-period p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.app-shell--desktop .desktop-current-period__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.app-shell--desktop .desktop-current-period__actions .secondary-action {
+  width: auto;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-period-close-action {
+  min-height: 2.75rem;
+  padding: 0 var(--space-4);
+  border: 1px solid rgba(214, 54, 54, 0.24);
+  border-radius: var(--radius-pill);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-shell--desktop .desktop-current-period__metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.app-shell--desktop .desktop-current-period__metrics > span {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.app-shell--desktop .desktop-current-period__metrics small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.app-shell--desktop .desktop-current-period__metrics strong {
+  overflow: hidden;
+  font-size: clamp(1rem, 1.5vw, 1.3rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-current-period__metric--income strong {
+  color: var(--color-success);
+}
+
+.app-shell--desktop .desktop-current-period__metric--expense strong {
+  color: var(--color-danger);
+}
+
+.app-shell--desktop .desktop-start-period {
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+.app-shell--desktop .desktop-start-period > div {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.app-shell--desktop .desktop-start-period > div > span {
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.app-shell--desktop .desktop-start-period .desktop-primary-action {
+  border: 0;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive table {
+  width: 100%;
+  min-width: 72rem;
+  border-collapse: collapse;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive th {
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive th:nth-child(n + 4):not(:last-child),
+.app-shell--desktop .desktop-cash-periods__archive td:nth-child(n + 4):not(:last-child),
+.app-shell--desktop .desktop-cash-periods__archive th:last-child,
+.app-shell--desktop .desktop-cash-periods__archive td:last-child {
+  text-align: right;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive td {
+  padding: var(--space-4) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  vertical-align: middle;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive td:first-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive td:first-child a {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.app-shell--desktop .desktop-cash-periods__archive td:first-child small {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+}
+
+.app-shell--desktop .desktop-period-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.app-shell--desktop .desktop-period-row-actions a,
+.app-shell--desktop .desktop-period-row-actions button {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.app-shell--desktop .desktop-period-row-actions svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+@media (max-width: 1240px) {
+  .app-shell--desktop .desktop-current-period__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-shell--desktop .desktop-current-period__actions {
+    justify-content: flex-start;
+  }
+
+  .app-shell--desktop .desktop-current-period__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell--desktop .desktop-current-period__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--desktop .desktop-start-period {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
