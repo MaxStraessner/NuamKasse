@@ -1679,6 +1679,7 @@ describe("Cash periods", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: "Start" }));
     expect(await screen.findByLabelText("Kategorie Bank")).toHaveAttribute("data-has-custom-image", "true");
+    expect(screen.queryByRole("link", { name: "Kasse abschließen" })).not.toBeInTheDocument();
     expect(screen.getByAltText("Bild der Kategorie Bank")).toHaveAttribute(
       "src",
       "/api/v1/categories/2/image?v=stable",
