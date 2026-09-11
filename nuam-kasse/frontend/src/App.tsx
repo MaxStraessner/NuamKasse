@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AuthProvider } from "./app/AuthContext";
+import { DisplayModeProvider } from "./app/DisplayModeContext";
 import { NetworkStatusProvider } from "./app/NetworkStatusContext";
 import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
@@ -39,6 +40,18 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <HomePage />,
+          },
+          {
+            path: "book",
+            element: <HomePage />,
+          },
+          {
+            path: "bookings",
+            element: <OverviewPage />,
+          },
+          {
+            path: "reports",
+            element: <OverviewPage />,
           },
           {
             path: "cashbooks",
@@ -81,10 +94,12 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <AuthProvider>
-      <NetworkStatusProvider>
-        <RouterProvider router={router} />
-      </NetworkStatusProvider>
-    </AuthProvider>
+    <DisplayModeProvider>
+      <AuthProvider>
+        <NetworkStatusProvider>
+          <RouterProvider router={router} />
+        </NetworkStatusProvider>
+      </AuthProvider>
+    </DisplayModeProvider>
   );
 }

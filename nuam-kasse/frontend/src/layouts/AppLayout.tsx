@@ -2,16 +2,35 @@ import { CircleUserRound, WalletCards } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
+import { useDisplayMode } from "../app/DisplayModeContext";
 import { BottomNav } from "../components/BottomNav";
+import { DesktopSidebar } from "../components/DesktopSidebar";
+import { DesktopTopbar } from "../components/DesktopTopbar";
 import { OfflineNotice } from "../components/OfflineNotice";
 import { PwaInstallPrompt } from "../components/PwaInstallPrompt";
 import { PwaUpdatePrompt } from "../components/PwaUpdatePrompt";
 
 export function AppLayout() {
   const { user } = useAuth();
+  const { resolvedMode } = useDisplayMode();
+
+  if (resolvedMode === "desktop") {
+    return (
+      <div className="app-shell app-shell--desktop">
+        <DesktopSidebar />
+        <div className="desktop-workspace">
+          <DesktopTopbar />
+          <OfflineNotice />
+          <div className="desktop-page"><Outlet /></div>
+          <PwaInstallPrompt />
+          <PwaUpdatePrompt />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell app-shell--mobile">
       <div className="user-strip">
         <span>Hallo, {user?.display_name}</span>
         <Link className="cashbook-switch" aria-label="Kasse wechseln" to="/cashbooks">

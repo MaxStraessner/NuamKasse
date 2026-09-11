@@ -1,8 +1,9 @@
-import { ChevronRight, KeyRound, Layers3, LogOut, PiggyBank, ShieldCheck, UserRoundCog, UsersRound, WalletCards } from "lucide-react";
+import { ChevronRight, KeyRound, Layers3, LogOut, MonitorSmartphone, PiggyBank, ShieldCheck, UserRoundCog, UsersRound, WalletCards } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { APP_VERSION } from "../app/appVersion";
 import { useAuth } from "../app/AuthContext";
+import { useDisplayMode, type DisplayPreference } from "../app/DisplayModeContext";
 import { AppCard } from "../components/AppCard";
 import { PageContainer } from "../components/PageContainer";
 import { PageHeader } from "../components/PageHeader";
@@ -21,6 +22,13 @@ function SettingsLink({ description, icon: Icon, label, to }: SettingsLinkProps)
 
 export function SettingsPage() {
   const { logout, user } = useAuth();
+  const { isWebAvailable, preference, setPreference } = useDisplayMode();
+
+  const displayOptions: Array<{ label: string; value: DisplayPreference }> = [
+    { label: "Automatisch", value: "auto" },
+    { label: "Web", value: "web" },
+    { label: "Mobil", value: "mobile" },
+  ];
 
   return (
     <PageContainer>
@@ -30,6 +38,45 @@ export function SettingsPage() {
         <div className="account-card__avatar" aria-hidden="true">{user?.display_name?.slice(0, 1).toUpperCase()}</div>
         <div><strong>{user?.display_name}</strong><span>@{user?.username} · {user?.role === "admin" ? "Administrator" : "Mitglied"}</span></div>
       </AppCard>
+
+      <section className="settings-section" aria-labelledby="display-settings">
+        <h2 id="display-settings">Darstellung</h2>
+        <AppCard className="display-setting">
+          <div className="display-setting__copy">
+            <MonitorSmartphone aria-hidden="true" />
+            <span><strong>Ansicht</strong><small>Passend zum Bildschirm oder dauerhaft festlegen</small></span>
+          </div>
+          {isWebAvailable ? (
+            <div className="display-mode-options" role="radiogroup" aria-label="Ansicht">
+              {displayOptions.map((option) => (
+                <button
+                  aria-checked={preference === option.value}
+                  className={preference === option.value ? "display-mode-options__item display-mode-options__item--active" : "display-mode-options__item"}
+                  key={option.value}
+                  onClick={() => setPreference(option.value)}
+                  role="radio"
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <label className="display-mode-select">
+              <span>Ansicht wählen</span>
+              <select
+                aria-label="Ansicht"
+                onChange={(event) => setPreference(event.target.value as DisplayPreference)}
+                value={preference}
+              >
+                <option value="auto">Automatisch</option>
+                <option value="mobile">Mobil</option>
+                {preference === "web" ? <option disabled value="web">Web (größerer Bildschirm erforderlich)</option> : null}
+              </select>
+            </label>
+          )}
+        </AppCard>
+      </section>
 
       <section className="settings-section" aria-labelledby="security-settings">
         <h2 id="security-settings">Sicherheit</h2>
