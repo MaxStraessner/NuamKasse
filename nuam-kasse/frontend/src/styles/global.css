@@ -3490,3 +3490,267 @@ textarea:focus-visible {
     width: 100%;
   }
 }
+
+.app-shell--desktop .desktop-core-header button.desktop-primary-action {
+  border: 0;
+}
+
+.app-shell--desktop .desktop-categories__toolbar {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(11rem, auto);
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.app-shell--desktop .desktop-categories__toolbar .dialog-search {
+  margin: 0;
+}
+
+.app-shell--desktop .desktop-categories__toolbar select {
+  width: 100%;
+  height: 100%;
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.app-shell--desktop .desktop-categories__gallery {
+  margin-bottom: var(--space-5);
+}
+
+.app-shell--desktop .desktop-categories__grid,
+.app-shell--desktop .desktop-categories__gallery > .category-grid--selection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+
+.app-shell--desktop .desktop-category-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.app-shell--desktop .desktop-category-card:hover,
+.app-shell--desktop .desktop-category-card--selected {
+  border-color: rgba(0, 102, 204, 0.32);
+  background: var(--color-primary-soft);
+}
+
+.app-shell--desktop .desktop-category-card--inactive {
+  opacity: 0.62;
+}
+
+.app-shell--desktop .desktop-category-card .category-tile {
+  width: 3.4rem;
+  height: 3.4rem;
+  grid-row: 1 / span 2;
+}
+
+.app-shell--desktop .desktop-category-card > span:not(.category-type-badge) {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.app-shell--desktop .desktop-category-card > span strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-category-card > span small {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+}
+
+.app-shell--desktop .desktop-category-card > .category-type-badge {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.app-shell--desktop .desktop-categories__management {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.7fr) minmax(30rem, 1.8fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.app-shell--desktop .desktop-categories__tree {
+  position: sticky;
+  top: 6rem;
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+}
+
+.app-shell--desktop .desktop-category-tree {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.app-shell--desktop .desktop-category-tree__item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.app-shell--desktop .desktop-category-tree__item:hover,
+.app-shell--desktop .desktop-category-tree__item--selected {
+  background: var(--color-primary-soft);
+}
+
+.app-shell--desktop .desktop-category-tree__item .category-tile {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.app-shell--desktop .desktop-category-tree__item > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.app-shell--desktop .desktop-category-tree__item strong {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-category-tree__item small {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+}
+
+.app-shell--desktop .desktop-category-tree__item > svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-text-tertiary);
+}
+
+.app-shell--desktop .desktop-category-detail__header,
+.app-shell--desktop .desktop-category-detail__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.app-shell--desktop .desktop-category-detail__header {
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.app-shell--desktop .desktop-category-detail__identity > .category-tile {
+  width: 4.75rem;
+  height: 4.75rem;
+  flex: 0 0 auto;
+}
+
+.app-shell--desktop .desktop-category-detail__identity > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.app-shell--desktop .desktop-category-detail__identity small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.app-shell--desktop .desktop-category-detail__identity h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  letter-spacing: -0.02em;
+}
+
+.app-shell--desktop .desktop-category-detail__identity .category-type-badge {
+  justify-self: start;
+}
+
+.app-shell--desktop .desktop-category-detail__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.app-shell--desktop .desktop-category-detail__facts > span {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.app-shell--desktop .desktop-category-detail__facts small {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+}
+
+.app-shell--desktop .desktop-category-detail__facts strong {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-shell--desktop .desktop-category-detail__actions {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-shell--desktop .desktop-category-detail__actions .category-actions {
+  justify-content: flex-start;
+}
+
+.app-shell--desktop .desktop-category-detail__subheading {
+  align-items: center;
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-3);
+}
+
+.app-shell--desktop .desktop-category-detail__subheading .secondary-action {
+  width: auto;
+}
+
+.app-shell--desktop .desktop-category-detail__children {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.app-shell--desktop .desktop-category-detail__children .subcategory-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+@media (max-width: 1120px) {
+  .app-shell--desktop .desktop-categories__management {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell--desktop .desktop-categories__tree {
+    position: static;
+    max-height: none;
+  }
+
+  .app-shell--desktop .desktop-category-tree {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

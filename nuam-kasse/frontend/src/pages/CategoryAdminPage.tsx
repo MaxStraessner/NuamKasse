@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
 
+import { useDisplayMode } from "../app/DisplayModeContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
@@ -648,6 +649,7 @@ function ConfirmDeleteDialog({
 }
 
 export function CategoryAdminPage() {
+  const { resolvedMode } = useDisplayMode();
   const [categories, setCategories] = useState<Category[]>([]);
   const [catalog, setCatalog] = useState<CategoryCatalog>({ icons: [], colors: [] });
   const [form, setForm] = useState<CategoryForm>(emptyForm);
@@ -664,6 +666,7 @@ export function CategoryAdminPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [statusTarget, setStatusTarget] = useState<{ category: Category; nextStatus: boolean } | null>(null);
+  const [selectedDesktopRootId, setSelectedDesktopRootId] = useState<number | null>(null);
 
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const rootCategories = categoryTree;
@@ -674,6 +677,9 @@ export function CategoryAdminPage() {
       || category.children.some((child) => child.name.toLocaleLowerCase("de-DE").includes(query));
     return matchesStatus && matchesSearch;
   });
+  const selectedDesktopRoot = filteredRootCategories.find((category) => category.id === selectedDesktopRootId)
+    ?? filteredRootCategories[0]
+    ?? null;
 
   async function loadCategories() {
     setIsLoading(true);
@@ -920,6 +926,117 @@ export function CategoryAdminPage() {
         </div>
         {renderCategoryActions(subcategory, siblings, index, parentCategoryId)}
       </div>
+    );
+  }
+
+  if (resolvedMode === "desktop") {
+    const selectedRootIndex = selectedDesktopRoot
+      ? rootCategories.findIndex((category) => category.id === selectedDesktopRoot.id)
+      : -1;
+
+    return (
+      <main className="desktop-core-page desktop-categories">
+        <header className="desktop-core-header">
+          <div>
+            <p>Verwaltung</p>
+            <h1>Kategorien</h1>
+            <span>Ober- und Unterkategorien in ihrer bestehenden Reihenfolge verwalten.</span>
+          </div>
+          <button className="desktop-primary-action" onClick={startCreate} type="button"><Plus aria-hidden="true" />Neue Kategorie</button>
+        </header>
+
+        <div className="desktop-categories__toolbar">
+          <label className="dialog-search"><Search aria-hidden="true" /><span className="sr-only">Kategorien suchen</span><input onChange={(event) => setSearch(event.target.value)} placeholder="Kategorien und Unterkategorien suchen" value={search} /></label>
+          <label><span className="sr-only">Status filtern</span><select aria-label="Status filtern" onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}><option value="all">Alle Kategorien</option><option value="active">Nur aktive</option><option value="inactive">Nur inaktive</option></select></label>
+        </div>
+
+        {message ? <p className="form-success" role="status">{message}</p> : null}
+        {error ? <div className="form-error" role="alert"><p>{error}</p><button className="secondary-action" type="button" onClick={() => void loadCategories()}>Erneut laden</button></div> : null}
+
+        <section className="desktop-panel desktop-categories__gallery" aria-labelledby="desktop-category-overview">
+          <div className="desktop-panel__heading">
+            <div><span>Übersicht</span><h2 id="desktop-category-overview">Oberkategorien</h2></div>
+            <small>{filteredRootCategories.length} von {rootCategories.length}</small>
+          </div>
+          {isLoading ? <div className="category-grid category-grid--selection" aria-label="Kategorien werden geladen">{[1, 2, 3, 4, 5, 6].map((item) => <div className="category-skeleton" key={item} />)}</div> : null}
+          {!isLoading && categories.length === 0 ? <p className="empty-state">Noch keine Kategorien vorhanden. Erstelle deine erste Kategorie.</p> : null}
+          {!isLoading && categories.length > 0 && filteredRootCategories.length === 0 ? <p className="empty-state">Keine passenden Kategorien gefunden.</p> : null}
+          {!isLoading && filteredRootCategories.length > 0 ? (
+            <div className="desktop-categories__grid">
+              {filteredRootCategories.map((category) => (
+                <button
+                  aria-label={`Kategorie ${category.name} auswählen`}
+                  className={`desktop-category-card${selectedDesktopRoot?.id === category.id ? " desktop-category-card--selected" : ""}${category.is_active ? "" : " desktop-category-card--inactive"}`}
+                  key={category.id}
+                  onClick={() => setSelectedDesktopRootId(category.id)}
+                  type="button"
+                >
+                  <CategoryTile category={category} showLabel={false} />
+                  <span><strong>{category.name}</strong><small>{category.children.length} Unterkategorie{category.children.length === 1 ? "" : "n"}</small></span>
+                  <CategoryTypeBadge compact type={category.category_type} />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <div className="desktop-categories__management">
+          <aside className="desktop-panel desktop-categories__tree" aria-label="Kategoriestruktur">
+            <div className="desktop-panel__heading"><div><span>Struktur</span><h2>Kategorien</h2></div></div>
+            <div className="desktop-category-tree">
+              {filteredRootCategories.map((category) => (
+                <button className={selectedDesktopRoot?.id === category.id ? "desktop-category-tree__item desktop-category-tree__item--selected" : "desktop-category-tree__item"} key={category.id} onClick={() => setSelectedDesktopRootId(category.id)} type="button">
+                  <CategoryTile category={category} showLabel={false} size="compact" />
+                  <span><strong>{category.name}</strong><small>{category.children.length} untergeordnet</small></span>
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="desktop-panel desktop-categories__detail" aria-live="polite">
+            {selectedDesktopRoot ? (
+              <>
+                <div className="desktop-category-detail__header">
+                  <div className="desktop-category-detail__identity">
+                    <CategoryTile category={selectedDesktopRoot} showLabel={false} />
+                    <span><small>Ausgewählte Oberkategorie</small><h2>{selectedDesktopRoot.name}</h2><CategoryTypeBadge type={selectedDesktopRoot.category_type} /></span>
+                  </div>
+                  <span className={`status-pill ${selectedDesktopRoot.is_active ? "status-pill--active" : ""}`}>{selectedDesktopRoot.is_active ? "aktiv" : "inaktiv"}</span>
+                </div>
+
+                <div className="desktop-category-detail__facts">
+                  <span><small>Position</small><strong>{selectedRootIndex + 1}</strong></span>
+                  <span><small>Unterkategorien</small><strong>{selectedDesktopRoot.children.length}</strong></span>
+                  <span><small>Darstellung</small><strong>{selectedDesktopRoot.has_custom_image ? "Eigenes Bild" : "Standardsymbol"}</strong></span>
+                </div>
+
+                <div className="desktop-category-detail__actions">
+                  {renderCategoryActions(selectedDesktopRoot, rootCategories, selectedRootIndex, null)}
+                </div>
+
+                <div className="desktop-panel__heading desktop-category-detail__subheading">
+                  <div><span>Bestehende Reihenfolge</span><h2>Unterkategorien</h2></div>
+                  <button className="secondary-action" onClick={() => { setForm({ ...emptyForm, parent_category_id: selectedDesktopRoot.id, category_type: selectedDesktopRoot.category_type }); setEditingCategory(null); setDialogMode("create"); setMessage(null); setError(null); }} type="button"><Plus aria-hidden="true" />Unterkategorie</button>
+                </div>
+                {selectedDesktopRoot.children.length === 0 ? <p className="category-empty-note">Noch keine Unterkategorien.</p> : (
+                  <div className="desktop-category-detail__children">
+                    {selectedDesktopRoot.children.map((subcategory, subcategoryIndex) => renderSubcategoryRow(subcategory, selectedDesktopRoot.children, subcategoryIndex, selectedDesktopRoot.id))}
+                  </div>
+                )}
+              </>
+            ) : <div className="desktop-core-empty"><strong>Keine Kategorie ausgewählt</strong><p>Passe Suche oder Statusfilter an.</p></div>}
+          </section>
+        </div>
+
+        {dialogMode ? (
+          <CategoryFormDialog catalog={catalog} category={editingCategory} form={form} isSaving={isSaving} mode={dialogMode} onCancel={closeDialog} onCategoryUpdated={handleCategoryUpdated} onFormChange={setForm} onSubmit={(event) => void handleSubmit(event)} rootCategories={rootCategories} />
+        ) : null}
+        {deleteTarget ? <ConfirmDeleteDialog category={deleteTarget} isDeleting={isDeleting} onCancel={() => setDeleteTarget(null)} onConfirm={() => void handleConfirmDeleteCategory()} subcategoryCount={getSubcategoryCount(deleteTarget)} /> : null}
+        <AppDialog description={statusTarget?.nextStatus ? "Die Kategorie wird wieder für neue Buchungen angeboten." : "Die Kategorie verschwindet von der Startseite. Bestehende Buchungen bleiben erhalten."} isOpen={Boolean(statusTarget)} onClose={() => setStatusTarget(null)} title={statusTarget?.nextStatus ? "Kategorie aktivieren?" : "Kategorie deaktivieren?"}>
+          {statusTarget ? <div className="stack-form"><button className={`primary-action${statusTarget.nextStatus ? "" : " category-danger-action"}`} onClick={() => void handleActiveChange(statusTarget.category, statusTarget.nextStatus)} type="button">Bestätigen</button><button className="secondary-action" onClick={() => setStatusTarget(null)} type="button">Abbrechen</button></div> : null}
+        </AppDialog>
+      </main>
     );
   }
 
