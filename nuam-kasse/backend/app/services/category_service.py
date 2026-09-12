@@ -312,7 +312,7 @@ def stage_category_configuration_from_cashbook(
     )
     if target_count:
         raise CategoryServiceError(
-            "Die Kategorien des neuen Kassenbuchs wurden bereits initialisiert."
+            "Die Kategorien der neuen Kasse wurden bereits initialisiert."
         )
 
     source_categories = list(

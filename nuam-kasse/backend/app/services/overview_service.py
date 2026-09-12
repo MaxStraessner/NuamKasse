@@ -178,7 +178,7 @@ def get_current_overview(
     cash_period = get_active_cash_period(db, cashbook_id)
     if cash_period is None:
         raise OverviewServiceError(
-            "Es ist keine aktive Kassenperiode vorhanden.",
+            "Es ist keine Kasse geöffnet.",
             code="no_active_cash_period",
             status_code=404,
         )
@@ -221,7 +221,7 @@ def get_overview_cash_period_by_id(
     )
     if cash_period is None:
         raise OverviewServiceError(
-            "Kassenperiode nicht gefunden.",
+            "Kassenstand nicht gefunden.",
             code="cash_period_not_found",
             status_code=404,
         )

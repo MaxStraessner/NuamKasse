@@ -209,6 +209,8 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
     restaurant = next(item for item in listed.json() if item["id"] == new_cashbook_id)
     assert restaurant["current_balance"] == "12450.00"
     assert restaurant["active_period_id"] is not None
+    assert restaurant["status"] == "open"
+    assert restaurant["archived_at"] is None
 
     selected = client.get(
         "/api/v1/cash-periods/current",
@@ -235,6 +237,130 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
     assert categories.status_code == 200
     assert len(categories.json()) == new_cashbook_category_count
     assert db_session.query(Category).count() == categories_before_read
+
+
+def test_cashbook_close_and_reopen_preserve_all_business_data(
+    client,
+    db_session,
+    settings,
+):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    cashbook = get_test_cashbook(db_session)
+    period = create_period(db_session, admin.id)
+    category = Category(
+        cashbook_id=cashbook.id,
+        user_id=cashbook.category_owner_user_id,
+        name="Essen",
+        name_normalized="essen",
+        icon_key="utensils",
+        color_key="orange",
+        category_type="expense",
+        sort_order=1,
+        is_active=True,
+    )
+    db_session.add(category)
+    db_session.flush()
+    image_root = Path(settings.category_image_storage_path)
+    preview_path = image_root / "lifecycle" / "essen.preview.webp"
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    preview_path.write_bytes(b"preserved-preview")
+    category.image_preview_path = preview_path.relative_to(image_root).as_posix()
+    category.image_updated_at = utc_now()
+    expense = Expense(
+        cash_period_id=period.id,
+        category_id=category.id,
+        amount=Decimal("25.00"),
+        transaction_type="expense",
+        currency="THB",
+        created_by_user_id=admin.id,
+    )
+    db_session.add(expense)
+    db_session.commit()
+    login(client, "admin")
+
+    counts_before = {
+        "cashbooks": db_session.query(Cashbook).count(),
+        "memberships": db_session.query(CashbookMembership).count(),
+        "categories": db_session.query(Category).count(),
+        "expenses": db_session.query(Expense).count(),
+        "periods": db_session.query(CashPeriod).count(),
+    }
+    category_snapshot = (
+        category.id,
+        category.name,
+        category.sort_order,
+        category.image_preview_path,
+        category.image_updated_at,
+    )
+
+    closed = client.post(
+        f"/api/v1/cashbooks/{cashbook.id}/close",
+        json={"end_date": "2026-08-31"},
+    )
+    listed_closed = client.get("/api/v1/cashbooks")
+
+    assert closed.status_code == 200
+    assert closed.json()["closed_period"]["id"] == period.id
+    assert closed.json()["closed_period"]["status"] == "closed"
+    archived_item = next(item for item in listed_closed.json() if item["id"] == cashbook.id)
+    assert archived_item["status"] == "archived"
+    assert archived_item["active_period_id"] is None
+    assert archived_item["current_balance"] == "975.00"
+    assert archived_item["archived_at"] is not None
+
+    reopened = client.post(
+        f"/api/v1/cashbooks/{cashbook.id}/reopen",
+        json={"name": "September 2026", "start_date": "2026-09-01"},
+    )
+    listed_open = client.get("/api/v1/cashbooks")
+
+    assert reopened.status_code == 201
+    assert reopened.json()["status"] == "active"
+    assert reopened.json()["opening_amount"] == "975.00"
+    open_item = next(item for item in listed_open.json() if item["id"] == cashbook.id)
+    assert open_item["status"] == "open"
+    assert open_item["active_period_id"] == reopened.json()["id"]
+    assert open_item["archived_at"] is None
+    assert db_session.query(Cashbook).count() == counts_before["cashbooks"]
+    assert db_session.query(CashbookMembership).count() == counts_before["memberships"]
+    assert db_session.query(Category).count() == counts_before["categories"]
+    assert db_session.query(Expense).count() == counts_before["expenses"]
+    assert db_session.query(CashPeriod).count() == counts_before["periods"] + 1
+    db_session.refresh(category)
+    assert (
+        category.id,
+        category.name,
+        category.sort_order,
+        category.image_preview_path,
+        category.image_updated_at,
+    ) == category_snapshot
+    assert db_session.get(Expense, expense.id).cash_period_id == period.id
+    assert preview_path.read_bytes() == b"preserved-preview"
+
+
+def test_cashbook_lifecycle_is_admin_only_and_rejects_conflicting_state(
+    client,
+    db_session,
+):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    cashbook = get_test_cashbook(db_session)
+    create_period(db_session, admin.id)
+    create_test_user(db_session, username="nuam", role=UserRole.member)
+
+    login(client, "nuam")
+    assert client.post(f"/api/v1/cashbooks/{cashbook.id}/close", json={}).status_code == 403
+    assert client.post(f"/api/v1/cashbooks/{cashbook.id}/reopen", json={}).status_code == 403
+
+    login(client, "admin")
+    already_open = client.post(f"/api/v1/cashbooks/{cashbook.id}/reopen", json={})
+    closed = client.post(f"/api/v1/cashbooks/{cashbook.id}/close", json={})
+    already_closed = client.post(f"/api/v1/cashbooks/{cashbook.id}/close", json={})
+
+    assert already_open.status_code == 409
+    assert already_open.json()["detail"]["code"] == "cashbook_already_open"
+    assert closed.status_code == 200
+    assert already_closed.status_code == 409
+    assert already_closed.json()["detail"]["code"] == "cashbook_already_archived"
 
 
 def test_new_cashbook_inherits_complete_category_layout_and_remains_independent(
@@ -450,6 +576,84 @@ def test_new_cashbook_inherits_complete_category_layout_and_remains_independent(
     assert category_a.image_path == original_path.relative_to(image_root).as_posix()
     assert original_path.is_file()
     assert preview_path.is_file()
+
+
+def test_member_can_copy_shared_cashbook_categories_and_read_inherited_images(
+    client,
+    db_session,
+    settings,
+):
+    admin = create_test_user(db_session, username="nurm", role=UserRole.admin)
+    harald = create_test_user(db_session, username="harald", role=UserRole.member)
+    source_cashbook = get_test_cashbook(db_session)
+    category = Category(
+        cashbook_id=source_cashbook.id,
+        user_id=source_cashbook.category_owner_user_id,
+        name="Lebensmittel",
+        name_normalized="lebensmittel",
+        icon_key="utensils",
+        color_key="orange",
+        category_type="expense",
+        sort_order=3,
+        is_active=True,
+    )
+    db_session.add(category)
+    db_session.flush()
+    image_root = Path(settings.category_image_storage_path)
+    original_path = image_root / "shared-users" / "food.original.png"
+    preview_path = image_root / "shared-users" / "food.preview.webp"
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.write_bytes(b"shared-original")
+    preview_path.write_bytes(b"shared-preview")
+    category.image_path = original_path.relative_to(image_root).as_posix()
+    category.image_preview_path = preview_path.relative_to(image_root).as_posix()
+    category.image_original_name = "food.png"
+    category.image_mime_type = "image/png"
+    category.image_size = len(b"shared-original")
+    category.image_width = 320
+    category.image_height = 240
+    category.image_updated_at = utc_now()
+    db_session.commit()
+    files_before = {path.relative_to(image_root) for path in image_root.rglob("*.*")}
+
+    login(client, "harald")
+    created = client.post(
+        "/api/v1/cashbooks",
+        headers={"X-Cashbook-ID": str(source_cashbook.id)},
+        json={
+            "name": "Haralds Kasse",
+            "opening_amount": "500.00",
+            "template_cashbook_id": source_cashbook.id,
+        },
+    )
+
+    assert created.status_code == 201
+    target_cashbook_id = created.json()["id"]
+    categories = client.get(
+        "/api/v1/categories",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+    )
+    assert categories.status_code == 200
+    inherited = next(item for item in categories.json() if item["name"] == category.name)
+    assert inherited["sort_order"] == category.sort_order
+    assert inherited["category_type"] == "expense"
+    assert inherited["has_custom_image"] is True
+    assert inherited["image_url"].startswith(
+        f"/api/v1/categories/{inherited['id']}/image?v="
+    )
+    image = client.get(
+        f"/api/v1/categories/{inherited['id']}/image",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+    )
+    assert image.status_code == 200
+    assert image.content == b"shared-preview"
+    assert {path.relative_to(image_root) for path in image_root.rglob("*.*")} == files_before
+    assert db_session.get(Category, category.id).image_path == category.image_path
+    assert db_session.query(CashbookMembership).filter_by(
+        cashbook_id=target_cashbook_id,
+        user_id=harald.id,
+        role=CashbookRole.admin,
+    ).count() == 1
 
 
 def test_cashbook_template_must_be_selected_when_context_is_ambiguous(

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,3 +62,5 @@ class CashbookListItem(CashbookRead):
     role: CashbookRole
     current_balance: str
     active_period_id: int | None
+    status: Literal["open", "archived"]
+    archived_at: datetime | None = None

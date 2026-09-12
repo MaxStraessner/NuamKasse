@@ -185,13 +185,13 @@ def build_cash_period_export(
     overview.title = "Übersicht"
     _style_title(overview, "Nuam Kasse", 12)
     status_label = (
-        "Laufende Kassenperiode"
+        "Laufende Kasse"
         if cash_period.status == CashPeriodStatus.active
         else "Abgeschlossen"
     )
     metadata = (
         ("Kasse", cashbook.name),
-        ("Periode", cash_period.name),
+        ("Bezeichnung", cash_period.name),
         ("Zeitraum", _period_range(cash_period)),
         ("Status", status_label),
         ("Abgeschlossen am", _plain_datetime(cash_period.closed_at)),
@@ -290,7 +290,7 @@ def build_cash_period_export(
             overview.cell(row_index, 11, _as_number(amounts["income"])).number_format = money_format
             overview.cell(row_index, 12, _as_number(amounts["expense"])).number_format = money_format
         trend_chart = LineChart()
-        trend_chart.title = "Entwicklung über die Kassenperiode"
+        trend_chart.title = "Entwicklung der Kasse"
         trend_chart.y_axis.title = currency
         trend_chart.height = 8
         trend_chart.width = 12

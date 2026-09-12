@@ -414,7 +414,7 @@ def _apply_cashbook_accesses(
         if len(periods) != len(requested_period_ids) or any(
             period.cashbook_id != cashbook_id for period in periods
         ):
-            raise UserServiceError("Eine Periodenzuweisung gehört nicht zur ausgewählten Kasse.")
+            raise UserServiceError("Ein Kassenstand gehört nicht zur ausgewählten Kasse.")
 
         membership = existing.get(cashbook_id)
         if membership is None:
