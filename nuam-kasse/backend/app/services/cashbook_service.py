@@ -10,7 +10,11 @@ from app.core.money import MoneyError, parse_money
 from app.models.cashbook import Cashbook, CashbookMembership, CashbookRole
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.user import User, UserRole
-from app.services.category_service import stage_default_categories_for_cashbook
+from app.services.category_service import (
+    CategoryServiceError,
+    stage_category_configuration_from_cashbook,
+    stage_default_categories_for_cashbook,
+)
 from app.services.cash_summary_service import get_cash_period_summary
 from app.services.access_control_service import membership_can_access_cash_period
 from app.services.audit_service import record_admin_action
@@ -201,6 +205,40 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
     return result
 
 
+def _resolve_category_template(
+    db: Session,
+    *,
+    user: User,
+    template_cashbook_id: int | None,
+) -> Cashbook | None:
+    if template_cashbook_id is not None:
+        access = get_cashbook_access(db, user, template_cashbook_id)
+        if access is None:
+            raise CashbookServiceError(
+                "Das ausgewählte Kassenbuch ist nicht verfügbar.",
+                code="cashbook_template_forbidden",
+                status_code=403,
+            )
+        return access.cashbook
+
+    memberships = list(
+        db.scalars(
+            select(CashbookMembership)
+            .where(CashbookMembership.user_id == user.id)
+            .order_by(CashbookMembership.id.asc())
+        )
+    )
+    if not memberships:
+        return None
+    if len(memberships) == 1:
+        return memberships[0].cashbook
+    raise CashbookServiceError(
+        "Bitte wähle ein Kassenbuch als Kategorienvorlage aus.",
+        code="cashbook_template_required",
+        status_code=400,
+    )
+
+
 def create_cashbook(
     db: Session,
     *,
@@ -208,6 +246,7 @@ def create_cashbook(
     name: str,
     opening_amount: str | Decimal,
     description: str | None = None,
+    template_cashbook_id: int | None = None,
     member_user_ids: list[int] | None = None,
     start_date: date | None = None,
 ) -> Cashbook:
@@ -232,6 +271,12 @@ def create_cashbook(
             status_code=400,
         )
 
+    category_template = _resolve_category_template(
+        db,
+        user=created_by,
+        template_cashbook_id=template_cashbook_id,
+    )
+
     cashbook = Cashbook(
         name=clean_name,
         description=clean_description,
@@ -241,11 +286,27 @@ def create_cashbook(
     )
     db.add(cashbook)
     db.flush()
-    stage_default_categories_for_cashbook(
-        db,
-        cashbook_id=cashbook.id,
-        category_owner_user_id=created_by.id,
-    )
+    try:
+        if category_template is None:
+            stage_default_categories_for_cashbook(
+                db,
+                cashbook_id=cashbook.id,
+                category_owner_user_id=created_by.id,
+            )
+        else:
+            stage_category_configuration_from_cashbook(
+                db,
+                source_cashbook=category_template,
+                target_cashbook_id=cashbook.id,
+                target_category_owner_user_id=created_by.id,
+            )
+    except CategoryServiceError as exc:
+        db.rollback()
+        raise CashbookServiceError(
+            "Die Kategorienvorlage konnte nicht übernommen werden.",
+            code="cashbook_template_invalid",
+            status_code=400,
+        ) from exc
     db.add(
         CashbookMembership(
             cashbook_id=cashbook.id,

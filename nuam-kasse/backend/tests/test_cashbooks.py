@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from app.models import (
     Cashbook,
@@ -11,6 +12,7 @@ from app.models import (
     Expense,
     UserRole,
 )
+from app.models.user import utc_now
 from conftest import create_test_user, get_test_cashbook
 
 
@@ -185,6 +187,9 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
         "expenses": db_session.query(Expense).count(),
         "categories": db_session.query(Category).count(),
     }
+    original_category_count = db_session.query(Category).filter_by(
+        cashbook_id=original_cashbook.id,
+    ).count()
     login(client, "admin")
 
     created = client.post(
@@ -219,7 +224,7 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
     assert db_session.query(Cashbook).count() == original_counts["cashbooks"] + 1
     assert db_session.query(CashPeriod).count() == original_counts["periods"] + 1
     assert db_session.query(Expense).count() == original_counts["expenses"]
-    assert new_cashbook_category_count > 0
+    assert new_cashbook_category_count == original_category_count
     assert db_session.query(Category).count() == original_counts["categories"] + new_cashbook_category_count
 
     categories_before_read = db_session.query(Category).count()
@@ -230,6 +235,305 @@ def test_user_can_create_list_and_switch_between_multiple_cashbooks(client, db_s
     assert categories.status_code == 200
     assert len(categories.json()) == new_cashbook_category_count
     assert db_session.query(Category).count() == categories_before_read
+
+
+def test_new_cashbook_inherits_complete_category_layout_and_remains_independent(
+    client,
+    db_session,
+    settings,
+):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    source_cashbook = get_test_cashbook(db_session)
+    source_period = create_period(db_session, admin.id)
+    roots = [
+        Category(
+            cashbook_id=source_cashbook.id,
+            user_id=source_cashbook.category_owner_user_id,
+            name=name,
+            name_normalized=name.casefold(),
+            icon_key=icon_key,
+            color_key=color_key,
+            category_type=category_type,
+            sort_order=sort_order,
+            is_active=True,
+        )
+        for name, icon_key, color_key, category_type, sort_order in (
+            ("Kategorie B", "wallet", "blue", "expense", 2),
+            ("Kategorie A", "utensils", "orange", "expense", 1),
+            ("Kategorie D", "gift", "pink", "expense", 4),
+            ("Kategorie C", "landmark", "green", "income", 3),
+        )
+    ]
+    db_session.add_all(roots)
+    db_session.flush()
+    roots_by_name = {category.name: category for category in roots}
+    roots_by_name["Kategorie D"].is_active = False
+    roots_by_name["Kategorie D"].archived_at = utc_now()
+    children = [
+        Category(
+            cashbook_id=source_cashbook.id,
+            user_id=source_cashbook.category_owner_user_id,
+            name=name,
+            name_normalized=name.casefold(),
+            icon_key="utensils",
+            color_key="orange",
+            category_type="expense",
+            parent_category_id=roots_by_name["Kategorie A"].id,
+            sort_order=sort_order,
+            is_active=True,
+        )
+        for name, sort_order in (("Unterkategorie 2", 2), ("Unterkategorie 1", 1))
+    ]
+    db_session.add_all(children)
+    db_session.flush()
+
+    image_root = Path(settings.category_image_storage_path)
+    original_path = image_root / "shared" / "category-a.original.jpg"
+    preview_path = image_root / "shared" / "category-a.preview.webp"
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.write_bytes(b"original-image")
+    preview_path.write_bytes(b"preview-image")
+    category_a = roots_by_name["Kategorie A"]
+    category_a.image_path = original_path.relative_to(image_root).as_posix()
+    category_a.image_preview_path = preview_path.relative_to(image_root).as_posix()
+    category_a.image_original_name = "category-a.jpg"
+    category_a.image_mime_type = "image/jpeg"
+    category_a.image_size = len(b"original-image")
+    category_a.image_width = 640
+    category_a.image_height = 480
+    category_a.image_updated_at = utc_now()
+    db_session.add(
+        Expense(
+            cash_period_id=source_period.id,
+            category_id=children[0].id,
+            amount=Decimal("25.00"),
+            transaction_type="expense",
+            currency="THB",
+            created_by_user_id=admin.id,
+        )
+    )
+    db_session.commit()
+
+    def layout(cashbook_id: int):
+        categories = db_session.query(Category).filter_by(cashbook_id=cashbook_id).all()
+        names_by_id = {category.id: category.name for category in categories}
+        items = [
+            (
+                names_by_id.get(category.parent_category_id),
+                category.name,
+                category.sort_order,
+                category.icon_key,
+                category.color_key,
+                category.category_type,
+                category.image_path,
+                category.image_preview_path,
+                category.image_original_name,
+                category.image_mime_type,
+                category.image_size,
+                category.image_width,
+                category.image_height,
+                category.image_updated_at,
+                category.is_active,
+                category.archived_at,
+            )
+            for category in categories
+        ]
+        return sorted(items, key=lambda item: (item[0] or "", item[1]))
+
+    source_layout = layout(source_cashbook.id)
+    source_ids = {
+        category.id
+        for category in db_session.query(Category).filter_by(
+            cashbook_id=source_cashbook.id
+        )
+    }
+    counts_before = {
+        "cashbooks": db_session.query(Cashbook).count(),
+        "periods": db_session.query(CashPeriod).count(),
+        "expenses": db_session.query(Expense).count(),
+    }
+    files_before = {path.relative_to(image_root) for path in image_root.rglob("*.*")}
+    login(client, "admin")
+
+    created = client.post(
+        "/api/v1/cashbooks",
+        headers={"X-Cashbook-ID": str(source_cashbook.id)},
+        json={
+            "name": "Neue Kasse",
+            "opening_amount": "500.00",
+            "template_cashbook_id": source_cashbook.id,
+        },
+    )
+
+    assert created.status_code == 201
+    target_cashbook_id = created.json()["id"]
+    target_categories = db_session.query(Category).filter_by(
+        cashbook_id=target_cashbook_id
+    ).all()
+    target_ids = {category.id for category in target_categories}
+    assert target_ids.isdisjoint(source_ids)
+    assert layout(target_cashbook_id) == source_layout
+    assert db_session.query(Cashbook).count() == counts_before["cashbooks"] + 1
+    assert db_session.query(CashPeriod).count() == counts_before["periods"] + 1
+    assert db_session.query(Expense).count() == counts_before["expenses"]
+    assert db_session.query(Expense).filter(
+        Expense.cash_period.has(cashbook_id=target_cashbook_id)
+    ).count() == 0
+    assert {path.relative_to(image_root) for path in image_root.rglob("*.*")} == files_before
+
+    listed = client.get(
+        "/api/v1/categories",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+    )
+    assert listed.status_code == 200
+    listed_roots = [item for item in listed.json() if item["parent_category_id"] is None]
+    assert [item["name"] for item in listed_roots] == [
+        "Kategorie A",
+        "Kategorie B",
+        "Kategorie C",
+    ]
+    listed_children = [
+        item for item in listed.json() if item["parent_category_id"] is not None
+    ]
+    assert [item["name"] for item in listed_children] == [
+        "Unterkategorie 1",
+        "Unterkategorie 2",
+    ]
+    assert len(
+        {
+            (item["parent_category_id"], item["name"].casefold())
+            for item in listed.json()
+        }
+    ) == len(listed.json())
+
+    all_listed = client.get(
+        "/api/v1/categories?include_inactive=true",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+    )
+    all_listed_roots = [
+        item for item in all_listed.json() if item["parent_category_id"] is None
+    ]
+    assert [item["name"] for item in all_listed_roots] == [
+        "Kategorie A",
+        "Kategorie B",
+        "Kategorie C",
+        "Kategorie D",
+    ]
+    assert all_listed_roots[-1]["is_active"] is False
+
+    target_roots = sorted(
+        (category for category in target_categories if category.parent_category_id is None),
+        key=lambda category: category.sort_order,
+    )
+    reordered = client.put(
+        "/api/v1/categories/reorder",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+        json={"category_ids": [category.id for category in reversed(target_roots)]},
+    )
+    assert reordered.status_code == 200
+    assert layout(source_cashbook.id) == source_layout
+
+    copied_category_a = next(
+        category for category in target_categories if category.name == "Kategorie A"
+    )
+    removed_image = client.delete(
+        f"/api/v1/categories/{copied_category_a.id}/image",
+        headers={"X-Cashbook-ID": str(target_cashbook_id)},
+    )
+    source_image = client.get(
+        f"/api/v1/categories/{category_a.id}/image",
+        headers={"X-Cashbook-ID": str(source_cashbook.id)},
+    )
+    db_session.refresh(category_a)
+    assert removed_image.status_code == 200
+    assert source_image.status_code == 200
+    assert category_a.image_path == original_path.relative_to(image_root).as_posix()
+    assert original_path.is_file()
+    assert preview_path.is_file()
+
+
+def test_cashbook_template_must_be_selected_when_context_is_ambiguous(
+    client,
+    db_session,
+):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    source_cashbook = get_test_cashbook(db_session)
+    login(client, "admin")
+    second = client.post(
+        "/api/v1/cashbooks",
+        json={
+            "name": "Zweite Kasse",
+            "opening_amount": "100.00",
+            "template_cashbook_id": source_cashbook.id,
+        },
+    )
+    assert second.status_code == 201
+    selected_by_header = client.post(
+        "/api/v1/cashbooks",
+        headers={"X-Cashbook-ID": str(second.json()["id"])},
+        json={"name": "Dritte Kasse", "opening_amount": "100.00"},
+    )
+    assert selected_by_header.status_code == 201
+    counts_before = {
+        "cashbooks": db_session.query(Cashbook).count(),
+        "periods": db_session.query(CashPeriod).count(),
+        "categories": db_session.query(Category).count(),
+    }
+
+    ambiguous = client.post(
+        "/api/v1/cashbooks",
+        json={"name": "Ohne Vorlage", "opening_amount": "100.00"},
+    )
+
+    assert ambiguous.status_code == 400
+    assert ambiguous.json()["detail"]["code"] == "cashbook_template_required"
+    assert db_session.query(Cashbook).count() == counts_before["cashbooks"]
+    assert db_session.query(CashPeriod).count() == counts_before["periods"]
+    assert db_session.query(Category).count() == counts_before["categories"]
+
+
+def test_user_cannot_copy_categories_from_inaccessible_cashbook(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    outsider = create_test_user(db_session, username="outsider", role=UserRole.member)
+    outsider_membership = db_session.query(CashbookMembership).filter_by(
+        user_id=outsider.id
+    ).one()
+    db_session.delete(outsider_membership)
+    foreign_cashbook = Cashbook(
+        name="Fremde Kasse",
+        currency="THB",
+        created_by_user_id=outsider.id,
+        category_owner_user_id=outsider.id,
+    )
+    db_session.add(foreign_cashbook)
+    db_session.flush()
+    db_session.add(
+        CashbookMembership(
+            cashbook_id=foreign_cashbook.id,
+            user_id=outsider.id,
+            role=CashbookRole.admin,
+        )
+    )
+    db_session.commit()
+    counts_before = {
+        "cashbooks": db_session.query(Cashbook).count(),
+        "categories": db_session.query(Category).count(),
+    }
+    login(client, "admin")
+
+    blocked = client.post(
+        "/api/v1/cashbooks",
+        json={
+            "name": "Unzulässige Kopie",
+            "opening_amount": "100.00",
+            "template_cashbook_id": foreign_cashbook.id,
+        },
+    )
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["code"] == "cashbook_template_forbidden"
+    assert db_session.query(Cashbook).count() == counts_before["cashbooks"]
+    assert db_session.query(Category).count() == counts_before["categories"]
 
 
 def test_cashbook_header_cannot_cross_membership_boundary(client, db_session):

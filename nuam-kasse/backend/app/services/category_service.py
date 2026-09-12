@@ -14,7 +14,7 @@ from app.models.category import Category, CategoryType
 from app.models.cashbook import Cashbook, CashbookMembership
 from app.models.expense import Expense
 from app.models.user import utc_now
-from app.services.category_image_service import delete_category_image_paths
+from app.services.category_image_service import delete_category_image_paths_if_unreferenced
 
 
 class CategoryServiceError(ValueError):
@@ -294,6 +294,97 @@ def list_categories(
     return list(db.scalars(query))
 
 
+def stage_category_configuration_from_cashbook(
+    db: Session,
+    *,
+    source_cashbook: Cashbook,
+    target_cashbook_id: int,
+    target_category_owner_user_id: int,
+) -> int:
+    """Clone one cashbook's category configuration into the current transaction."""
+    target_count = int(
+        db.scalar(
+            select(func.count(Category.id)).where(
+                *_owner_filter(target_cashbook_id, target_category_owner_user_id)
+            )
+        )
+        or 0
+    )
+    if target_count:
+        raise CategoryServiceError(
+            "Die Kategorien des neuen Kassenbuchs wurden bereits initialisiert."
+        )
+
+    source_categories = list(
+        db.scalars(
+            select(Category)
+            .where(
+                *_owner_filter(
+                    source_cashbook.id,
+                    source_cashbook.category_owner_user_id,
+                )
+            )
+            .order_by(
+                Category.parent_category_id.is_not(None).asc(),
+                Category.sort_order.asc(),
+                Category.name_normalized.asc(),
+                Category.id.asc(),
+            )
+        )
+    )
+    copied_ids: dict[int, int] = {}
+    pending = list(source_categories)
+    created = 0
+
+    while pending:
+        next_pending: list[Category] = []
+        for source in pending:
+            if (
+                source.parent_category_id is not None
+                and source.parent_category_id not in copied_ids
+            ):
+                next_pending.append(source)
+                continue
+
+            category = Category(
+                cashbook_id=target_cashbook_id,
+                user_id=target_category_owner_user_id,
+                name=source.name,
+                name_normalized=source.name_normalized,
+                icon_key=source.icon_key,
+                color_key=source.color_key,
+                category_type=source.category_type,
+                image_path=source.image_path,
+                image_preview_path=source.image_preview_path,
+                image_original_name=source.image_original_name,
+                image_mime_type=source.image_mime_type,
+                image_size=source.image_size,
+                image_width=source.image_width,
+                image_height=source.image_height,
+                image_updated_at=source.image_updated_at,
+                parent_category_id=(
+                    copied_ids[source.parent_category_id]
+                    if source.parent_category_id is not None
+                    else None
+                ),
+                sort_order=source.sort_order,
+                is_active=source.is_active,
+                archived_at=source.archived_at,
+            )
+            db.add(category)
+            db.flush()
+            copied_ids[source.id] = category.id
+            created += 1
+
+        if len(next_pending) == len(pending):
+            raise CategoryServiceError(
+                "Die Kategorienvorlage enthält eine ungültige Hierarchie."
+            )
+        pending = next_pending
+
+    return created
+
+
 def get_category_by_id(
     db: Session,
     category_id: int,
@@ -527,7 +618,12 @@ def delete_category(db: Session, *, category: Category, settings: Settings | Non
     image_preview_path = category.image_preview_path
     db.delete(category)
     db.commit()
-    delete_category_image_paths(image_path, image_preview_path, settings)
+    delete_category_image_paths_if_unreferenced(
+        db,
+        image_path,
+        image_preview_path,
+        settings,
+    )
 
 
 def get_category_catalog() -> dict[str, object]:
