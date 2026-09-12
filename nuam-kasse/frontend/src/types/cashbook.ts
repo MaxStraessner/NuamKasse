@@ -17,6 +17,7 @@ export type CashbookCreate = {
   name: string;
   opening_amount: string;
   description?: string | null;
+  template_cashbook_id?: number | null;
   member_user_ids?: number[];
   start_date?: string | null;
 };

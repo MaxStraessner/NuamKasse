@@ -3,6 +3,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
+import { useDisplayMode } from "../app/DisplayModeContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
 import { CategoryTile } from "../components/CategoryTile";
@@ -96,6 +97,7 @@ function formatExpenseCount(count: number): string {
 
 export function OverviewPage() {
   const { user } = useAuth();
+  const { resolvedMode } = useDisplayMode();
   const isAdmin = user?.cashbook_role === "admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPeriodId = Number(searchParams.get("period"));
@@ -341,6 +343,111 @@ export function OverviewPage() {
     filters.categoryId || filters.userId || filters.datePreset !== "all" || filters.status !== "active" || filters.sort !== "created_at_desc",
   );
 
+  function canVoidExpense(expense: OverviewExpense): boolean {
+    return Boolean(
+      cashPeriod?.status === "active"
+      && !expense.is_voided
+      && (isAdmin || user?.id === expense.created_by.id),
+    );
+  }
+
+  if (resolvedMode === "desktop") {
+    return (
+      <main className="desktop-core-page desktop-bookings">
+        <header className="desktop-core-header">
+          <div>
+            <p>Gemeinsame Kasse</p>
+            <h1>Buchungen</h1>
+            <span>Transaktionen prüfen, filtern und nachvollziehbar verwalten.</span>
+          </div>
+          {periodOptions.length > 0 ? (
+            <label className="desktop-period-select">
+              <span>Kassenperiode</span>
+              <select onChange={(event) => selectPeriod(event.target.value)} value={selectedPeriodId ?? ""}>
+                <option value="">Aktive Periode</option>
+                {periodOptions.filter((period) => period.status !== "active").map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </header>
+
+        {isLoadingOverview && !overview ? <div className="desktop-dashboard__skeleton" aria-label="Buchungen werden geladen" /> : null}
+        {hasNoActivePeriod ? (
+          <section className="desktop-panel desktop-dashboard__empty" aria-label="Keine aktive Kassenperiode">
+            <h2>Keine aktive Kassenperiode</h2>
+            <p>Zurzeit ist keine aktive Kassenperiode vorhanden.</p>
+            {isAdmin ? <Link to="/settings/cash-periods">Neue Kassenperiode anlegen</Link> : null}
+          </section>
+        ) : null}
+        {overviewError ? (
+          <div className="form-error" role="alert"><p>{overviewError}</p><button className="secondary-action" onClick={() => void loadOverview(false)} type="button">Erneut laden</button></div>
+        ) : null}
+
+        {overview && cashPeriod ? (
+          <>
+            <section className="desktop-bookings__summary" aria-label="Kennzahlen der ausgewählten Kassenperiode">
+              <article className="desktop-metric desktop-metric--balance"><span className="desktop-metric__label">Verbleibend</span><strong>{formatThaiBaht(overview.summary.remaining_amount, cashPeriod.currency)}</strong><small>{cashPeriod.name}</small></article>
+              <article className="desktop-metric desktop-metric--income"><span className="desktop-metric__label">Einnahmen</span><strong>{formatThaiBaht(overview.summary.income_amount, cashPeriod.currency)}</strong><small>{formatExpenseCount(overview.summary.active_expense_count)}</small></article>
+              <article className="desktop-metric desktop-metric--expense"><span className="desktop-metric__label">Ausgaben</span><strong>{formatThaiBaht(overview.summary.spent_amount, cashPeriod.currency)}</strong><small>{percentSpent.toFixed(2)} Prozent des Ausgangsbetrags</small></article>
+              <article className="desktop-metric"><span className="desktop-metric__label">Buchungen</span><strong>{isAdmin ? overview.summary.expense_count : overview.summary.active_expense_count}</strong><small>{isAdmin ? `${overview.summary.voided_expense_count} storniert` : "Gültige Buchungen"}</small></article>
+            </section>
+
+            <section className="desktop-panel desktop-bookings__panel" aria-labelledby="desktop-bookings-title">
+              <div className="desktop-panel__heading">
+                <div><span>{formatPeriodDate(cashPeriod.start_date)}{cashPeriod.end_date ? ` bis ${formatPeriodDate(cashPeriod.end_date)}` : " bis heute"}</span><h2 id="desktop-bookings-title">Buchungsliste</h2></div>
+                <small>{expensesPage ? `${expensesPage.total} gefunden` : "Wird geladen"}</small>
+              </div>
+
+              <div className="desktop-bookings__filters" aria-label="Buchungen filtern">
+                <label><span>Kategorie</span><select onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))} value={filters.categoryId}><option value="">Alle Kategorien</option>{overviewCategories.map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</select></label>
+                <label><span>Benutzer</span><select onChange={(event) => setFilters((current) => ({ ...current, userId: event.target.value }))} value={filters.userId}><option value="">Alle Benutzer</option>{overviewUsers.map((summaryUser) => <option key={summaryUser.user_id} value={summaryUser.user_id}>{summaryUser.display_name}</option>)}</select></label>
+                <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamte Periode</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
+                {isAdmin ? <label><span>Status</span><select onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as StatusFilter }))} value={filters.status}><option value="active">Nur gültige</option><option value="all">Mit stornierten</option></select></label> : null}
+                <label><span>Sortierung</span><select onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as OverviewExpenseSort }))} value={filters.sort}><option value="created_at_desc">Neueste zuerst</option><option value="created_at_asc">Älteste zuerst</option><option value="amount_desc">Höchster Betrag</option><option value="amount_asc">Niedrigster Betrag</option></select></label>
+                {hasActiveFilters ? <button className="desktop-filter-reset" onClick={resetFilters} type="button">Zurücksetzen</button> : null}
+              </div>
+              {filters.datePreset === "custom" ? (
+                <div className="desktop-bookings__date-filters">
+                  <label><span>Von</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} type="date" value={filters.dateFrom} /></label>
+                  <label><span>Bis</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} type="date" value={filters.dateTo} /></label>
+                </div>
+              ) : null}
+              {filterError ? <p className="form-error" role="alert">{filterError}</p> : null}
+              {expenseError ? <p className="form-error" role="alert">{expenseError}</p> : null}
+              {isLoadingExpenses && !expensesPage ? <div className="cash-skeleton" aria-label="Buchungen werden geladen" /> : null}
+              {expensesPage && expensesPage.items.length === 0 ? <p className="empty-state">{hasActiveFilters ? "Für diese Auswahl wurden keine Buchungen gefunden." : "Noch keine Buchungen vorhanden."}</p> : null}
+              {expensesPage && expensesPage.items.length > 0 ? (
+                <div className="desktop-table-scroller">
+                  <table className="desktop-bookings__table">
+                    <thead><tr><th>Datum</th><th>Kategorie</th><th>Beschreibung</th><th>Benutzer</th><th>Typ</th><th>Betrag</th><th><span className="sr-only">Aktionen</span></th></tr></thead>
+                    <tbody>
+                      {expensesPage.items.map((expense) => (
+                        <tr className={`${expense.transaction_type === "income" ? "desktop-bookings__row--income" : "desktop-bookings__row--expense"}${expense.is_voided ? " desktop-bookings__row--voided" : ""}`} key={expense.id}>
+                          <td>{formatLocalDateTime(expense.created_at)}</td>
+                          <td><div className="desktop-bookings__category"><CategoryTile category={expense.category} showLabel={false} size="compact" /><span><strong>{expense.category.name}</strong>{expense.category.parent_category_id ? <small>Unterkategorie</small> : null}</span></div></td>
+                          <td>{expense.note || "—"}{isAdmin && expense.is_voided ? <small>Storniert{expense.voided_by ? ` von ${expense.voided_by.display_name}` : ""}{expense.void_reason ? ` · ${expense.void_reason}` : ""}</small> : null}</td>
+                          <td>{expense.created_by.display_name}</td>
+                          <td><CategoryTypeBadge compact type={expense.transaction_type} /></td>
+                          <td className={`desktop-money ${expense.transaction_type === "income" ? "desktop-money--positive" : "desktop-money--negative"}`}>{expense.transaction_type === "income" ? "+" : "−"}{formatThaiBaht(expense.amount, expense.currency)}</td>
+                          <td>{expense.is_voided ? <span className="desktop-status">Storniert</span> : canVoidExpense(expense) ? <button className="link-button" disabled={voidingExpenseId === expense.id} onClick={() => setVoidTarget(expense)} type="button">Stornieren</button> : null}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {expensesPage?.has_more ? <button className="secondary-action overview-load-more" disabled={isLoadingMore} onClick={() => void loadExpenses(expensesPage.offset + expensesPage.limit, true)} type="button">Weitere Buchungen laden</button> : null}
+            </section>
+
+            <AppDialog description="Die Buchung bleibt zur Nachvollziehbarkeit gespeichert und wird aus den Summen entfernt." isOpen={Boolean(voidTarget)} onClose={() => setVoidTarget(null)} preventClose={voidingExpenseId !== null} title="Buchung stornieren?">
+              {voidTarget ? <div className="stack-form"><div className="closing-summary"><strong>{voidTarget.category.name}</strong><span>{formatThaiBaht(voidTarget.amount, voidTarget.currency)}</span></div><button className="primary-action category-danger-action" onClick={() => void handleVoidExpense(voidTarget)} type="button">Buchung stornieren</button><button className="secondary-action" onClick={() => setVoidTarget(null)} type="button">Abbrechen</button></div> : null}
+            </AppDialog>
+          </>
+        ) : null}
+      </main>
+    );
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -534,11 +641,6 @@ export function OverviewPage() {
             {expensesPage && expensesPage.items.length > 0 ? (
               <div className="expense-list overview-expense-list">
                 {expensesPage.items.map((expense) => {
-                  const canVoidExpense = Boolean(
-                    cashPeriod.status === "active"
-                    && !expense.is_voided
-                    && (isAdmin || user?.id === expense.created_by.id),
-                  );
                   return (
                     <div className={`expense-item${expense.is_voided ? " expense-item--voided" : ""}`} key={expense.id}>
                       <CategoryTile category={expense.category} showLabel={false} size="compact" />
@@ -556,7 +658,7 @@ export function OverviewPage() {
                       <div className="expense-item__amount">
                         <strong>{formatThaiBaht(expense.amount, expense.currency)}</strong>
                         {isAdmin && expense.is_voided ? <span className="status-pill">Storniert</span> : null}
-                        {canVoidExpense ? (
+                        {canVoidExpense(expense) ? (
                           <button
                             className="link-button"
                             disabled={voidingExpenseId === expense.id}

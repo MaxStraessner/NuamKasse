@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import (
@@ -50,6 +50,7 @@ def create_cashbook_endpoint(
     payload: CashbookCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_password_change_completed),
+    active_cashbook_id: int | None = Header(default=None, alias="X-Cashbook-ID"),
 ):
     try:
         return create_cashbook(
@@ -58,6 +59,9 @@ def create_cashbook_endpoint(
             name=payload.name,
             opening_amount=payload.opening_amount,
             description=payload.description,
+            template_cashbook_id=(
+                payload.template_cashbook_id or active_cashbook_id
+            ),
             member_user_ids=payload.member_user_ids,
             start_date=payload.start_date,
         )

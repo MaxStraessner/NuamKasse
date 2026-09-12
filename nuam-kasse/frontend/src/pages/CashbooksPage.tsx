@@ -21,10 +21,17 @@ export function CashbooksPage() {
   const [name, setName] = useState("");
   const [openingAmount, setOpeningAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [templateCashbookId, setTemplateCashbookId] = useState<number | "">(user?.cashbook_id ?? "");
 
   async function loadCashbooks() {
     try {
-      setCashbooks(await listCashbooks());
+      const loadedCashbooks = await listCashbooks();
+      setCashbooks(loadedCashbooks);
+      setTemplateCashbookId((current) => {
+        if (current && loadedCashbooks.some((cashbook) => cashbook.id === current)) return current;
+        if (user?.cashbook_id && loadedCashbooks.some((cashbook) => cashbook.id === user.cashbook_id)) return user.cashbook_id;
+        return loadedCashbooks.length === 1 ? loadedCashbooks[0].id : "";
+      });
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kassen konnten nicht geladen werden.");
@@ -40,6 +47,10 @@ export function CashbooksPage() {
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (cashbooks.length > 0 && !templateCashbookId) {
+      setError("Bitte wähle ein Kassenbuch als Kategorienvorlage aus.");
+      return;
+    }
     setIsSaving(true);
     setError(null);
     try {
@@ -47,6 +58,7 @@ export function CashbooksPage() {
         name: name.trim(),
         opening_amount: normalizeAmountInput(openingAmount),
         description: description.trim() || null,
+        template_cashbook_id: templateCashbookId || null,
       });
       await selectCashbook(cashbook.id);
       navigate("/");
@@ -78,11 +90,21 @@ export function CashbooksPage() {
           </AppCard>
         ))}
       </div>
-      <AppDialog description="Die neue Kasse erhält automatisch ihre erste aktive Kassenperiode." isOpen={isOpen} onClose={() => setIsOpen(false)} preventClose={isSaving} title="Neue Kasse">
+      <AppDialog description="Die neue Kasse erhält eine eigene Kopie der gewählten Kategorienstruktur und ihre erste aktive Kassenperiode." isOpen={isOpen} onClose={() => setIsOpen(false)} preventClose={isSaving} title="Neue Kasse">
         <form className="stack-form" onSubmit={(event) => void handleCreate(event)}>
           <label className="form-field"><span>Name der Kasse</span><input maxLength={120} required value={name} onChange={(event) => setName(event.target.value)} /></label>
           <label className="form-field"><span>Anfangsbestand</span><input inputMode="decimal" required value={openingAmount} onChange={(event) => setOpeningAmount(event.target.value)} /></label>
           <label className="form-field"><span>Beschreibung optional</span><textarea maxLength={1000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          {cashbooks.length > 0 ? (
+            <label className="form-field">
+              <span>Kategorien übernehmen von</span>
+              <select aria-label="Kategorien übernehmen von" required value={templateCashbookId} onChange={(event) => setTemplateCashbookId(Number(event.target.value))}>
+                <option disabled value="">Bitte auswählen</option>
+                {cashbooks.map((cashbook) => <option key={cashbook.id} value={cashbook.id}>{cashbook.name}</option>)}
+              </select>
+              <small>Reihenfolge, Unterkategorien, Typen und Bilder werden einmalig übernommen.</small>
+            </label>
+          ) : null}
           <button className="primary-action" disabled={isSaving} type="submit">Kasse anlegen</button>
           <button className="secondary-action" disabled={isSaving} onClick={() => setIsOpen(false)} type="button">Abbrechen</button>
         </form>

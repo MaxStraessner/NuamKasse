@@ -50,6 +50,7 @@ class CashbookCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     opening_amount: str = Field(min_length=1, max_length=20)
     description: str | None = Field(default=None, max_length=1000)
+    template_cashbook_id: int | None = Field(default=None, gt=0)
     member_user_ids: list[int] = Field(default_factory=list)
     start_date: date | None = None
 

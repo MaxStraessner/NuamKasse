@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AuthProvider } from "./app/AuthContext";
+import { DisplayModeProvider } from "./app/DisplayModeContext";
 import { NetworkStatusProvider } from "./app/NetworkStatusContext";
 import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
 import { AppLayout } from "./layouts/AppLayout";
@@ -12,6 +13,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { ResponsiveHomePage } from "./pages/ResponsiveHomePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UserAdminPage } from "./pages/UserAdminPage";
 
@@ -38,7 +40,19 @@ const router = createBrowserRouter([
         children: [
           {
             index: true,
+            element: <ResponsiveHomePage />,
+          },
+          {
+            path: "book",
             element: <HomePage />,
+          },
+          {
+            path: "bookings",
+            element: <OverviewPage />,
+          },
+          {
+            path: "reports",
+            element: <OverviewPage />,
           },
           {
             path: "cashbooks",
@@ -81,10 +95,12 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <AuthProvider>
-      <NetworkStatusProvider>
-        <RouterProvider router={router} />
-      </NetworkStatusProvider>
-    </AuthProvider>
+    <DisplayModeProvider>
+      <AuthProvider>
+        <NetworkStatusProvider>
+          <RouterProvider router={router} />
+        </NetworkStatusProvider>
+      </AuthProvider>
+    </DisplayModeProvider>
   );
 }

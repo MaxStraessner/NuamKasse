@@ -3,6 +3,7 @@ import { Check, CheckCircle2, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
+import { useDisplayMode } from "../app/DisplayModeContext";
 import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
@@ -31,6 +32,7 @@ function isNoActiveCashPeriod(error: unknown): boolean {
 export function HomePage() {
   const { status: networkStatus } = useNetworkStatus();
   const { user } = useAuth();
+  const { resolvedMode } = useDisplayMode();
   const [cashPeriod, setCashPeriod] = useState<CashPeriod | null>(null);
   const [cashSummary, setCashSummary] = useState<CashPeriodSummary | null>(null);
   const [isLoadingCashPeriod, setIsLoadingCashPeriod] = useState(true);
@@ -254,6 +256,211 @@ export function HomePage() {
     }
   }
 
+  function renderBookingForm() {
+    if (!selectedCategory) {
+      return null;
+    }
+
+    return (
+      <form className="booking-form" onSubmit={(event) => void handleCreateExpense(event)}>
+        <div className="booking-category-header">
+          <CategoryTile category={selectedCategory} showLabel={false} />
+          {selectedParentCategory ? (
+            <div className="booking-category-pair" aria-label={getCategoryPath(categories, selectedCategory)}>
+              <div>
+                <span>Oberkategorie</span>
+                <strong>{selectedParentCategory.name}</strong>
+              </div>
+              <div>
+                <span>Unterkategorie</span>
+                <strong>{selectedCategory.name}</strong>
+              </div>
+            </div>
+          ) : (
+            <strong className="booking-category-single">{selectedCategory.name}</strong>
+          )}
+          <CategoryTypeBadge type={selectedCategoryType} />
+        </div>
+        <div className="amount-field">
+          <label htmlFor="expense-amount"><span>Betrag</span></label>
+          <input
+            aria-label="Betrag"
+            aria-describedby="amount-help"
+            data-autofocus
+            id="expense-amount"
+            inputMode="decimal"
+            onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
+            value={expenseAmount}
+          />
+          <div className="booking-actions">
+            <button
+              aria-label="Bestätigen"
+              className="booking-action booking-action--confirm"
+              disabled={isSavingExpense || !canUseServer}
+              type="submit"
+            >
+              <Check aria-hidden="true" />
+            </button>
+            <button
+              aria-label="Abbrechen"
+              className="booking-action booking-action--cancel"
+              disabled={isSavingExpense}
+              onClick={closeExpenseDialog}
+              type="button"
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
+          <small id="amount-help">Betrag in Thai Baht</small>
+        </div>
+        <div className="quick-amounts" aria-label="Schnellbeträge">
+          {[100, 250, 500, 1000].map((amount) => (
+            <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
+          ))}
+        </div>
+        <label className="form-field">
+          <span>Notiz optional</span>
+          <input
+            maxLength={500}
+            onChange={(event) => setExpenseNote(event.target.value)}
+            placeholder="Kurze Beschreibung"
+            value={expenseNote}
+          />
+        </label>
+        <div className="expense-preview">
+          <div>
+            <span>Verbleibend vorher</span>
+            <strong>{formatThaiBaht(cashSummary?.remaining_amount ?? "0.00", cashSummary?.currency ?? "THB")}</strong>
+          </div>
+          <div>
+            <span>Neue {isIncomeBooking ? "Einnahme" : "Ausgabe"}</span>
+            <strong>{expenseAmount.trim() ? (enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "Bitte prüfen") : "—"}</strong>
+          </div>
+          <div>
+            <span>Voraussichtlich verbleibend</span>
+            <strong>
+              {expenseAmount.trim() && enteredMinorUnits !== null
+                ? formatThaiBaht(minorUnitsToDecimalString(
+                  isIncomeBooking
+                    ? remainingMinorUnits + enteredMinorUnits
+                    : Math.max(remainingMinorUnits - enteredMinorUnits, 0),
+                ))
+                : "—"}
+            </strong>
+          </div>
+        </div>
+        {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
+      </form>
+    );
+  }
+
+  if (resolvedMode === "desktop") {
+    return (
+      <main className="desktop-core-page desktop-booking">
+        <header className="desktop-core-header">
+          <div>
+            <p>Gemeinsame Kasse</p>
+            <h1>Buchen</h1>
+            <span>Kategorie wählen und Buchung ohne unnötige Zwischenschritte erfassen.</span>
+          </div>
+          {cashPeriod && cashSummary ? (
+            <div className="desktop-booking__balance" aria-label="Aktueller Kassenstand">
+              <span>{cashPeriod.name}</span>
+              <strong>{formatThaiBaht(cashSummary.remaining_amount, cashSummary.currency)}</strong>
+              <small>Aktueller Restbetrag</small>
+            </div>
+          ) : null}
+        </header>
+
+        {successMessage ? <div className="success-toast" role="status"><CheckCircle2 aria-hidden="true" /><span>{successMessage}</span></div> : null}
+        {cashPeriodError ? (
+          <div className="form-error" role="alert">
+            <p>{cashPeriodError}</p>
+            <button className="secondary-action" type="button" onClick={() => void refreshCashPeriod(false)}>Erneut laden</button>
+          </div>
+        ) : null}
+
+        <div className="desktop-booking__layout">
+          <section className="desktop-panel desktop-booking__catalog" aria-labelledby="desktop-booking-categories">
+            <div className="desktop-panel__heading">
+              <div><span>Kategorieauswahl</span><h2 id="desktop-booking-categories">Kategorien</h2></div>
+              <small>{rootCategories.length} verfügbar</small>
+            </div>
+            {isLoadingCategories ? (
+              <div className="category-grid category-grid--selection" aria-label="Kategorien werden geladen">
+                {[1, 2, 3, 4, 5, 6].map((item) => <div className="category-skeleton" key={item} />)}
+              </div>
+            ) : null}
+            {categoryError ? (
+              <div className="empty-state" role="alert"><p>{categoryError}</p><button className="secondary-action" type="button" onClick={() => void loadCategories()}>Erneut laden</button></div>
+            ) : null}
+            {bookingError ? <p className="form-error" role="alert">{bookingError}</p> : null}
+            {!isLoadingCategories && !categoryError && rootCategories.length === 0 ? (
+              <p className="empty-state">{user?.cashbook_role === "admin" ? "Noch keine Kategorien vorhanden. Lege in den Einstellungen eine Kategorie an." : "Noch keine Kategorien verfügbar."}</p>
+            ) : null}
+            {!isLoadingCategories && !categoryError && rootCategories.length > 0 ? (
+              <div className="category-grid category-grid--selection">
+                {rootCategories.map((category) => (
+                  <CategoryTile
+                    category={category}
+                    isDisabled={!canBookCategory(category) || !category.is_active}
+                    key={category.id}
+                    onSelect={() => openRootCategory(category)}
+                    variant="selection"
+                  />
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          <aside className="desktop-panel desktop-booking__composer" aria-label="Buchungserfassung">
+            {isLoadingCashPeriod ? <div className="cash-skeleton" aria-label="Kassenperiode wird geladen" /> : null}
+            {!isLoadingCashPeriod && hasNoActiveCashPeriod ? (
+              <div className="desktop-core-empty">
+                <strong>Keine aktive Kassenperiode</strong>
+                <p>Eine Buchung ist erst möglich, sobald eine Periode aktiv ist.</p>
+                {user?.cashbook_role === "admin" ? <Link className="primary-link" to="/settings/cash-periods">Neue Kassenperiode anlegen</Link> : null}
+              </div>
+            ) : null}
+            {!isLoadingCashPeriod && !hasNoActiveCashPeriod && !selectedRootCategory && !selectedCategory ? (
+              <div className="desktop-core-empty">
+                <span className="desktop-core-empty__step">1</span>
+                <strong>Kategorie auswählen</strong>
+                <p>Wähle links eine Kategorie. Unterkategorie und Buchungsformular erscheinen anschließend hier.</p>
+              </div>
+            ) : null}
+            {selectedRootCategory && !selectedCategory ? (
+              <div className="desktop-booking__subcategories">
+                <div className="desktop-panel__heading">
+                  <div><span>Unterkategorie</span><h2>{selectedRootCategory.name}</h2></div>
+                  <button aria-label="Kategorieauswahl schließen" className="desktop-icon-button" onClick={closeSubcategoryView} type="button"><X aria-hidden="true" /></button>
+                </div>
+                {selectedRootChildren.length > 6 ? (
+                  <label className="dialog-search"><Search aria-hidden="true" /><span className="sr-only">Unterkategorie suchen</span><input onChange={(event) => setSubcategorySearch(event.target.value)} placeholder="Unterkategorie suchen" value={subcategorySearch} /></label>
+                ) : null}
+                {selectedRootChildren.length === 0 ? <p className="empty-state">Für diese Oberkategorie gibt es noch keine aktiven Unterkategorien.</p> : null}
+                {selectedRootChildren.length > 0 && visibleRootChildren.length === 0 ? <p className="empty-state">Keine passende Unterkategorie gefunden.</p> : null}
+                {visibleRootChildren.length > 0 ? (
+                  <div className="category-grid category-grid--selection">
+                    {visibleRootChildren.map((subcategory) => (
+                      <CategoryTile category={subcategory} isDisabled={!canBookCategory(subcategory) || !subcategory.is_active} key={subcategory.id} onSelect={() => openExpenseDialog(subcategory, selectedRootCategory)} variant="selection" />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {selectedCategory ? (
+              <div className="desktop-booking__form-wrap">
+                <div className="desktop-panel__heading"><div><span>Buchungserfassung</span><h2>{isIncomeBooking ? "Einnahme" : "Ausgabe"}</h2></div></div>
+                {renderBookingForm()}
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <PageContainer>
       <PageHeader eyebrow="Gemeinsame Kasse" title="Nuam Kasse" />
@@ -374,97 +581,7 @@ export function HomePage() {
         preventClose={isSavingExpense}
         title={`${isIncomeBooking ? "Einnahme" : "Ausgabe"} eintragen`}
       >
-        {selectedCategory ? (
-            <form className="booking-form" onSubmit={(event) => void handleCreateExpense(event)}>
-              <div className="booking-category-header">
-                <CategoryTile category={selectedCategory} showLabel={false} />
-                {selectedParentCategory ? (
-                  <div className="booking-category-pair" aria-label={getCategoryPath(categories, selectedCategory)}>
-                    <div>
-                      <span>Oberkategorie</span>
-                      <strong>{selectedParentCategory.name}</strong>
-                    </div>
-                    <div>
-                      <span>Unterkategorie</span>
-                      <strong>{selectedCategory.name}</strong>
-                    </div>
-                  </div>
-                ) : (
-                  <strong className="booking-category-single">{selectedCategory.name}</strong>
-                )}
-                <CategoryTypeBadge type={selectedCategoryType} />
-              </div>
-              <div className="amount-field">
-                <label htmlFor="expense-amount"><span>Betrag</span></label>
-                <input
-                  aria-label="Betrag"
-                  aria-describedby="amount-help"
-                  data-autofocus
-                  id="expense-amount"
-                  inputMode="decimal"
-                  onChange={(event) => setExpenseAmount(event.target.value.replace(/[^\d,.]/g, ""))}
-                  value={expenseAmount}
-                />
-                <div className="booking-actions">
-                  <button
-                    aria-label="Bestätigen"
-                    className="booking-action booking-action--confirm"
-                    disabled={isSavingExpense || !canUseServer}
-                    type="submit"
-                  >
-                    <Check aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label="Abbrechen"
-                    className="booking-action booking-action--cancel"
-                    disabled={isSavingExpense}
-                    onClick={closeExpenseDialog}
-                    type="button"
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                </div>
-                <small id="amount-help">Betrag in Thai Baht</small>
-              </div>
-              <div className="quick-amounts" aria-label="Schnellbeträge">
-                {[100, 250, 500, 1000].map((amount) => (
-                  <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
-                ))}
-              </div>
-              <label className="form-field">
-                <span>Notiz optional</span>
-                <input
-                  maxLength={500}
-                  onChange={(event) => setExpenseNote(event.target.value)}
-                  placeholder="Kurze Beschreibung"
-                  value={expenseNote}
-                />
-              </label>
-              <div className="expense-preview">
-                <div>
-                  <span>Verbleibend vorher</span>
-                  <strong>{formatThaiBaht(cashSummary?.remaining_amount ?? "0.00", cashSummary?.currency ?? "THB")}</strong>
-                </div>
-                <div>
-                  <span>Neue {isIncomeBooking ? "Einnahme" : "Ausgabe"}</span>
-                  <strong>{expenseAmount.trim() ? (enteredMinorUnits !== null ? formatThaiBaht(minorUnitsToDecimalString(enteredMinorUnits)) : "Bitte prüfen") : "—"}</strong>
-                </div>
-                <div>
-                  <span>Voraussichtlich verbleibend</span>
-                  <strong>
-                    {expenseAmount.trim() && enteredMinorUnits !== null
-                      ? formatThaiBaht(minorUnitsToDecimalString(
-                        isIncomeBooking
-                          ? remainingMinorUnits + enteredMinorUnits
-                          : Math.max(remainingMinorUnits - enteredMinorUnits, 0),
-                      ))
-                      : "—"}
-                  </strong>
-                </div>
-              </div>
-              {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
-            </form>
-        ) : null}
+        {renderBookingForm()}
       </AppDialog>
     </PageContainer>
   );

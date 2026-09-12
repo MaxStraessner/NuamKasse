@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image, ImageOps, UnidentifiedImageError
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -77,6 +78,34 @@ def _delete_file(relative_path: str | None, settings: Settings | None = None) ->
         path.unlink(missing_ok=True)
     except OSError:
         return
+
+
+def _image_path_is_referenced(db: Session, relative_path: str) -> bool:
+    return (
+        db.scalar(
+            select(Category.id)
+            .where(
+                or_(
+                    Category.image_path == relative_path,
+                    Category.image_preview_path == relative_path,
+                )
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def delete_category_image_paths_if_unreferenced(
+    db: Session,
+    image_path: str | None,
+    image_preview_path: str | None,
+    settings: Settings | None = None,
+) -> None:
+    """Delete image files only after their last category reference is gone."""
+    for relative_path in {image_path, image_preview_path} - {None}:
+        if not _image_path_is_referenced(db, relative_path):
+            _delete_file(relative_path, settings)
 
 
 def _validate_size(content: bytes, settings: Settings) -> None:
@@ -193,8 +222,12 @@ def replace_category_image(
             _delete_file(stored.image_preview_path, current_settings)
         raise
 
-    _delete_file(old_image_path, current_settings)
-    _delete_file(old_preview_path, current_settings)
+    delete_category_image_paths_if_unreferenced(
+        db,
+        old_image_path,
+        old_preview_path,
+        current_settings,
+    )
     return category
 
 
@@ -220,8 +253,12 @@ def remove_category_image(
     db.commit()
     db.refresh(category)
 
-    _delete_file(old_image_path, current_settings)
-    _delete_file(old_preview_path, current_settings)
+    delete_category_image_paths_if_unreferenced(
+        db,
+        old_image_path,
+        old_preview_path,
+        current_settings,
+    )
     return category
 
 
