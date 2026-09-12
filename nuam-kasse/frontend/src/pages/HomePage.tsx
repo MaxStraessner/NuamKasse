@@ -91,7 +91,7 @@ export function HomePage() {
         setCashPeriodError(null);
       } else if (!silent) {
         setHasNoActiveCashPeriod(false);
-        setCashPeriodError("Aktuelle Kassenperiode konnte nicht geladen werden.");
+        setCashPeriodError("Aktive Kasse konnte nicht geladen werden.");
       }
     } finally {
       if (!silent) {
@@ -414,12 +414,12 @@ export function HomePage() {
           </section>
 
           <aside className="desktop-panel desktop-booking__composer" aria-label="Buchungserfassung">
-            {isLoadingCashPeriod ? <div className="cash-skeleton" aria-label="Kassenperiode wird geladen" /> : null}
+            {isLoadingCashPeriod ? <div className="cash-skeleton" aria-label="Aktive Kasse wird geladen" /> : null}
             {!isLoadingCashPeriod && hasNoActiveCashPeriod ? (
               <div className="desktop-core-empty">
-                <strong>Keine aktive Kassenperiode</strong>
-                <p>Eine Buchung ist erst möglich, sobald eine Periode aktiv ist.</p>
-                {user?.cashbook_role === "admin" ? <Link className="primary-link" to="/settings/cash-periods">Neue Kassenperiode anlegen</Link> : null}
+                <strong>Keine aktive Kasse</strong>
+                <p>Eine Buchung ist erst möglich, sobald eine Kasse geöffnet ist.</p>
+                {user?.cashbook_role === "admin" ? <Link className="primary-link" to="/cashbooks">Kassenverwaltung öffnen</Link> : null}
               </div>
             ) : null}
             {!isLoadingCashPeriod && !hasNoActiveCashPeriod && !selectedRootCategory && !selectedCategory ? (
@@ -468,10 +468,10 @@ export function HomePage() {
       <AppCard ariaLabel="Kassenübersicht">
         <div className="card-heading">
           <span>Aktuelle Kasse</span>
-          <small>{cashPeriod?.name || "Kassenperiode"}</small>
+          <small>{cashPeriod?.name || "Aktive Kasse"}</small>
         </div>
         {isLoadingCashPeriod ? (
-          <div className="cash-skeleton" aria-label="Kassenperiode wird geladen" />
+          <div className="cash-skeleton" aria-label="Aktive Kasse wird geladen" />
         ) : null}
         {cashPeriodError ? (
           <div className="empty-state" role="alert">
@@ -485,8 +485,8 @@ export function HomePage() {
           <div className="cash-empty">
             <p>Zurzeit ist kein Betrag hinterlegt.</p>
             {user?.cashbook_role === "admin" ? (
-              <Link className="primary-link" to="/settings/cash-periods">
-                Neue Kassenperiode anlegen
+              <Link className="primary-link" to="/cashbooks">
+                Kassenverwaltung öffnen
               </Link>
             ) : null}
           </div>

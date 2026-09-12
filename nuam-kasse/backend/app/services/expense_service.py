@@ -44,7 +44,7 @@ def _get_active_cash_period_locked(db: Session, cashbook_id: int) -> CashPeriod:
     cash_period = db.scalar(_active_cash_period_for_update(cashbook_id))
     if cash_period is None:
         raise ExpenseServiceError(
-            "Es ist keine aktive Kassenperiode vorhanden.",
+            "Es ist keine Kasse geöffnet.",
             code="no_active_cash_period",
             status_code=404,
         )
@@ -91,7 +91,7 @@ def create_expense(
     cash_period = _get_active_cash_period_locked(db, cashbook_id)
     if cash_period.status != CashPeriodStatus.active:
         raise ExpenseServiceError(
-            "Die Kassenperiode ist bereits abgeschlossen.",
+            "Die Kasse ist bereits geschlossen.",
             code="cash_period_closed",
             status_code=409,
         )
@@ -207,10 +207,10 @@ def void_expense(
         .with_for_update()
     )
     if cash_period is None:
-        raise ExpenseServiceError("Kassenperiode nicht gefunden.", code="cash_period_not_found", status_code=404)
+        raise ExpenseServiceError("Kassenstand nicht gefunden.", code="cash_period_not_found", status_code=404)
     if cash_period.status != CashPeriodStatus.active:
         raise ExpenseServiceError(
-            "Die Kassenperiode ist bereits abgeschlossen.",
+            "Die Kasse ist bereits geschlossen.",
             code="cash_period_closed",
             status_code=409,
         )

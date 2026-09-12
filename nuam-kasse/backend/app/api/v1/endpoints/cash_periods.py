@@ -58,7 +58,7 @@ def _get_cash_period(db: Session, cash_period_id: int, access: CashbookAccess) -
     if cash_period is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "cash_period_not_found", "message": "Kassenperiode nicht gefunden."},
+            detail={"code": "cash_period_not_found", "message": "Kassenstand nicht gefunden."},
         )
     ensure_cash_period_access(db, access, cash_period)
     return cash_period
@@ -71,7 +71,7 @@ def _get_active_or_404(db: Session, access: CashbookAccess) -> CashPeriod:
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "no_active_cash_period",
-                "message": "Es ist keine aktive Kassenperiode vorhanden.",
+                "message": "Es ist keine Kasse geöffnet.",
             },
         )
     ensure_cash_period_access(db, access, cash_period)

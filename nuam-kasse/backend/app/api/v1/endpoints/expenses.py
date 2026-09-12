@@ -33,7 +33,7 @@ def _get_expense(db: Session, expense_id: int, access: CashbookAccess) -> Expens
         )
     cash_period = db.get(CashPeriod, expense.cash_period_id)
     if cash_period is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kassenperiode nicht gefunden.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kassenstand nicht gefunden.")
     ensure_cash_period_access(db, access, cash_period)
     return expense
 

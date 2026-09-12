@@ -47,12 +47,12 @@ function PeriodOverview({ error, periods }: { error: string | null; periods: Cas
   return (
     <section className="desktop-panel desktop-periods" aria-labelledby="period-overview-title">
       <div className="desktop-panel__heading">
-        <div><span>Kassenperioden</span><h2 id="period-overview-title">Periodenübersicht</h2></div>
-        <Link to="/settings/cash-periods">Alle Perioden</Link>
+        <div><span>Archiv</span><h2 id="period-overview-title">Kassenstände</h2></div>
+        <Link to="/cashbooks">Kassen verwalten</Link>
       </div>
       {error ? <p className="desktop-panel__error" role="alert">{error}</p> : null}
       {!error && periods.length === 0 ? (
-        <div className="desktop-chart-empty"><p>Noch keine Kassenperiode vorhanden.</p><span>Vorhandene Zeiträume werden hier übersichtlich zusammengefasst.</span></div>
+        <div className="desktop-chart-empty"><p>Noch kein Kassenstand vorhanden.</p><span>Vorhandene Zeiträume werden hier übersichtlich zusammengefasst.</span></div>
       ) : null}
       {periods.length > 0 ? (
         <div className="desktop-periods__scroller">
@@ -102,7 +102,7 @@ export function DesktopDashboardPage() {
       setPeriods(Array.isArray(periodsResult.value) ? periodsResult.value : []);
     } else {
       setPeriods([]);
-      setPeriodError("Kassenperioden konnten nicht geladen werden.");
+      setPeriodError("Kassenarchiv konnte nicht geladen werden.");
     }
 
     if (overviewResult.status === "rejected") {
@@ -160,9 +160,9 @@ export function DesktopDashboardPage() {
 
       {hasNoActivePeriod ? (
         <section className="desktop-panel desktop-dashboard__empty">
-          <h2>Keine aktive Kassenperiode</h2>
-          <p>Für das Dashboard wird eine aktive Kassenperiode benötigt.</p>
-          {user?.cashbook_role === "admin" ? <Link to="/settings/cash-periods">Kassenperioden öffnen</Link> : null}
+          <h2>Keine aktive Kasse</h2>
+          <p>Für das Dashboard muss eine Kasse geöffnet sein.</p>
+          {user?.cashbook_role === "admin" ? <Link to="/cashbooks">Kassenverwaltung öffnen</Link> : null}
         </section>
       ) : null}
 
@@ -175,9 +175,9 @@ export function DesktopDashboardPage() {
 
       {overview ? (
         <>
-          <section className="desktop-metrics" aria-label="Kennzahlen der aktuellen Kassenperiode">
-            <DashboardMetric detail="Aktuelle Kassenperiode" icon={ArrowUpRight} label="Einnahmen" tone="income" value={formatThaiBaht(overview.summary.income_amount, currency)} />
-            <DashboardMetric detail="Aktuelle Kassenperiode" icon={ArrowDownRight} label="Ausgaben" tone="expense" value={formatThaiBaht(overview.summary.spent_amount, currency)} />
+          <section className="desktop-metrics" aria-label="Kennzahlen der aktiven Kasse">
+            <DashboardMetric detail="Aktive Kasse" icon={ArrowUpRight} label="Einnahmen" tone="income" value={formatThaiBaht(overview.summary.income_amount, currency)} />
+            <DashboardMetric detail="Aktive Kasse" icon={ArrowDownRight} label="Ausgaben" tone="expense" value={formatThaiBaht(overview.summary.spent_amount, currency)} />
             <DashboardMetric detail="Verfügbarer Kassenbestand" icon={Wallet} label="Aktueller Saldo" tone="balance" value={formatThaiBaht(overview.summary.remaining_amount, currency)} />
             <DashboardMetric detail="Gültige Buchungen" icon={ReceiptText} label="Anzahl Buchungen" tone="bookings" value={String(overview.summary.active_expense_count)} />
           </section>
@@ -186,7 +186,7 @@ export function DesktopDashboardPage() {
 
           <section className="desktop-dashboard__charts">
             <article className="desktop-panel" aria-labelledby="trend-title">
-              <div className="desktop-panel__heading"><div><span>Aktuelle Periode</span><h2 id="trend-title">Einnahmen und Ausgaben</h2></div></div>
+              <div className="desktop-panel__heading"><div><span>Aktive Kasse</span><h2 id="trend-title">Einnahmen und Ausgaben</h2></div></div>
               <DesktopTrendChart currency={currency} data={timelineData} />
             </article>
             <article className="desktop-panel" aria-labelledby="category-distribution-title">

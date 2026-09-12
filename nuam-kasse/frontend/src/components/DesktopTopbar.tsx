@@ -3,40 +3,57 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../app/AuthContext";
+import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod } from "../services/cashPeriodsApi";
+
+type CashbookState = "loading" | "open" | "archived" | "unknown";
 
 export function DesktopTopbar() {
   const { user } = useAuth();
-  const [cashPeriodName, setCashPeriodName] = useState<string | null>(null);
+  const [cashbookState, setCashbookState] = useState<CashbookState>("loading");
 
   useEffect(() => {
     let isCurrent = true;
-    setCashPeriodName(null);
+
+    if (!user?.cashbook_id) {
+      setCashbookState("archived");
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    setCashbookState("loading");
     void getCurrentCashPeriod()
-      .then((cashPeriod) => {
-        if (isCurrent) {
-          setCashPeriodName(cashPeriod.name);
-        }
+      .then(() => {
+        if (isCurrent) setCashbookState("open");
       })
-      .catch(() => {
-        if (isCurrent) {
-          setCashPeriodName("Keine aktive Periode");
-        }
+      .catch((error: unknown) => {
+        if (!isCurrent) return;
+        setCashbookState(error instanceof ApiError && error.status === 404 ? "archived" : "unknown");
       });
+
     return () => {
       isCurrent = false;
     };
   }, [user?.cashbook_id]);
+
+  const contextLabel = cashbookState === "open" ? "Aktive Kasse" : "Kassenstatus";
+  const contextName =
+    cashbookState === "open"
+      ? user?.cashbook_name || "Kasse wählen"
+      : cashbookState === "archived"
+        ? "Keine aktive Kasse"
+        : cashbookState === "unknown"
+          ? "Status nicht verfügbar"
+          : "Wird geladen";
 
   return (
     <header className="desktop-topbar">
       <div className="desktop-topbar__context">
         <Link to="/cashbooks">
           <WalletCards aria-hidden="true" />
-          <span><small>Aktuelle Kasse</small><strong>{user?.cashbook_name || "Kasse wählen"}</strong></span>
+          <span><small>{contextLabel}</small><strong>{contextName}</strong></span>
         </Link>
-        <span className="desktop-topbar__divider" aria-hidden="true" />
-        <span><small>Kassenperiode</small><strong>{cashPeriodName || "Wird geladen …"}</strong></span>
       </div>
       <Link className="desktop-topbar__account" aria-label="Konto und Einstellungen öffnen" to="/settings">
         <span><small>Angemeldet als</small><strong>{user?.display_name}</strong></span>

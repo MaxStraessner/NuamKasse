@@ -8,6 +8,12 @@ from app.api.dependencies.auth import (
 )
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.cash_period import (
+    CashPeriodCloseRequest,
+    CashPeriodCloseResult,
+    CashPeriodRead,
+    CashPeriodStartRequest,
+)
 from app.schemas.cashbook import (
     CashbookCreate,
     CashbookListItem,
@@ -20,11 +26,14 @@ from app.services.cashbook_service import (
     CashbookAccess,
     CashbookServiceError,
     add_cashbook_member,
+    close_cashbook,
     create_cashbook,
+    get_cashbook_access,
     list_cashbooks_for_user,
     list_cashbook_members,
     list_member_candidates,
     remove_cashbook_member,
+    reopen_cashbook,
 )
 
 router = APIRouter(prefix="/cashbooks", tags=["cashbooks"])
@@ -35,6 +44,29 @@ def _service_error(exc: CashbookServiceError) -> HTTPException:
         status_code=exc.status_code,
         detail={"code": exc.code, "message": exc.message},
     )
+
+
+def _cashbook_admin_access(
+    db: Session, user: User, cashbook_id: int
+) -> CashbookAccess:
+    access = get_cashbook_access(db, user, cashbook_id)
+    if access is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "cashbook_membership_required",
+                "message": "Dieser Benutzer ist dieser Kasse nicht zugeordnet.",
+            },
+        )
+    if not access.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "cashbook_admin_required",
+                "message": "Diese Funktion ist nur für den Administrator der Kasse verfügbar.",
+            },
+        )
+    return access
 
 
 @router.get("", response_model=list[CashbookListItem])
@@ -63,6 +95,46 @@ def create_cashbook_endpoint(
                 payload.template_cashbook_id or active_cashbook_id
             ),
             member_user_ids=payload.member_user_ids,
+            start_date=payload.start_date,
+        )
+    except CashbookServiceError as exc:
+        raise _service_error(exc) from exc
+
+
+@router.post("/{cashbook_id}/close", response_model=CashPeriodCloseResult)
+def close_cashbook_endpoint(
+    cashbook_id: int,
+    payload: CashPeriodCloseRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+) -> dict[str, object]:
+    access = _cashbook_admin_access(db, user, cashbook_id)
+    try:
+        closed_period, summary = close_cashbook(
+            db,
+            cashbook=access.cashbook,
+            closed_by=user,
+            end_date=payload.end_date,
+        )
+    except CashbookServiceError as exc:
+        raise _service_error(exc) from exc
+    return {"closed_period": closed_period, "summary": summary}
+
+
+@router.post("/{cashbook_id}/reopen", response_model=CashPeriodRead, status_code=status.HTTP_201_CREATED)
+def reopen_cashbook_endpoint(
+    cashbook_id: int,
+    payload: CashPeriodStartRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_change_completed),
+):
+    access = _cashbook_admin_access(db, user, cashbook_id)
+    try:
+        return reopen_cashbook(
+            db,
+            cashbook=access.cashbook,
+            opened_by=user,
+            name=payload.name,
             start_date=payload.start_date,
         )
     except CashbookServiceError as exc:

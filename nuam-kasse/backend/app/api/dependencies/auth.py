@@ -135,6 +135,6 @@ def ensure_cash_period_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "cash_period_access_required",
-                "message": "Für diese Kassenperiode besteht keine Berechtigung.",
+                "message": "Für diesen Kassenstand besteht keine Berechtigung.",
             },
         )

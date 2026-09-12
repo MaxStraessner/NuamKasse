@@ -30,9 +30,9 @@ GERMAN_MONTHS = (
 def _validate_name(name: str) -> str:
     clean_name = name.strip()
     if not clean_name:
-        raise CashPeriodServiceError("Der Name der Kassenperiode darf nicht leer sein.")
+        raise CashPeriodServiceError("Die Bezeichnung der Kasse darf nicht leer sein.")
     if len(clean_name) > 80:
-        raise CashPeriodServiceError("Der Name der Kassenperiode darf höchstens 80 Zeichen lang sein.")
+        raise CashPeriodServiceError("Die Bezeichnung der Kasse darf höchstens 80 Zeichen lang sein.")
     return clean_name
 
 
@@ -123,7 +123,7 @@ def create_cash_period(
     db.scalar(select(Cashbook).where(Cashbook.id == cashbook.id).with_for_update())
     if get_active_cash_period(db, cashbook.id) is not None:
         raise CashPeriodServiceError(
-            "Es existiert bereits eine aktive Kassenperiode.",
+            "Es ist bereits eine Kasse geöffnet.",
             code="active_cash_period_exists",
             conflict=True,
         )
@@ -153,7 +153,7 @@ def create_cash_period(
     except IntegrityError as exc:
         db.rollback()
         raise CashPeriodServiceError(
-            "Es existiert bereits eine aktive Kassenperiode.",
+            "Es ist bereits eine Kasse geöffnet.",
             code="active_cash_period_exists",
             conflict=True,
         ) from exc
@@ -172,7 +172,7 @@ def update_cash_period(
 ) -> CashPeriod:
     if cash_period.status == CashPeriodStatus.closed:
         raise CashPeriodServiceError(
-            "Eine abgeschlossene Kassenperiode kann nicht mehr verändert werden.",
+            "Ein archivierter Kassenstand kann nicht mehr verändert werden.",
             code="cash_period_closed",
             conflict=True,
         )
@@ -227,11 +227,11 @@ def close_cash_period(
     )
     if cash_period is None:
         raise CashPeriodServiceError(
-            "Kassenperiode nicht gefunden.", code="cash_period_not_found"
+            "Kassenstand nicht gefunden.", code="cash_period_not_found"
         )
     if cash_period.status == CashPeriodStatus.closed:
         raise CashPeriodServiceError(
-            "Eine abgeschlossene Kassenperiode kann nicht erneut abgeschlossen werden.",
+            "Diese Kasse ist bereits geschlossen.",
             code="cash_period_closed",
             conflict=True,
         )
@@ -257,7 +257,7 @@ def close_cash_period(
     except IntegrityError as exc:
         db.rollback()
         raise CashPeriodServiceError(
-            "Die Kassenperiode wurde parallel verändert. Bitte lade die Ansicht neu.",
+            "Der Kassenstand wurde parallel verändert. Bitte lade die Ansicht neu.",
             code="cash_period_close_conflict",
             conflict=True,
         ) from exc
@@ -276,7 +276,7 @@ def start_next_cash_period(
     db.scalar(select(Cashbook).where(Cashbook.id == cashbook.id).with_for_update())
     if get_active_cash_period(db, cashbook.id) is not None:
         raise CashPeriodServiceError(
-            "Es existiert bereits eine aktive Kassenperiode.",
+            "Es ist bereits eine Kasse geöffnet.",
             code="active_cash_period_exists",
             conflict=True,
         )
@@ -291,7 +291,7 @@ def start_next_cash_period(
     )
     if previous_period is None:
         raise CashPeriodServiceError(
-            "Es gibt keine abgeschlossene Kassenperiode als Ausgangspunkt.",
+            "Es gibt keinen archivierten Kassenstand als Ausgangspunkt.",
             code="closed_cash_period_required",
             conflict=True,
         )
@@ -317,7 +317,7 @@ def start_next_cash_period(
     except IntegrityError as exc:
         db.rollback()
         raise CashPeriodServiceError(
-            "Die Kassenperiode wurde parallel verändert. Bitte lade die Ansicht neu.",
+            "Der Kassenstand wurde parallel verändert. Bitte lade die Ansicht neu.",
             code="cash_period_start_conflict",
             conflict=True,
         ) from exc

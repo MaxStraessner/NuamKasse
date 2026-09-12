@@ -4,7 +4,6 @@ import {
   Layers3,
   LogOut,
   MonitorSmartphone,
-  PiggyBank,
   ShieldCheck,
   UserRoundCog,
   UsersRound,
@@ -219,16 +218,10 @@ export function SettingsPage() {
               </div>
               <AppCard className="settings-menu">
                 <SettingsLink
-                  description="Kassen auswählen und neue Kasse anlegen"
+                  description="Aktive, weitere und geschlossene Kassen"
                   icon={WalletCards}
-                  label="Meine Kassen"
+                  label="Kassen verwalten"
                   to="/cashbooks"
-                />
-                <SettingsLink
-                  description="Aktive und abgeschlossene Zeiträume"
-                  icon={PiggyBank}
-                  label="Kassenperioden und Archiv"
-                  to="/settings/cash-periods"
                 />
               </AppCard>
             </section>
@@ -263,7 +256,7 @@ export function SettingsPage() {
                   ) : null}
                   {user?.role === "admin" ? (
                     <SettingsLink
-                      description="Konten, Rollen, Kassen und Perioden"
+                      description="Konten, Rollen, Kassen und Archiv"
                       icon={UserRoundCog}
                       label="Benutzer"
                       to="/settings/users"
@@ -335,16 +328,10 @@ export function SettingsPage() {
         <h2 id="cashbook-settings">Gemeinsame Kasse</h2>
         <AppCard className="settings-menu">
           <SettingsLink
-            description="Kassen auswählen und neue Kasse anlegen"
+            description="Aktive, weitere und geschlossene Kassen"
             icon={WalletCards}
-            label="Meine Kassen"
+            label="Kassen verwalten"
             to="/cashbooks"
-          />
-          <SettingsLink
-            description="Aktive und abgeschlossene Zeiträume"
-            icon={PiggyBank}
-            label="Kassenperioden und Archiv"
-            to="/settings/cash-periods"
           />
         </AppCard>
       </section>
@@ -371,7 +358,7 @@ export function SettingsPage() {
             ) : null}
             {user?.role === "admin" ? (
               <SettingsLink
-                description="Konten, Rollen, Kassen und Perioden"
+                description="Konten, Rollen, Kassen und Archiv"
                 icon={UserRoundCog}
                 label="Benutzer"
                 to="/settings/users"

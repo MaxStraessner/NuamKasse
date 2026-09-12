@@ -470,7 +470,7 @@ describe("App authentication", () => {
     fireEvent.change(screen.getByLabelText("Kassenrolle Nuam Kasse"), {
       target: { value: "admin" },
     });
-    fireEvent.change(screen.getByLabelText("Periodenzugriff Nuam Kasse"), {
+    fireEvent.change(screen.getByLabelText("Archivzugriff Nuam Kasse"), {
       target: { value: "current_and_future" },
     });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Benutzer anlegen" }));
@@ -553,7 +553,7 @@ describe("App authentication", () => {
     expect(screen.queryByText("Kategorien")).not.toBeInTheDocument();
     expect(screen.queryByText("Benutzer")).not.toBeInTheDocument();
     expect(screen.queryByText("Mitglieder")).not.toBeInTheDocument();
-    expect(screen.getByText("Kassenperioden und Archiv")).toBeInTheDocument();
+    expect(screen.getByText("Kassen verwalten")).toBeInTheDocument();
   });
 
   test("member cannot open user administration by direct URL", async () => {
@@ -1263,7 +1263,7 @@ describe("Expenses", () => {
       }
       if (url.endsWith("/cash-periods/current") || url.endsWith("/cash-periods/current/summary")) {
         return jsonResponse(
-          { detail: { code: "no_active_cash_period", message: "Es ist keine aktive Kassenperiode vorhanden." } },
+          { detail: { code: "no_active_cash_period", message: "Es ist keine Kasse geöffnet." } },
           404,
         );
       }
@@ -1390,7 +1390,7 @@ describe("Overview", () => {
     expect(screen.getAllByText(/19,600\.00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/400\.00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/62\.50/).length).toBeGreaterThan(0);
-    expect(screen.queryByLabelText("Kassenperiode")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Kassenstand")).not.toBeInTheDocument();
     expect(screen.queryByText("Mit stornierten")).not.toBeInTheDocument();
     expect(screen.queryByText(/storniert/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inklusive stornierter")).not.toBeInTheDocument();
@@ -1436,9 +1436,9 @@ describe("Overview", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: /Übersicht/i }));
-    expect(await screen.findByLabelText("Kassenperiode")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Kassenstand")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Kassenperiode"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Kassenstand"), { target: { value: "2" } });
     expect(await screen.findByText("Juni 2026")).toBeInTheDocument();
     expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
 
@@ -1539,7 +1539,7 @@ describe("Cash periods", () => {
       }
       if (url.endsWith("/cash-periods/current") || url.endsWith("/cash-periods/current/summary")) {
         return jsonResponse(
-          { detail: { code: "no_active_cash_period", message: "Es ist keine aktive Kassenperiode vorhanden." } },
+          { detail: { code: "no_active_cash_period", message: "Es ist keine Kasse geöffnet." } },
           404,
         );
       }
@@ -1553,7 +1553,7 @@ describe("Cash periods", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
     expect(await screen.findByText("Zurzeit ist kein Betrag hinterlegt.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Neue Kassenperiode anlegen" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Kassenverwaltung öffnen" })).toBeInTheDocument();
   });
 
   test("member does not see cash period administration", async () => {
@@ -1577,7 +1577,7 @@ describe("Cash periods", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
     expect(await screen.findByRole("heading", { name: "Einstellungen" })).toBeInTheDocument();
-    expect(screen.queryByText("Kassenperioden")).not.toBeInTheDocument();
+    expect(screen.queryByText("Administration")).not.toBeInTheDocument();
   });
 
   test("admin can edit an active cash period", async () => {
@@ -1606,20 +1606,20 @@ describe("Cash periods", () => {
       return jsonResponse({});
     });
 
+    window.history.pushState({}, "", "/settings/cash-periods");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
-    expect(await screen.findByRole("heading", { name: "Kassenperioden" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Nuam Kasse" })).toBeInTheDocument();
     expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
 
     const julyCard = screen.getByText("Juli 2026").closest(".app-card");
     expect(julyCard).not.toBeNull();
     fireEvent.click(within(julyCard as HTMLElement).getByRole("button", { name: "Bearbeiten" }));
-    fireEvent.change(screen.getByLabelText("Name der Kassenperiode"), { target: { value: "Juli korrigiert" } });
+    fireEvent.change(screen.getByLabelText("Bezeichnung"), { target: { value: "Juli korrigiert" } });
     fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "25000.50" } });
-    fireEvent.click(screen.getByRole("button", { name: "Kassenperiode speichern" }));
-    expect(await screen.findByText("Kassenperiode wurde aktualisiert.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kasse speichern" }));
+    expect(await screen.findByText("Kasse wurde aktualisiert.")).toBeInTheDocument();
     expect(screen.getByText("Juli korrigiert")).toBeInTheDocument();
   });
 
@@ -1689,16 +1689,16 @@ describe("Cash periods", () => {
       "Kategorie Essen",
     ]);
 
-    fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Kasse abschließen" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Kassenperiode endgültig abschließen" }));
+    window.history.pushState({}, "", "/settings/cash-periods");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    fireEvent.click(await screen.findByRole("button", { name: "Kasse schließen" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Kasse endgültig schließen" }));
 
-    expect(await screen.findByText(/Kassenperiode abgeschlossen.*Endbestand/)).toBeInTheDocument();
+    expect(await screen.findByText(/Kasse geschlossen.*Endbestand/)).toBeInTheDocument();
     expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
     expect(screen.getByText("Juli 2026")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Neue Kassenperiode starten" }));
-    expect(await screen.findByText(/August 2026 wurde mit.*Anfangsbestand gestartet/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kasse wieder öffnen" }));
+    expect(await screen.findByText(/Kasse wurde mit.*Anfangsbestand wieder geöffnet/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Start" }));
     await waitFor(() => expect(categoryCalls).toBe(2));
@@ -1729,7 +1729,7 @@ describe("Cash periods", () => {
       }
       if (url.endsWith("/cash-periods") && options?.method === "POST") {
         return jsonResponse(
-          { detail: { code: "active_cash_period_exists", message: "Es existiert bereits eine aktive Kassenperiode." } },
+          { detail: { code: "active_cash_period_exists", message: "Es ist bereits eine Kasse geöffnet." } },
           409,
         );
       }
@@ -1739,20 +1739,20 @@ describe("Cash periods", () => {
       return jsonResponse({});
     });
 
+    window.history.pushState({}, "", "/settings/cash-periods");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("link", { name: "Einstellungen" }));
-    fireEvent.click(await screen.findByRole("link", { name: /Kassenperioden.*Archiv/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Neu" }));
-    fireEvent.change(await screen.findByLabelText("Name der Kassenperiode"), { target: { value: "August 2026" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Neu" }));
+    fireEvent.change(await screen.findByLabelText("Bezeichnung"), { target: { value: "August 2026" } });
     fireEvent.change(screen.getByLabelText("Ausgangsbetrag"), { target: { value: "21000.00" } });
     fireEvent.change(screen.getByLabelText("Beginn"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("Ende optional"), { target: { value: "2026-07-31" } });
-    fireEvent.click(screen.getByRole("button", { name: "Kassenperiode anlegen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kasse öffnen" }));
     expect(await screen.findByText("Das Ende darf nicht vor dem Beginn liegen.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Ende optional"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Kassenperiode anlegen" }));
-    expect(await screen.findByText("Es existiert bereits eine aktive Kassenperiode.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kasse öffnen" }));
+    expect(await screen.findByText("Es ist bereits eine Kasse geöffnet.")).toBeInTheDocument();
   });
 });

@@ -156,5 +156,5 @@ def test_active_period_can_be_exported(client, db_session):
 
     assert response.status_code == 200
     workbook = load_workbook(BytesIO(response.content), data_only=False)
-    assert workbook["Übersicht"]["B6"].value == "Laufende Kassenperiode"
+    assert workbook["Übersicht"]["B6"].value == "Laufende Kasse"
     assert workbook.sheetnames == ["Übersicht", "Kategorien", "Buchungen"]

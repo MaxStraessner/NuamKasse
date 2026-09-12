@@ -26,7 +26,7 @@ function toPolyline(data: TimelineBucket[], maximum: number, key: "incomeMinor" 
 
 export function DesktopTrendChart({ currency, data }: DesktopTrendChartProps) {
   if (data.length === 0) {
-    return <div className="desktop-chart-empty"><p>Noch keine Buchungen in dieser Kassenperiode.</p><span>Der Verlauf erscheint, sobald Einnahmen oder Ausgaben erfasst wurden.</span></div>;
+    return <div className="desktop-chart-empty"><p>Noch keine Buchungen in dieser Kasse.</p><span>Der Verlauf erscheint, sobald Einnahmen oder Ausgaben erfasst wurden.</span></div>;
   }
 
   const maximum = Math.max(1, ...data.flatMap((item) => [item.incomeMinor, item.expenseMinor]));

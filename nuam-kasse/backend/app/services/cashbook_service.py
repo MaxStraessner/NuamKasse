@@ -18,6 +18,12 @@ from app.services.category_service import (
 from app.services.cash_summary_service import get_cash_period_summary
 from app.services.access_control_service import membership_can_access_cash_period
 from app.services.audit_service import record_admin_action
+from app.services.cash_period_service import (
+    CashPeriodServiceError,
+    close_cash_period,
+    get_active_cash_period,
+    start_next_cash_period,
+)
 
 
 class CashbookServiceError(ValueError):
@@ -45,7 +51,13 @@ def get_membership_for_user(
     query = select(CashbookMembership).where(CashbookMembership.user_id == user_id)
     if cashbook_id is not None:
         query = query.where(CashbookMembership.cashbook_id == cashbook_id)
-    return db.scalar(query.order_by(CashbookMembership.id.asc()))
+        return db.scalar(query.order_by(CashbookMembership.id.asc()))
+
+    memberships = list(db.scalars(query.order_by(CashbookMembership.id.asc())))
+    for membership in memberships:
+        if get_active_cash_period(db, membership.cashbook_id) is not None:
+            return membership
+    return memberships[0] if memberships else None
 
 
 def get_cashbook_access(
@@ -176,11 +188,15 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for membership in memberships:
         cashbook = membership.cashbook
-        active_period = db.scalar(
-            select(CashPeriod).where(
+        active_period = get_active_cash_period(db, cashbook.id)
+        latest_closed_period = db.scalar(
+            select(CashPeriod)
+            .where(
                 CashPeriod.cashbook_id == cashbook.id,
-                CashPeriod.status == CashPeriodStatus.active,
+                CashPeriod.status == CashPeriodStatus.closed,
             )
+            .order_by(CashPeriod.closed_at.desc(), CashPeriod.id.desc())
+            .limit(1)
         )
         current_balance = "0.00"
         visible_active_period = (
@@ -189,8 +205,14 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
             and membership_can_access_cash_period(db, membership, active_period)
             else None
         )
-        if visible_active_period is not None:
-            current_balance = str(get_cash_period_summary(db, active_period)["remaining_amount"])
+        visible_balance_period = visible_active_period
+        if visible_balance_period is None and latest_closed_period is not None:
+            if membership_can_access_cash_period(db, membership, latest_closed_period):
+                visible_balance_period = latest_closed_period
+        if visible_balance_period is not None:
+            current_balance = str(
+                get_cash_period_summary(db, visible_balance_period)["remaining_amount"]
+            )
         result.append(
             {
                 "id": cashbook.id,
@@ -200,9 +222,75 @@ def list_cashbooks_for_user(db: Session, user: User) -> list[dict[str, object]]:
                 "role": membership.role,
                 "current_balance": current_balance,
                 "active_period_id": visible_active_period.id if visible_active_period else None,
+                "status": "open" if active_period is not None else "archived",
+                "archived_at": (
+                    latest_closed_period.closed_at
+                    if active_period is None and latest_closed_period is not None
+                    else None
+                ),
             }
         )
     return result
+
+
+def close_cashbook(
+    db: Session,
+    *,
+    cashbook: Cashbook,
+    closed_by: User,
+    end_date: date | None = None,
+) -> tuple[CashPeriod, dict[str, object]]:
+    active_period = get_active_cash_period(db, cashbook.id)
+    if active_period is None:
+        raise CashbookServiceError(
+            "Die Kasse ist bereits geschlossen.",
+            code="cashbook_already_archived",
+            status_code=409,
+        )
+    try:
+        return close_cash_period(
+            db,
+            cashbook=cashbook,
+            cash_period_id=active_period.id,
+            closed_by=closed_by,
+            end_date=end_date,
+        )
+    except CashPeriodServiceError as exc:
+        raise CashbookServiceError(
+            exc.message,
+            code=exc.code,
+            status_code=409 if exc.conflict else 400,
+        ) from exc
+
+
+def reopen_cashbook(
+    db: Session,
+    *,
+    cashbook: Cashbook,
+    opened_by: User,
+    name: str | None = None,
+    start_date: date | None = None,
+) -> CashPeriod:
+    if get_active_cash_period(db, cashbook.id) is not None:
+        raise CashbookServiceError(
+            "Die Kasse ist bereits geöffnet.",
+            code="cashbook_already_open",
+            status_code=409,
+        )
+    try:
+        return start_next_cash_period(
+            db,
+            cashbook=cashbook,
+            created_by=opened_by,
+            name=name,
+            start_date=start_date,
+        )
+    except CashPeriodServiceError as exc:
+        raise CashbookServiceError(
+            exc.message,
+            code=exc.code,
+            status_code=409 if exc.conflict else 400,
+        ) from exc
 
 
 def _resolve_category_template(
@@ -215,7 +303,7 @@ def _resolve_category_template(
         access = get_cashbook_access(db, user, template_cashbook_id)
         if access is None:
             raise CashbookServiceError(
-                "Das ausgewählte Kassenbuch ist nicht verfügbar.",
+                "Die ausgewählte Kasse ist nicht verfügbar.",
                 code="cashbook_template_forbidden",
                 status_code=403,
             )
@@ -233,7 +321,7 @@ def _resolve_category_template(
     if len(memberships) == 1:
         return memberships[0].cashbook
     raise CashbookServiceError(
-        "Bitte wähle ein Kassenbuch als Kategorienvorlage aus.",
+        "Bitte wähle eine Kasse als Kategorienvorlage aus.",
         code="cashbook_template_required",
         status_code=400,
     )

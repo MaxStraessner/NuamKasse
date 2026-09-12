@@ -3,7 +3,6 @@ import {
   ChartNoAxesCombined,
   FolderTree,
   LayoutDashboard,
-  PiggyBank,
   PlusCircle,
   Settings,
   ShieldCheck,
@@ -24,7 +23,7 @@ const mainNavigation: NavigationItem[] = [
   { icon: LayoutDashboard, label: "Übersicht", to: "/", end: true },
   { icon: PlusCircle, label: "Buchen", to: "/book" },
   { icon: BookOpenCheck, label: "Buchungen", to: "/bookings" },
-  { icon: PiggyBank, label: "Kassenperioden", to: "/settings/cash-periods" },
+  { icon: WalletCards, label: "Kassen", to: "/cashbooks" },
   { icon: ChartNoAxesCombined, label: "Auswertungen", to: "/reports" },
 ];
 

@@ -63,14 +63,14 @@ const actionLabels: Record<string, string> = {
   "user.role_changed": "Rolle geändert",
   "user.deactivated": "Benutzer deaktiviert",
   "user.activated": "Benutzer aktiviert",
-  "user.access_changed": "Kassen- und Periodenzugriff geändert",
+  "user.access_changed": "Kassen- und Archivzugriff geändert",
   "user.cashbook_access_changed": "Kassenzugriff geändert",
-  "user.period_access_changed": "Periodenzugriff geändert",
+  "user.period_access_changed": "Archivzugriff geändert",
 };
 
 const periodAccessLabels: Record<PeriodAccessMode, string> = {
-  all: "Alle Perioden",
-  selected: "Ausgewählte Perioden",
+  all: "Gesamtes Kassenarchiv",
+  selected: "Ausgewählte Kassenstände",
   current_and_future: "Aktuell und zukünftig",
 };
 
@@ -86,7 +86,7 @@ function userPeriodSummary(user: User): string {
   if (accesses.length === 0) return "Kein Zugriff";
   if (accesses.length === 1)
     return periodAccessLabels[accesses[0].period_access_mode];
-  return `${user.accessible_period_count ?? 0} Perioden`;
+  return `${user.accessible_period_count ?? 0} Kassenstände`;
 }
 
 function blankAccessDraft(options: CashbookAccessOption[]): AccessDraft {
@@ -223,9 +223,9 @@ function AccessEditor({
                   </select>
                 </label>
                 <label className="form-field">
-                  <span>Periodenzugriff</span>
+                  <span>Archivzugriff</span>
                   <select
-                    aria-label={`Periodenzugriff ${cashbook.name}`}
+                    aria-label={`Archivzugriff ${cashbook.name}`}
                     onChange={(event) =>
                       update(cashbook.id, {
                         mode: event.target.value as PeriodAccessMode,
@@ -233,20 +233,20 @@ function AccessEditor({
                     }
                     value={access.mode}
                   >
-                    <option value="all">Alle Perioden</option>
-                    <option value="selected">Bestimmte Perioden</option>
+                    <option value="all">Gesamtes Kassenarchiv</option>
+                    <option value="selected">Bestimmte Kassenstände</option>
                     <option value="current_and_future">
-                      Aktuelle und zukünftige Perioden
+                      Aktuelle und zukünftige Kassenstände
                     </option>
                   </select>
                 </label>
                 {access.mode === "selected" ? (
                   <div
                     className="period-checklist"
-                    aria-label={`Perioden ${cashbook.name}`}
+                    aria-label={`Kassenstände ${cashbook.name}`}
                   >
                     {cashbook.periods.length === 0 ? (
-                      <small>Noch keine Perioden vorhanden.</small>
+                      <small>Noch keine archivierten Kassenstände vorhanden.</small>
                     ) : null}
                     {cashbook.periods.map((period) => (
                       <label key={period.id}>
@@ -275,7 +275,7 @@ function AccessEditor({
                 ) : null}
                 {access.mode === "current_and_future" ? (
                   <p className="help-copy">
-                    Die aktuell aktive und jede später beginnende Periode werden
+                    Der aktuell aktive und jeder später beginnende Kassenstand werden
                     automatisch freigegeben.
                   </p>
                 ) : null}
@@ -421,7 +421,7 @@ export function UserAdminPage() {
       replaceUser(updated);
       setDetailAccess(userAccessDraft(updated, options));
       setAuditLog(await listUserAuditLog(updated.id));
-      setMessage("Kassen- und Periodenzugriff wurde aktualisiert.");
+      setMessage("Kassen- und Archivzugriff wurde aktualisiert.");
     } catch (err) {
       setError(
         err instanceof Error
@@ -465,7 +465,7 @@ export function UserAdminPage() {
             <p>Administration</p>
             <h1>Benutzer</h1>
             <span>
-              Konten, Rollen, Kassen und historische Periodenzugriffe
+              Konten, Rollen, Kassen und historische Archivzugriffe
               nachvollziehbar verwalten.
             </span>
           </div>
@@ -497,7 +497,7 @@ export function UserAdminPage() {
             title="Benutzer"
           />
           <p className="section-intro">
-            Konten, Rollen, Kassen und historische Periodenzugriffe
+            Konten, Rollen, Kassen und historische Archivzugriffe
             nachvollziehbar verwalten.
           </p>
         </>
@@ -540,7 +540,7 @@ export function UserAdminPage() {
                     <th>Status</th>
                     <th>Passwort</th>
                     <th>Kassen</th>
-                    <th>Periodenzugriff</th>
+                    <th>Archivzugriff</th>
                     <th>
                       <span className="visually-hidden">Aktionen</span>
                     </th>
@@ -633,7 +633,7 @@ export function UserAdminPage() {
                   @{user.username} ·{" "}
                   {user.role === "admin" ? "Administrator" : "Mitglied"} ·{" "}
                   {user.cashbook_count ?? 0} Kassen ·{" "}
-                  {user.accessible_period_count ?? 0} Perioden
+                  {user.accessible_period_count ?? 0} Kassenstände
                 </small>
               </span>
               <span
