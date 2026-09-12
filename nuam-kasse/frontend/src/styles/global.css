@@ -3967,3 +3967,481 @@ textarea:focus-visible {
     flex-direction: column;
   }
 }
+
+/* Desktop administration, settings, and cross-view finish. Portal dialogs opt in
+   through their desktop-only class because they render outside the app shell. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.desktop-form-grid,
+.desktop-dialog-actions,
+.user-detail__account-grid {
+  display: contents;
+}
+
+.audit-skeleton {
+  min-height: 7rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--color-surface-muted), #fff, var(--color-surface-muted));
+  background-size: 220% 100%;
+  animation: shimmer 1.25s infinite;
+}
+
+.app-shell--desktop .app-card,
+.app-shell--desktop .desktop-panel,
+.app-shell--desktop .desktop-current-period {
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.025);
+}
+
+.app-shell--desktop button,
+.app-shell--desktop a,
+.desktop-user-dialog button {
+  transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.app-shell--desktop button:focus-visible,
+.app-shell--desktop a:focus-visible,
+.desktop-user-dialog button:focus-visible,
+.desktop-user-dialog input:focus-visible,
+.desktop-user-dialog select:focus-visible {
+  outline: 3px solid rgba(0, 102, 204, 0.2);
+  outline-offset: 2px;
+}
+
+.app-shell--desktop .desktop-admin {
+  width: min(100%, 92rem);
+}
+
+.app-shell--desktop .desktop-admin-table {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-shell--desktop .desktop-admin-table table,
+.desktop-user-dialog .desktop-audit-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.app-shell--desktop .desktop-admin-table table {
+  min-width: 56rem;
+}
+
+.app-shell--desktop .desktop-admin-table th,
+.desktop-user-dialog .desktop-audit-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.045em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.app-shell--desktop .desktop-admin-table td,
+.desktop-user-dialog .desktop-audit-table td {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  vertical-align: middle;
+}
+
+.app-shell--desktop .desktop-admin-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.025);
+}
+
+.app-shell--desktop .desktop-admin-table th:last-child,
+.app-shell--desktop .desktop-admin-table td:last-child {
+  width: 3.5rem;
+  text-align: right;
+}
+
+.app-shell--desktop .desktop-admin-user {
+  display: flex;
+  min-width: 12rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.app-shell--desktop .desktop-admin-user > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.app-shell--desktop .desktop-admin-user strong,
+.app-shell--desktop .desktop-admin-user small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-admin-user strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-shell--desktop .desktop-admin-user small,
+.app-shell--desktop .desktop-table-muted {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.app-shell--desktop .desktop-role-badge {
+  display: inline-flex;
+  padding: 0.32rem 0.58rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-shell--desktop .desktop-role-badge--admin {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.app-shell--desktop .desktop-status--inactive {
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary);
+}
+
+.app-shell--desktop .desktop-status--warning {
+  background: #fff7df;
+  color: #8a6100;
+}
+
+.app-shell--desktop .desktop-admin-table__empty {
+  min-height: 18rem;
+  align-content: center;
+  padding: var(--space-8);
+}
+
+.desktop-user-dialog {
+  width: min(calc(100% - 3rem), 76rem);
+  max-height: min(92dvh, 58rem);
+  border-radius: var(--radius-xl);
+}
+
+.desktop-user-dialog--create {
+  width: min(calc(100% - 3rem), 68rem);
+}
+
+.desktop-user-dialog .app-dialog__header {
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.desktop-user-dialog .app-dialog__body {
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+.desktop-user-dialog .desktop-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.desktop-user-dialog .desktop-form-grid .switch-field {
+  align-self: end;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.desktop-user-dialog .form-field input,
+.desktop-user-dialog .form-field select {
+  min-height: 2.8rem;
+}
+
+.desktop-user-dialog .desktop-dialog-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.desktop-user-dialog .desktop-dialog-actions .primary-action,
+.desktop-user-dialog .desktop-dialog-actions .secondary-action {
+  width: auto;
+  min-width: 9rem;
+  padding: 0 var(--space-4);
+}
+
+.desktop-user-dialog .desktop-user-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.desktop-user-dialog .desktop-user-summary > span {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.desktop-user-dialog .desktop-user-summary small {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+}
+
+.desktop-user-dialog .desktop-user-summary strong {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-user-dialog .user-detail__account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.desktop-user-dialog .detail-section {
+  align-content: start;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.desktop-user-dialog .detail-section--security {
+  border-color: rgba(214, 54, 54, 0.18);
+  background: color-mix(in srgb, var(--color-danger-soft) 28%, var(--color-surface));
+}
+
+.desktop-user-dialog .detail-section--security > h3 svg,
+.desktop-user-dialog .secondary-action--danger {
+  color: var(--color-danger);
+}
+
+.desktop-user-dialog .detail-section > .secondary-action {
+  width: auto;
+  justify-self: start;
+  padding: 0 var(--space-4);
+}
+
+.desktop-user-dialog .access-editor {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.desktop-user-dialog .desktop-audit-table {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.desktop-user-dialog .desktop-audit-table table {
+  min-width: 48rem;
+}
+
+.desktop-user-dialog .desktop-audit-table td strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-shell--desktop .desktop-settings {
+  scroll-behavior: smooth;
+}
+
+.app-shell--desktop .desktop-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 17rem) minmax(30rem, 1fr);
+  align-items: start;
+  gap: var(--space-8);
+}
+
+.app-shell--desktop .desktop-settings__aside {
+  position: sticky;
+  top: 7rem;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.app-shell--desktop .desktop-settings__account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.app-shell--desktop .desktop-settings__account > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.app-shell--desktop .desktop-settings__account strong,
+.app-shell--desktop .desktop-settings__account span,
+.app-shell--desktop .desktop-settings__account small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--desktop .desktop-settings__account span,
+.app-shell--desktop .desktop-settings__account small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.app-shell--desktop .desktop-settings__navigation {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.app-shell--desktop .desktop-settings__navigation a {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.app-shell--desktop .desktop-settings__navigation a:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+}
+
+.app-shell--desktop .desktop-settings__navigation svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+}
+
+.app-shell--desktop .desktop-settings__aside .settings-logout {
+  margin-top: 0;
+  border: 1px solid rgba(214, 54, 54, 0.12);
+  background: var(--color-surface);
+}
+
+.app-shell--desktop .desktop-settings__content {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.app-shell--desktop .desktop-settings__section {
+  scroll-margin-top: 6.5rem;
+}
+
+.app-shell--desktop .desktop-settings__section > div:first-child {
+  margin-bottom: var(--space-3);
+}
+
+.app-shell--desktop .desktop-settings__section h2,
+.app-shell--desktop .desktop-settings__section p {
+  margin: 0;
+}
+
+.app-shell--desktop .desktop-settings__section h2 {
+  font-size: var(--font-size-lg);
+  letter-spacing: -0.015em;
+}
+
+.app-shell--desktop .desktop-settings__section p {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.app-shell--desktop .desktop-settings__section .display-setting {
+  grid-template-columns: minmax(16rem, 1fr) minmax(22rem, 1.25fr);
+  align-items: center;
+  padding: var(--space-5);
+}
+
+.app-shell--desktop .desktop-settings__section .settings-menu__item {
+  min-height: 4.8rem;
+  padding-right: var(--space-5);
+  padding-left: var(--space-5);
+}
+
+@media (max-width: 1160px) {
+  .app-shell--desktop .desktop-admin-table table {
+    min-width: 0;
+  }
+
+  .app-shell--desktop .desktop-admin-table th:nth-child(5),
+  .app-shell--desktop .desktop-admin-table td:nth-child(5),
+  .app-shell--desktop .desktop-admin-table th:nth-child(6),
+  .app-shell--desktop .desktop-admin-table td:nth-child(6) {
+    display: none;
+  }
+
+  .app-shell--desktop .desktop-settings__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell--desktop .desktop-settings__aside {
+    position: static;
+    grid-template-columns: minmax(13rem, 0.7fr) minmax(24rem, 1.3fr);
+    align-items: stretch;
+  }
+
+  .app-shell--desktop .desktop-settings__navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--desktop .desktop-settings__aside .settings-logout {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 940px) {
+  .app-shell--desktop .desktop-admin-table th:nth-child(2),
+  .app-shell--desktop .desktop-admin-table td:nth-child(2),
+  .app-shell--desktop .desktop-admin-table th:nth-child(4),
+  .app-shell--desktop .desktop-admin-table td:nth-child(4) {
+    display: none;
+  }
+
+  .app-shell--desktop .desktop-admin-table th,
+  .app-shell--desktop .desktop-admin-table td {
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+  }
+
+  .desktop-user-dialog .desktop-user-summary,
+  .desktop-user-dialog .desktop-form-grid,
+  .desktop-user-dialog .user-detail__account-grid,
+  .desktop-user-dialog .access-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell--desktop .desktop-settings__aside,
+  .app-shell--desktop .desktop-settings__section .display-setting {
+    grid-template-columns: 1fr;
+  }
+}

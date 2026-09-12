@@ -1,5 +1,12 @@
 import type { PropsWithChildren } from "react";
 
-export function PageContainer({ children }: PropsWithChildren) {
-  return <main className="page-container">{children}</main>;
+type PageContainerProps = PropsWithChildren<{ className?: string }>;
+
+export function PageContainer({
+  children,
+  className = "",
+}: PageContainerProps) {
+  return (
+    <main className={`page-container ${className}`.trim()}>{children}</main>
+  );
 }
