@@ -160,7 +160,7 @@ describe("Desktop administration and settings", () => {
       within(table).getByRole("columnheader", { name: "Globale Rolle" }),
     ).toBeInTheDocument();
     expect(
-      within(table).getByRole("columnheader", { name: "Periodenzugriff" }),
+      within(table).getByRole("columnheader", { name: "Archivzugriff" }),
     ).toBeInTheDocument();
     expect(within(table).getByText("Wechsel erforderlich")).toBeInTheDocument();
 

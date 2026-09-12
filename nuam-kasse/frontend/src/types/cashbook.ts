@@ -11,6 +11,8 @@ export type CashbookListItem = Cashbook & {
   role: UserRole;
   current_balance: string;
   active_period_id: number | null;
+  status: "open" | "archived";
+  archived_at: string | null;
 };
 
 export type CashbookCreate = {

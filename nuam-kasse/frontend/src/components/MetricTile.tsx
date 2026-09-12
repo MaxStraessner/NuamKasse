@@ -5,7 +5,7 @@ type MetricTileProps = {
   hint?: string;
 };
 
-export function MetricTile({ label, value, tone, hint = "aus Kassenperiode" }: MetricTileProps) {
+export function MetricTile({ label, value, tone, hint = "aus aktiver Kasse" }: MetricTileProps) {
   return (
     <div className={`metric-tile metric-tile--${tone}`}>
       <span className="metric-tile__label">{label}</span>

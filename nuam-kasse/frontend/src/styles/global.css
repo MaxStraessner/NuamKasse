@@ -2494,6 +2494,14 @@ textarea:focus-visible {
 .cash-period-archive .secondary-action { display: inline-flex; width: auto; min-height: 2.75rem; align-items: center; justify-content: center; gap: var(--space-2); text-decoration: none; }
 .cash-period-archive .primary-action svg,
 .cash-period-archive .secondary-action svg { width: 1rem; height: 1rem; }
+.cashbook-management-sections { display: grid; gap: var(--space-6); }
+.cashbook-management-sections > section { display: grid; gap: var(--space-3); }
+.cashbook-section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-3); }
+.cashbook-section-heading h2 { margin: 0; font-size: var(--font-size-lg); }
+.cashbook-section-heading small { color: var(--color-text-tertiary); text-align: right; }
+.cashbook-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.cashbook-actions .help-copy { margin: 0; }
+.cashbook-close-action { color: var(--color-danger); }
 .admin-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-bottom: var(--space-4); }
 .admin-toolbar .dialog-search { margin: 0; background: var(--color-surface); border: 1px solid var(--color-border); }
 .admin-toolbar select { min-height: 3rem; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }

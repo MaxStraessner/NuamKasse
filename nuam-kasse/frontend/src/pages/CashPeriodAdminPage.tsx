@@ -64,7 +64,7 @@ export function CashPeriodAdminPage() {
       setCashPeriods(await listCashPeriods());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kassenperioden konnten nicht geladen werden.");
+      setError(err instanceof Error ? err.message : "Kassendaten konnten nicht geladen werden.");
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +95,7 @@ export function CashPeriodAdminPage() {
   }
 
   function validateForm(): string | null {
-    if (!form.name.trim()) return "Der Name der Kassenperiode darf nicht leer sein.";
+    if (!form.name.trim()) return "Die Bezeichnung der Kasse darf nicht leer sein.";
     if (!form.opening_amount.trim()) return "Der Ausgangsbetrag darf nicht leer sein.";
     if (!form.start_date) return "Der Beginn ist erforderlich.";
     if (form.end_date && form.end_date < form.start_date) return "Das Ende darf nicht vor dem Beginn liegen.";
@@ -119,15 +119,15 @@ export function CashPeriodAdminPage() {
     try {
       if (editingId) {
         await updateCashPeriod(editingId, payload);
-        setMessage("Kassenperiode wurde aktualisiert.");
+        setMessage("Kasse wurde aktualisiert.");
       } else {
         await createCashPeriod({ ...payload, currency: "THB" });
-        setMessage("Kassenperiode wurde angelegt.");
+        setMessage("Kasse wurde geöffnet.");
       }
       resetForm();
       await loadCashPeriods();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kassenperiode konnte nicht gespeichert werden.");
+      setError(err instanceof Error ? err.message : "Kasse konnte nicht gespeichert werden.");
     } finally {
       setIsSaving(false);
     }
@@ -146,12 +146,12 @@ export function CashPeriodAdminPage() {
     setError(null);
     try {
       const result = await closeCashPeriod(closeTarget.id, closeEndDate);
-      setMessage(`Kassenperiode abgeschlossen. Endbestand: ${formatThaiBaht(result.summary.remaining_amount, result.summary.currency)}.`);
+      setMessage(`Kasse geschlossen. Endbestand: ${formatThaiBaht(result.summary.remaining_amount, result.summary.currency)}.`);
       setCloseTarget(null);
       resetForm();
       await loadCashPeriods();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kassenperiode konnte nicht abgeschlossen werden.");
+      setError(err instanceof Error ? err.message : "Kasse konnte nicht geschlossen werden.");
     } finally {
       setIsSaving(false);
     }
@@ -162,10 +162,10 @@ export function CashPeriodAdminPage() {
     setError(null);
     try {
       const nextPeriod = await startCashPeriod();
-      setMessage(`${nextPeriod.name} wurde mit ${formatThaiBaht(nextPeriod.opening_amount, nextPeriod.currency)} Anfangsbestand gestartet.`);
+      setMessage(`Die Kasse wurde mit ${formatThaiBaht(nextPeriod.opening_amount, nextPeriod.currency)} Anfangsbestand wieder geöffnet.`);
       await loadCashPeriods();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Neue Kassenperiode konnte nicht gestartet werden.");
+      setError(err instanceof Error ? err.message : "Kasse konnte nicht wieder geöffnet werden.");
     } finally {
       setIsSaving(false);
     }
@@ -208,18 +208,18 @@ export function CashPeriodAdminPage() {
         <header className="desktop-core-header">
           <div>
             <p>Gemeinsame Kasse</p>
-            <h1>Kassenperioden</h1>
-            <span>Aktuelle Periode, Bestände und historische Zeiträume im Überblick.</span>
+            <h1>{user?.cashbook_name || "Kasse"}</h1>
+            <span>Aktueller Bestand und abgeschlossene Kassenstände im Überblick.</span>
           </div>
           {isAdmin && cashPeriods.length === 0 ? (
-            <button className="desktop-primary-action" onClick={() => { resetForm(); setIsFormOpen(true); }} type="button"><Plus aria-hidden="true" />Neue Periode</button>
+            <button className="desktop-primary-action" onClick={() => { resetForm(); setIsFormOpen(true); }} type="button"><Plus aria-hidden="true" />Kasse öffnen</button>
           ) : null}
         </header>
 
         {message ? <p className="form-success" role="status">{message}</p> : null}
         {error ? <div className="form-error" role="alert"><p>{error}</p><button className="secondary-action" type="button" onClick={() => void loadCashPeriods()}>Erneut laden</button></div> : null}
-        {isLoading ? <div className="desktop-dashboard__skeleton" aria-label="Kassenperioden werden geladen" /> : null}
-        {!isLoading && cashPeriods.length === 0 ? <section className="desktop-panel desktop-dashboard__empty"><h2>Noch keine Kassenperiode</h2><p>Lege eine erste Periode an, um Buchungen zu erfassen.</p></section> : null}
+        {isLoading ? <div className="desktop-dashboard__skeleton" aria-label="Kassendaten werden geladen" /> : null}
+        {!isLoading && cashPeriods.length === 0 ? <section className="desktop-panel desktop-dashboard__empty"><h2>Diese Kasse wurde noch nicht geöffnet</h2><p>Öffne die Kasse, um Buchungen zu erfassen.</p></section> : null}
 
         {!isLoading && activePeriod ? (
           <section className="desktop-panel desktop-current-period" aria-labelledby="desktop-current-period-title">
@@ -236,7 +236,7 @@ export function CashPeriodAdminPage() {
                 {isAdmin ? <button className="desktop-period-close-action" onClick={() => startClose(activePeriod)} type="button">Kasse abschließen</button> : null}
               </div>
             </div>
-            <div className="desktop-current-period__metrics" aria-label="Kennzahlen der aktuellen Periode">
+            <div className="desktop-current-period__metrics" aria-label="Kennzahlen der aktiven Kasse">
               <span><small>Ausgangsbetrag</small><strong>{formatThaiBaht(activePeriod.opening_amount, activePeriod.currency)}</strong></span>
               <span className="desktop-current-period__metric--income"><small>Einnahmen</small><strong>{formatThaiBaht(activePeriod.income_amount, activePeriod.currency)}</strong></span>
               <span className="desktop-current-period__metric--expense"><small>Ausgaben</small><strong>{formatThaiBaht(activePeriod.spent_amount, activePeriod.currency)}</strong></span>
@@ -248,17 +248,17 @@ export function CashPeriodAdminPage() {
 
         {!isLoading && isAdmin && !activePeriod && latestClosedPeriod ? (
           <section className="desktop-panel desktop-start-period">
-            <div><span>Nächster Zeitraum</span><h2>Neue Kassenperiode starten</h2><p>Der Endbestand von {formatThaiBaht(latestClosedPeriod.remaining_amount, latestClosedPeriod.currency)} wird automatisch übernommen. Alte Buchungen werden nicht kopiert.</p></div>
-            <button className="desktop-primary-action" disabled={isSaving} onClick={() => void handleStartNextPeriod()} type="button">Neue Periode starten</button>
+            <div><span>Archivierte Kasse</span><h2>Kasse wieder öffnen</h2><p>Der letzte Endbestand von {formatThaiBaht(latestClosedPeriod.remaining_amount, latestClosedPeriod.currency)} wird automatisch übernommen. Alte Buchungen bleiben unverändert archiviert.</p></div>
+            <button className="desktop-primary-action" disabled={isSaving} onClick={() => void handleStartNextPeriod()} type="button">Kasse wieder öffnen</button>
           </section>
         ) : null}
 
         {!isLoading && cashPeriods.length > 0 ? (
           <section className="desktop-panel desktop-cash-periods__archive" aria-labelledby="desktop-period-archive-title">
-            <div className="desktop-panel__heading"><div><span>Historie und aktuelle Periode</span><h2 id="desktop-period-archive-title">Periodenübersicht</h2></div><small>{cashPeriods.length} Zeitraum{cashPeriods.length === 1 ? "" : "e"}</small></div>
+            <div className="desktop-panel__heading"><div><span>Historie</span><h2 id="desktop-period-archive-title">Kassenarchiv</h2></div><small>{cashPeriods.length} Kassenstand{cashPeriods.length === 1 ? "" : "e"}</small></div>
             <div className="desktop-table-scroller">
               <table>
-                <thead><tr><th>Periode</th><th>Zeitraum</th><th>Status</th><th>Einnahmen</th><th>Ausgaben</th><th>Saldo</th><th>Buchungen</th><th><span className="sr-only">Aktionen</span></th></tr></thead>
+                <thead><tr><th>Kassenstand</th><th>Zeitraum</th><th>Status</th><th>Einnahmen</th><th>Ausgaben</th><th>Saldo</th><th>Buchungen</th><th><span className="sr-only">Aktionen</span></th></tr></thead>
                 <tbody>
                   {cashPeriods.map((cashPeriod) => (
                     <tr key={cashPeriod.id}>
@@ -279,21 +279,21 @@ export function CashPeriodAdminPage() {
         ) : null}
 
         {isAdmin ? (
-          <AppDialog description={editingId ? "Änderungen gelten sofort für die aktive Periode." : "Lege den Anfangsbestand für einen neuen Zeitraum fest."} isOpen={isFormOpen} onClose={resetForm} preventClose={isSaving} title={editingId ? "Kassenperiode bearbeiten" : "Neue Kassenperiode"}>
+          <AppDialog description={editingId ? "Änderungen gelten sofort für die aktive Kasse." : "Lege den Anfangsbestand fest."} isOpen={isFormOpen} onClose={resetForm} preventClose={isSaving} title={editingId ? "Kasse bearbeiten" : "Kasse öffnen"}>
             <form className="stack-form" onSubmit={(event) => void handleSubmit(event)}>
-              <label className="form-field"><span>Name der Kassenperiode</span><input maxLength={80} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+              <label className="form-field"><span>Bezeichnung</span><input maxLength={80} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
               <label className="form-field"><span>Ausgangsbetrag</span><input inputMode="decimal" placeholder="20000.00" required value={form.opening_amount} onChange={(event) => setForm({ ...form, opening_amount: event.target.value })} /></label>
               <div className="money-preview"><span>Formatierte Vorschau</span><strong>{form.opening_amount ? formatThaiBaht(normalizeAmountInput(form.opening_amount)) : "THB 0.00"}</strong></div>
               <label className="form-field"><span>Beginn</span><input required type="date" value={form.start_date} onChange={(event) => handleStartDateChange(event.target.value)} /></label>
               <label className="form-field"><span>Ende optional</span><input type="date" value={form.end_date} onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></label>
               <div className="settings-list"><div><span>Währung</span><strong>Thai Baht / THB</strong></div></div>
-              <button className="primary-action" disabled={isSaving} type="submit">{editingId ? "Kassenperiode speichern" : "Kassenperiode anlegen"}</button>
+              <button className="primary-action" disabled={isSaving} type="submit">{editingId ? "Kasse speichern" : "Kasse öffnen"}</button>
               <button className="secondary-action" disabled={isSaving} onClick={resetForm} type="button">Abbrechen</button>
             </form>
           </AppDialog>
         ) : null}
-        <AppDialog description="Bitte prüfe alle Werte. Nach dem Abschluss können Buchungen dieser Kassenperiode nicht mehr verändert oder gelöscht werden." isOpen={Boolean(closeTarget)} onClose={() => setCloseTarget(null)} preventClose={isSaving} title="Kasse abschließen">
-          {closeTarget ? <div className="stack-form"><div className="closing-summary"><strong>{user?.cashbook_name}</strong><span>{closeTarget.name}</span></div><div className="cash-period-metrics"><span><small>Beginn</small><strong>{formatDate(closeTarget.start_date)}</strong></span><span><small>Abschlussdatum</small><strong>{formatDate(closeEndDate)}</strong></span><span><small>Anfangsbestand</small><strong>{formatThaiBaht(closeTarget.opening_amount, closeTarget.currency)}</strong></span><span><small>Einnahmen</small><strong>{formatThaiBaht(closeTarget.income_amount, closeTarget.currency)}</strong></span><span><small>Ausgaben</small><strong>{formatThaiBaht(closeTarget.spent_amount, closeTarget.currency)}</strong></span><span><small>Endbestand</small><strong>{formatThaiBaht(closeTarget.remaining_amount, closeTarget.currency)}</strong></span><span><small>Buchungen</small><strong>{closeTarget.transaction_count}</strong></span></div><label className="form-field"><span>Enddatum</span><input data-autofocus max={new Date().toISOString().slice(0, 10)} min={closeTarget.start_date} onChange={(event) => setCloseEndDate(event.target.value)} required type="date" value={closeEndDate} /></label><p className="form-error" role="note">Nach dem Abschluss können Buchungen dieser Kassenperiode nicht mehr verändert oder gelöscht werden.</p><button className="primary-action category-danger-action" disabled={isSaving || !closeEndDate} onClick={() => void handleClose()} type="button">Kassenperiode endgültig abschließen</button><button className="secondary-action" disabled={isSaving} onClick={() => setCloseTarget(null)} type="button">Abbrechen</button></div> : null}
+        <AppDialog description="Bitte prüfe alle Werte. Nach dem Schließen können die archivierten Buchungen nicht mehr verändert oder gelöscht werden." isOpen={Boolean(closeTarget)} onClose={() => setCloseTarget(null)} preventClose={isSaving} title="Kasse schließen">
+          {closeTarget ? <div className="stack-form"><div className="closing-summary"><strong>{user?.cashbook_name}</strong><span>{closeTarget.name}</span></div><div className="cash-period-metrics"><span><small>Beginn</small><strong>{formatDate(closeTarget.start_date)}</strong></span><span><small>Abschlussdatum</small><strong>{formatDate(closeEndDate)}</strong></span><span><small>Anfangsbestand</small><strong>{formatThaiBaht(closeTarget.opening_amount, closeTarget.currency)}</strong></span><span><small>Einnahmen</small><strong>{formatThaiBaht(closeTarget.income_amount, closeTarget.currency)}</strong></span><span><small>Ausgaben</small><strong>{formatThaiBaht(closeTarget.spent_amount, closeTarget.currency)}</strong></span><span><small>Endbestand</small><strong>{formatThaiBaht(closeTarget.remaining_amount, closeTarget.currency)}</strong></span><span><small>Buchungen</small><strong>{closeTarget.transaction_count}</strong></span></div><label className="form-field"><span>Enddatum</span><input data-autofocus max={new Date().toISOString().slice(0, 10)} min={closeTarget.start_date} onChange={(event) => setCloseEndDate(event.target.value)} required type="date" value={closeEndDate} /></label><p className="form-error" role="note">Nach dem Schließen können die archivierten Buchungen nicht mehr verändert oder gelöscht werden.</p><button className="primary-action category-danger-action" disabled={isSaving || !closeEndDate} onClick={() => void handleClose()} type="button">Kasse endgültig schließen</button><button className="secondary-action" disabled={isSaving} onClick={() => setCloseTarget(null)} type="button">Abbrechen</button></div> : null}
         </AppDialog>
       </main>
     );
@@ -305,7 +305,7 @@ export function CashPeriodAdminPage() {
         backLabel="Einstellungen"
         backTo="/settings"
         eyebrow="Gemeinsame Kasse"
-        title="Kassenperioden"
+        title={user?.cashbook_name || "Kasse"}
         action={isAdmin && cashPeriods.length === 0 ? (
           <button className="page-action" onClick={() => { resetForm(); setIsFormOpen(true); }} type="button">
             <Plus aria-hidden="true" /><span>Neu</span>
@@ -313,13 +313,13 @@ export function CashPeriodAdminPage() {
         ) : undefined}
       />
 
-      <p className="section-intro">Aktive Periode und Archiv der gemeinsamen Kasse.</p>
+      <p className="section-intro">Aktiver Bestand und Archiv dieser Kasse.</p>
       {message ? <p className="form-success" role="status">{message}</p> : null}
       {error ? <div className="form-error" role="alert"><p>{error}</p><button className="secondary-action" type="button" onClick={() => void loadCashPeriods()}>Erneut laden</button></div> : null}
 
       <div className="cash-period-archive" aria-live="polite">
-        {isLoading ? <AppCard><div className="list-skeleton" aria-label="Kassenperioden werden geladen" /></AppCard> : null}
-        {!isLoading && cashPeriods.length === 0 ? <AppCard><p className="empty-state empty-state--padded">Noch keine Kassenperiode vorhanden.</p></AppCard> : null}
+        {isLoading ? <AppCard><div className="list-skeleton" aria-label="Kassendaten werden geladen" /></AppCard> : null}
+        {!isLoading && cashPeriods.length === 0 ? <AppCard><p className="empty-state empty-state--padded">Diese Kasse wurde noch nicht geöffnet.</p></AppCard> : null}
         {cashPeriods.map((cashPeriod) => (
           <AppCard className="cash-period-archive__item" key={cashPeriod.id}>
             <div className="cash-period-archive__heading">
@@ -351,31 +351,31 @@ export function CashPeriodAdminPage() {
 
       {isAdmin && !activePeriod && latestClosedPeriod ? (
         <AppCard className="cash-period-archive__item">
-          <strong>Neue Kassenperiode starten</strong>
-          <p>Der Endbestand von {formatThaiBaht(latestClosedPeriod.remaining_amount, latestClosedPeriod.currency)} wird automatisch als Anfangsbestand übernommen. Alte Buchungen werden nicht kopiert.</p>
-          <button className="primary-action" disabled={isSaving} onClick={() => void handleStartNextPeriod()} type="button">Neue Kassenperiode starten</button>
+          <strong>Kasse wieder öffnen</strong>
+          <p>Der letzte Endbestand von {formatThaiBaht(latestClosedPeriod.remaining_amount, latestClosedPeriod.currency)} wird automatisch übernommen. Alte Buchungen bleiben unverändert archiviert.</p>
+          <button className="primary-action" disabled={isSaving} onClick={() => void handleStartNextPeriod()} type="button">Kasse wieder öffnen</button>
         </AppCard>
       ) : null}
 
       {isAdmin ? (
-        <AppDialog description={editingId ? "Änderungen gelten sofort für die aktive Periode." : "Lege den Anfangsbestand für einen neuen Zeitraum fest."} isOpen={isFormOpen} onClose={resetForm} preventClose={isSaving} title={editingId ? "Kassenperiode bearbeiten" : "Neue Kassenperiode"}>
+        <AppDialog description={editingId ? "Änderungen gelten sofort für die aktive Kasse." : "Lege den Anfangsbestand fest."} isOpen={isFormOpen} onClose={resetForm} preventClose={isSaving} title={editingId ? "Kasse bearbeiten" : "Kasse öffnen"}>
           <form className="stack-form" onSubmit={(event) => void handleSubmit(event)}>
-            <label className="form-field"><span>Name der Kassenperiode</span><input maxLength={80} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+            <label className="form-field"><span>Bezeichnung</span><input maxLength={80} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
             <label className="form-field"><span>Ausgangsbetrag</span><input inputMode="decimal" placeholder="20000.00" required value={form.opening_amount} onChange={(event) => setForm({ ...form, opening_amount: event.target.value })} /></label>
             <div className="money-preview"><span>Formatierte Vorschau</span><strong>{form.opening_amount ? formatThaiBaht(normalizeAmountInput(form.opening_amount)) : "THB 0.00"}</strong></div>
             <label className="form-field"><span>Beginn</span><input required type="date" value={form.start_date} onChange={(event) => handleStartDateChange(event.target.value)} /></label>
             <label className="form-field"><span>Ende optional</span><input type="date" value={form.end_date} onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></label>
             <div className="settings-list"><div><span>Währung</span><strong>Thai Baht / THB</strong></div></div>
-            <button className="primary-action" disabled={isSaving} type="submit">{editingId ? "Kassenperiode speichern" : "Kassenperiode anlegen"}</button>
+            <button className="primary-action" disabled={isSaving} type="submit">{editingId ? "Kasse speichern" : "Kasse öffnen"}</button>
             <button className="secondary-action" disabled={isSaving} onClick={resetForm} type="button">Abbrechen</button>
           </form>
         </AppDialog>
       ) : null}
 
       {isAdmin && activePeriod ? (
-        <button className="danger-link" onClick={() => startClose(activePeriod)} type="button">Kasse abschließen</button>
+        <button className="danger-link" onClick={() => startClose(activePeriod)} type="button">Kasse schließen</button>
       ) : null}
-      <AppDialog description="Bitte prüfe alle Werte. Nach dem Abschluss können Buchungen dieser Kassenperiode nicht mehr verändert oder gelöscht werden." isOpen={Boolean(closeTarget)} onClose={() => setCloseTarget(null)} preventClose={isSaving} title="Kasse abschließen">
+      <AppDialog description="Bitte prüfe alle Werte. Nach dem Schließen können die archivierten Buchungen nicht mehr verändert oder gelöscht werden." isOpen={Boolean(closeTarget)} onClose={() => setCloseTarget(null)} preventClose={isSaving} title="Kasse schließen">
         {closeTarget ? (
           <div className="stack-form">
             <div className="closing-summary"><strong>{user?.cashbook_name}</strong><span>{closeTarget.name}</span></div>
@@ -389,8 +389,8 @@ export function CashPeriodAdminPage() {
               <span><small>Buchungen</small><strong>{closeTarget.transaction_count}</strong></span>
             </div>
             <label className="form-field"><span>Enddatum</span><input data-autofocus max={new Date().toISOString().slice(0, 10)} min={closeTarget.start_date} onChange={(event) => setCloseEndDate(event.target.value)} required type="date" value={closeEndDate} /></label>
-            <p className="form-error" role="note">Nach dem Abschluss können Buchungen dieser Kassenperiode nicht mehr verändert oder gelöscht werden.</p>
-            <button className="primary-action category-danger-action" disabled={isSaving || !closeEndDate} onClick={() => void handleClose()} type="button">Kassenperiode endgültig abschließen</button>
+            <p className="form-error" role="note">Nach dem Schließen können die archivierten Buchungen nicht mehr verändert oder gelöscht werden.</p>
+            <button className="primary-action category-danger-action" disabled={isSaving || !closeEndDate} onClick={() => void handleClose()} type="button">Kasse endgültig schließen</button>
             <button className="secondary-action" disabled={isSaving} onClick={() => setCloseTarget(null)} type="button">Abbrechen</button>
           </div>
         ) : null}

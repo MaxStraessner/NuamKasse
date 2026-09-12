@@ -134,6 +134,17 @@ function installApiMock() {
     if (url.endsWith("/cash-periods/current/summary")) return jsonResponse(cashSummary);
     if (url.endsWith("/cash-periods/current")) return jsonResponse(activePeriod);
     if (url.endsWith("/cash-periods")) return jsonResponse([activePeriod, closedPeriod]);
+    if (url.endsWith("/cashbooks")) return jsonResponse([{
+      id: 1,
+      name: "Nuam Kasse",
+      description: null,
+      currency: "THB",
+      role: "admin",
+      current_balance: "20750.00",
+      active_period_id: 1,
+      status: "open",
+      archived_at: null,
+    }]);
     if (url.endsWith("/overview/current")) return jsonResponse(overview);
     if (url.includes("/overview/cash-periods/1/expenses")) return jsonResponse({ items: expenses, total: expenses.length, limit: 20, offset: 0, has_more: false });
     if (url.endsWith("/expenses") && method === "POST") {
@@ -216,10 +227,10 @@ describe("Desktop core views", () => {
     expect(screen.queryByRole("button", { name: "Kasse abschließen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Kasse abschließen" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("link", { name: "Kassenperioden" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Kassenperioden" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Kennzahlen der aktuellen Periode")).toHaveTextContent("20,750.00");
-    expect(screen.getByRole("button", { name: "Kasse abschließen" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Periodenübersicht" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Kassen" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Kassenverwaltung" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Aktive Kasse" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kasse schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Archiv" })).toBeInTheDocument();
   });
 });

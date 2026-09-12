@@ -362,9 +362,9 @@ export function OverviewPage() {
           </div>
           {periodOptions.length > 0 ? (
             <label className="desktop-period-select">
-              <span>Kassenperiode</span>
+              <span>Kassenstand</span>
               <select onChange={(event) => selectPeriod(event.target.value)} value={selectedPeriodId ?? ""}>
-                <option value="">Aktive Periode</option>
+                <option value="">Aktive Kasse</option>
                 {periodOptions.filter((period) => period.status !== "active").map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
               </select>
             </label>
@@ -373,10 +373,10 @@ export function OverviewPage() {
 
         {isLoadingOverview && !overview ? <div className="desktop-dashboard__skeleton" aria-label="Buchungen werden geladen" /> : null}
         {hasNoActivePeriod ? (
-          <section className="desktop-panel desktop-dashboard__empty" aria-label="Keine aktive Kassenperiode">
-            <h2>Keine aktive Kassenperiode</h2>
-            <p>Zurzeit ist keine aktive Kassenperiode vorhanden.</p>
-            {isAdmin ? <Link to="/settings/cash-periods">Neue Kassenperiode anlegen</Link> : null}
+          <section className="desktop-panel desktop-dashboard__empty" aria-label="Keine aktive Kasse">
+            <h2>Keine aktive Kasse</h2>
+            <p>Zurzeit ist keine Kasse geöffnet.</p>
+            {isAdmin ? <Link to="/cashbooks">Kassenverwaltung öffnen</Link> : null}
           </section>
         ) : null}
         {overviewError ? (
@@ -385,7 +385,7 @@ export function OverviewPage() {
 
         {overview && cashPeriod ? (
           <>
-            <section className="desktop-bookings__summary" aria-label="Kennzahlen der ausgewählten Kassenperiode">
+            <section className="desktop-bookings__summary" aria-label="Kennzahlen des ausgewählten Kassenstands">
               <article className="desktop-metric desktop-metric--balance"><span className="desktop-metric__label">Verbleibend</span><strong>{formatThaiBaht(overview.summary.remaining_amount, cashPeriod.currency)}</strong><small>{cashPeriod.name}</small></article>
               <article className="desktop-metric desktop-metric--income"><span className="desktop-metric__label">Einnahmen</span><strong>{formatThaiBaht(overview.summary.income_amount, cashPeriod.currency)}</strong><small>{formatExpenseCount(overview.summary.active_expense_count)}</small></article>
               <article className="desktop-metric desktop-metric--expense"><span className="desktop-metric__label">Ausgaben</span><strong>{formatThaiBaht(overview.summary.spent_amount, cashPeriod.currency)}</strong><small>{percentSpent.toFixed(2)} Prozent des Ausgangsbetrags</small></article>
@@ -401,7 +401,7 @@ export function OverviewPage() {
               <div className="desktop-bookings__filters" aria-label="Buchungen filtern">
                 <label><span>Kategorie</span><select onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))} value={filters.categoryId}><option value="">Alle Kategorien</option>{overviewCategories.map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</select></label>
                 <label><span>Benutzer</span><select onChange={(event) => setFilters((current) => ({ ...current, userId: event.target.value }))} value={filters.userId}><option value="">Alle Benutzer</option>{overviewUsers.map((summaryUser) => <option key={summaryUser.user_id} value={summaryUser.user_id}>{summaryUser.display_name}</option>)}</select></label>
-                <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamte Periode</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
+                <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamter Kassenzeitraum</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
                 {isAdmin ? <label><span>Status</span><select onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as StatusFilter }))} value={filters.status}><option value="active">Nur gültige</option><option value="all">Mit stornierten</option></select></label> : null}
                 <label><span>Sortierung</span><select onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as OverviewExpenseSort }))} value={filters.sort}><option value="created_at_desc">Neueste zuerst</option><option value="created_at_asc">Älteste zuerst</option><option value="amount_desc">Höchster Betrag</option><option value="amount_asc">Niedrigster Betrag</option></select></label>
                 {hasActiveFilters ? <button className="desktop-filter-reset" onClick={resetFilters} type="button">Zurücksetzen</button> : null}
@@ -455,9 +455,9 @@ export function OverviewPage() {
         title="Übersicht"
         action={periodOptions.length > 0 ? (
           <label className="period-select">
-            <span>Kassenperiode</span>
+            <span>Kassenstand</span>
             <select onChange={(event) => selectPeriod(event.target.value)} value={selectedPeriodId ?? ""}>
-              <option value="">Aktive Periode</option>
+              <option value="">Aktive Kasse</option>
               {periodOptions
                 .filter((period) => period.status !== "active")
                 .map((period) => (
@@ -477,12 +477,12 @@ export function OverviewPage() {
       ) : null}
 
       {hasNoActivePeriod ? (
-        <AppCard ariaLabel="Keine aktive Kassenperiode">
+        <AppCard ariaLabel="Keine aktive Kasse">
           <div className="cash-empty">
-            <p>Zurzeit ist keine aktive Kassenperiode vorhanden.</p>
+            <p>Zurzeit ist keine Kasse geöffnet.</p>
             {isAdmin ? (
-              <Link className="primary-link" to="/settings/cash-periods">
-                Neue Kassenperiode anlegen
+              <Link className="primary-link" to="/cashbooks">
+                Kassenverwaltung öffnen
               </Link>
             ) : null}
           </div>
@@ -500,7 +500,7 @@ export function OverviewPage() {
 
       {overview && cashPeriod ? (
         <>
-          <AppCard ariaLabel="Kassenperiodenkopf">
+          <AppCard ariaLabel="Aktiver Kassenstand">
             <div className="overview-period">
               <div>
                 <span className="home-header__eyebrow">{cashPeriod.status === "active" ? "Aktiv" : "Abgeschlossen"}</span>
@@ -526,19 +526,19 @@ export function OverviewPage() {
                 label="Ausgegeben"
                 value={formatThaiBaht(overview.summary.spent_amount, cashPeriod.currency)}
                 tone="warning"
-                hint={isAdmin ? `${overview.summary.voided_expense_count} storniert` : "Aktuelle Periode"}
+                hint={isAdmin ? `${overview.summary.voided_expense_count} storniert` : "Aktive Kasse"}
               />
               <MetricTile
                 label="Eingenommen"
                 value={formatThaiBaht(overview.summary.income_amount, cashPeriod.currency)}
                 tone="positive"
-                hint="Aktuelle Periode"
+                hint="Aktive Kasse"
               />
               <MetricTile
                 label="Ausgangsbetrag"
                 value={formatThaiBaht(overview.summary.opening_amount, cashPeriod.currency)}
                 tone="neutral"
-                hint="Zu Periodenbeginn"
+                hint="Bei Kassenöffnung"
               />
               <MetricTile
                 label="Buchungen"
@@ -694,7 +694,7 @@ export function OverviewPage() {
             <div className="overview-filter-sheet">
               <label><span>Kategorie</span><select onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))} value={filters.categoryId}><option value="">Alle Kategorien</option>{overviewCategories.map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</select></label>
               <label><span>Benutzer</span><select onChange={(event) => setFilters((current) => ({ ...current, userId: event.target.value }))} value={filters.userId}><option value="">Alle Benutzer</option>{overviewUsers.map((summaryUser) => <option key={summaryUser.user_id} value={summaryUser.user_id}>{summaryUser.display_name}</option>)}</select></label>
-              <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamte Periode</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
+              <label><span>Zeitraum</span><select onChange={(event) => setFilters((current) => ({ ...current, datePreset: event.target.value as DatePreset }))} value={filters.datePreset}><option value="all">Gesamter Kassenzeitraum</option><option value="today">Heute</option><option value="last7">Letzte 7 Tage</option><option value="custom">Benutzerdefiniert</option></select></label>
               {filters.datePreset === "custom" ? <div className="overview-date-row"><label><span>Von</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} type="date" value={filters.dateFrom} /></label><label><span>Bis</span><input max={cashPeriod.end_date ?? undefined} min={cashPeriod.start_date} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} type="date" value={filters.dateTo} /></label></div> : null}
               {isAdmin ? <label><span>Status</span><select onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as StatusFilter }))} value={filters.status}><option value="active">Nur gültige</option><option value="all">Mit stornierten</option></select></label> : null}
               <label><span>Sortierung</span><select onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as OverviewExpenseSort }))} value={filters.sort}><option value="created_at_desc">Neueste zuerst</option><option value="created_at_asc">Älteste zuerst</option><option value="amount_desc">Höchster Betrag zuerst</option><option value="amount_asc">Niedrigster Betrag zuerst</option></select></label>

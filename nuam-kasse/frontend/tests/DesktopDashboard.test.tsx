@@ -159,11 +159,11 @@ describe("Desktop dashboard", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Willkommen, Nuam" })).toBeInTheDocument();
-    expect(await screen.findByLabelText("Kennzahlen der aktuellen Kassenperiode")).toHaveTextContent("Einnahmen");
-    expect(screen.getByLabelText("Kennzahlen der aktuellen Kassenperiode")).toHaveTextContent("1,200.00");
+    expect(await screen.findByLabelText("Kennzahlen der aktiven Kasse")).toHaveTextContent("Einnahmen");
+    expect(screen.getByLabelText("Kennzahlen der aktiven Kasse")).toHaveTextContent("1,200.00");
     expect(screen.getByRole("img", { name: "Einnahmen und Ausgaben im Zeitverlauf" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Ausgaben nach Kategorien/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Periodenübersicht" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kassenstände" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Desktop-Hauptnavigation" })).toHaveTextContent("Buchen");
     expect(screen.queryByRole("link", { name: "Administration" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Kategorien" })).not.toBeInTheDocument();
@@ -188,7 +188,7 @@ describe("Desktop dashboard", () => {
     }, []);
     render(<App />);
 
-    expect(await screen.findByText("Noch keine Buchungen in dieser Kassenperiode.")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Buchungen in dieser Kasse.")).toBeInTheDocument();
     expect(screen.getByText("Noch keine Ausgaben für die Kategorienverteilung.")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Einnahmen und Ausgaben im Zeitverlauf" })).not.toBeInTheDocument();
   });
