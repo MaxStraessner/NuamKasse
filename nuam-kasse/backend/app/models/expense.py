@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -13,6 +13,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     __table_args__ = (
         Index("ix_expenses_cash_period_voided_created", "cash_period_id", "is_voided", "created_at"),
+        Index("ix_expenses_cash_period_voided_booking", "cash_period_id", "is_voided", "booking_date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -45,6 +46,7 @@ class Expense(Base):
         default=utc_now,
         index=True,
     )
+    booking_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today, index=True)
     is_voided: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     voided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     voided_by_user_id: Mapped[int] = mapped_column(

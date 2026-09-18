@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import Select, func, select
@@ -35,14 +35,6 @@ def _percentage(amount: Decimal, total: Decimal) -> str:
     if total <= Decimal("0.00"):
         return "0.00"
     return _format_percent((amount / total) * Decimal("100"))
-
-
-def _date_start(value: date) -> datetime:
-    return datetime.combine(value, time.min, tzinfo=timezone.utc)
-
-
-def _date_end(value: date) -> datetime:
-    return datetime.combine(value, time.max, tzinfo=timezone.utc)
 
 
 def _overview_summary(db: Session, cash_period: CashPeriod) -> dict[str, object]:
@@ -269,9 +261,9 @@ def _apply_expense_filters(
     if created_by_user_id is not None:
         query = query.where(Expense.created_by_user_id == created_by_user_id)
     if date_from is not None:
-        query = query.where(Expense.created_at >= _date_start(date_from))
+        query = query.where(Expense.booking_date >= date_from)
     if date_to is not None:
-        query = query.where(Expense.created_at <= _date_end(date_to))
+        query = query.where(Expense.booking_date <= date_to)
     if not is_admin or not include_voided:
         query = query.where(Expense.is_voided.is_(False))
     return query
@@ -279,9 +271,9 @@ def _apply_expense_filters(
 
 def _apply_sort(query: Select[tuple[Expense]], sort: str) -> Select[tuple[Expense]]:
     if sort == "created_at_desc":
-        return query.order_by(Expense.created_at.desc(), Expense.id.desc())
+        return query.order_by(Expense.booking_date.desc(), Expense.created_at.desc(), Expense.id.desc())
     if sort == "created_at_asc":
-        return query.order_by(Expense.created_at.asc(), Expense.id.asc())
+        return query.order_by(Expense.booking_date.asc(), Expense.created_at.asc(), Expense.id.asc())
     if sort == "amount_desc":
         return query.order_by(Expense.amount.desc(), Expense.id.desc())
     if sort == "amount_asc":

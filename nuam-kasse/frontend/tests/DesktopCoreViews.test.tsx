@@ -73,8 +73,8 @@ const cashSummary: CashPeriodSummary = {
 };
 
 const expenses: OverviewExpense[] = [
-  { id: 1, cash_period_id: 1, category: { id: 11, name: "Obst", icon_key: "utensils", color_key: "green", parent_category_id: 10, category_type: "expense" }, amount: "450.00", transaction_type: "expense", currency: "THB", created_by: { id: 2, display_name: "Nuam" }, created_at: "2026-09-02T10:00:00Z", is_voided: false, voided_at: null, voided_by: null, void_reason: null, note: "Markt" },
-  { id: 2, cash_period_id: 1, category: { id: 20, name: "Einzahlung", icon_key: "landmark", color_key: "blue", parent_category_id: null, category_type: "income" }, amount: "1200.00", transaction_type: "income", currency: "THB", created_by: { id: 1, display_name: "Papa" }, created_at: "2026-09-03T10:00:00Z", is_voided: false, voided_at: null, voided_by: null, void_reason: null, note: null },
+  { id: 1, cash_period_id: 1, category: { id: 11, name: "Obst", icon_key: "utensils", color_key: "green", parent_category_id: 10, category_type: "expense" }, amount: "450.00", transaction_type: "expense", currency: "THB", created_by: { id: 2, display_name: "Nuam" }, created_at: "2026-09-02T10:00:00Z", booking_date: "2026-09-02", is_voided: false, voided_at: null, voided_by: null, void_reason: null, note: "Markt" },
+  { id: 2, cash_period_id: 1, category: { id: 20, name: "Einzahlung", icon_key: "landmark", color_key: "blue", parent_category_id: null, category_type: "income" }, amount: "1200.00", transaction_type: "income", currency: "THB", created_by: { id: 1, display_name: "Papa" }, created_at: "2026-09-03T10:00:00Z", booking_date: "2026-09-03", is_voided: false, voided_at: null, voided_by: null, void_reason: null, note: null },
 ];
 
 const bookedExpense: Expense = {
@@ -151,6 +151,13 @@ function installApiMock() {
       const result: ExpenseMutationResponse = { expense: bookedExpense, summary: cashSummary };
       return jsonResponse(result);
     }
+    if (url.endsWith("/expenses/1") && method === "PATCH") {
+      const result: ExpenseMutationResponse = {
+        expense: { ...bookedExpense, amount: "500.00", booking_date: "2026-09-01", note: "Korrigiert" },
+        summary: cashSummary,
+      };
+      return jsonResponse(result);
+    }
     return jsonResponse({});
   }));
   return requests;
@@ -197,6 +204,38 @@ describe("Desktop core views", () => {
     expect(within(table).getByText("Einnahme")).toBeInTheDocument();
     expect(within(table).getByText("Ausgabe")).toBeInTheDocument();
     expect(screen.getByLabelText("Buchungen filtern")).toBeInTheDocument();
+  });
+
+  test("edits amount, category note and booking date through the shared booking API", async () => {
+    installDesktopViewport();
+    const requests = installApiMock();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Buchungen" }));
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Markt").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Bearbeiten" }));
+
+    let dialog = await screen.findByRole("dialog", { name: "Buchung bearbeiten" });
+    fireEvent.change(within(dialog).getByLabelText("Betrag"), { target: { value: "999,00" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+    expect(requests.some((request) => request.url.endsWith("/expenses/1") && request.method === "PATCH")).toBe(false);
+
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Bearbeiten" }));
+    dialog = await screen.findByRole("dialog", { name: "Buchung bearbeiten" });
+    fireEvent.change(within(dialog).getByLabelText("Betrag"), { target: { value: "500,00" } });
+    fireEvent.change(within(dialog).getByLabelText("Kategorie"), { target: { value: "20" } });
+    fireEvent.change(within(dialog).getByLabelText("Buchungsdatum im Kalender auswählen"), { target: { value: "2026-09-01" } });
+    fireEvent.change(within(dialog).getByLabelText("Notiz optional"), { target: { value: "Korrigiert" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() => expect(requests.some((request) => (
+      request.url.endsWith("/expenses/1")
+      && request.method === "PATCH"
+      && request.body?.includes('"booking_date":"2026-09-01"')
+      && request.body?.includes('"category_id":20')
+    ))).toBe(true));
   });
 
   test("keeps category order and exposes the existing management actions", async () => {

@@ -77,6 +77,7 @@ def test_closed_period_export_contains_analytics_charts_categories_and_all_booki
                 created_by_user_id=member.id,
                 note="Wochenmarkt",
                 created_at=datetime(2026, 7, 5, 9, 30, tzinfo=timezone.utc),
+                booking_date=date(2026, 7, 5),
             ),
             Expense(
                 cash_period_id=period.id,
@@ -87,6 +88,7 @@ def test_closed_period_export_contains_analytics_charts_categories_and_all_booki
                 created_by_user_id=admin.id,
                 note="Einlage",
                 created_at=datetime(2026, 7, 6, 10, 0, tzinfo=timezone.utc),
+                booking_date=date(2026, 7, 6),
             ),
         ]
     )

@@ -1,9 +1,11 @@
 from datetime import date
 from decimal import Decimal
 
+from app.api.v1.endpoints import expenses as expenses_endpoint
 from app.models.cash_period import CashPeriod, CashPeriodStatus
 from app.models.category import Category, CategoryType
 from app.models.expense import Expense
+from app.models.admin_audit_log import AdminAuditLog
 from app.models.user import User, UserRole
 from conftest import create_test_user, get_test_cashbook
 
@@ -341,5 +343,124 @@ def test_closed_cash_period_expenses_are_readable_but_not_voidable_or_editable(c
     assert read.status_code == 200
     assert void.status_code == 409
     assert void.json()["detail"]["code"] == "cash_period_closed"
-    assert patch.status_code == 405
+    assert patch.status_code == 409
+    assert patch.json()["detail"]["code"] == "cash_period_closed"
     assert delete.status_code == 405
+
+
+def test_booking_date_is_stored_and_must_match_period_and_not_be_future(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    category = create_category(db_session, user_id=admin.id)
+    create_cash_period(db_session, created_by_user_id=admin.id)
+    login(client, "admin")
+
+    stored = client.post(
+        "/api/v1/expenses",
+        json={"category_id": category.id, "amount": "25.00", "booking_date": "2026-07-15"},
+    )
+    before_period = client.post(
+        "/api/v1/expenses",
+        json={"category_id": category.id, "amount": "25.00", "booking_date": "2026-06-30"},
+    )
+    future = client.post(
+        "/api/v1/expenses",
+        json={"category_id": category.id, "amount": "25.00", "booking_date": "2099-01-01"},
+    )
+
+    assert stored.status_code == 201
+    assert stored.json()["expense"]["booking_date"] == "2026-07-15"
+    assert before_period.status_code == 409
+    assert before_period.json()["detail"]["code"] == "booking_date_before_period"
+    assert future.status_code == 409
+    assert future.json()["detail"]["code"] == "booking_date_future"
+    assert db_session.query(Expense).count() == 1
+
+
+def test_future_active_period_keeps_today_as_valid_default_booking_date(
+    client, db_session, monkeypatch
+):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    category = create_category(db_session, user_id=admin.id)
+    cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
+    cash_period.name = "Oktober 2026"
+    cash_period.start_date = date(2026, 10, 1)
+    cash_period.end_date = date(2026, 10, 31)
+    db_session.commit()
+    monkeypatch.setattr(
+        expenses_endpoint,
+        "_current_business_date",
+        lambda settings: date(2026, 9, 18),
+    )
+    login(client, "admin")
+
+    stored = client.post(
+        "/api/v1/expenses",
+        json={"category_id": category.id, "amount": "500.00"},
+    )
+
+    assert stored.status_code == 201
+    assert stored.json()["expense"]["booking_date"] == "2026-09-18"
+    assert db_session.query(Expense).count() == 1
+
+
+def test_member_updates_own_booking_and_audit_preserves_creator(client, db_session):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    member = create_test_user(db_session, username="nuam", role=UserRole.member)
+    other_member = create_test_user(db_session, username="nok", role=UserRole.member)
+    expense_category = create_category(db_session, user_id=admin.id)
+    income_category = create_category(
+        db_session,
+        name="Einzahlung",
+        user_id=admin.id,
+        category_type=CategoryType.income,
+    )
+    cash_period = create_cash_period(
+        db_session,
+        created_by_user_id=admin.id,
+        opening_amount=Decimal("1000.00"),
+    )
+    expense = create_expense_row(
+        db_session,
+        cash_period_id=cash_period.id,
+        category_id=expense_category.id,
+        created_by_user_id=member.id,
+        amount=Decimal("250.00"),
+    )
+    expense.booking_date = date(2026, 7, 10)
+    db_session.commit()
+
+    login(client, "nok")
+    forbidden = client.patch(f"/api/v1/expenses/{expense.id}", json={"amount": "200.00"})
+    login(client, "nuam")
+    updated = client.patch(
+        f"/api/v1/expenses/{expense.id}",
+        json={
+            "category_id": income_category.id,
+            "amount": "100.00",
+            "note": "Nachtrag",
+            "booking_date": "2026-07-08",
+        },
+    )
+
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"]["code"] == "expense_update_forbidden"
+    assert updated.status_code == 200
+    assert updated.json()["expense"]["category"]["id"] == income_category.id
+    assert updated.json()["expense"]["transaction_type"] == "income"
+    assert updated.json()["expense"]["amount"] == "100.00"
+    assert updated.json()["expense"]["note"] == "Nachtrag"
+    assert updated.json()["expense"]["booking_date"] == "2026-07-08"
+    assert updated.json()["expense"]["created_by"]["id"] == member.id
+    assert updated.json()["summary"]["remaining_amount"] == "1100.00"
+
+    audit = db_session.query(AdminAuditLog).filter_by(action="expense.updated").one()
+    assert audit.actor_user_id == member.id
+    assert audit.target_user_id == member.id
+    assert audit.details["expense_id"] == expense.id
+    assert set(audit.details["changed_fields"]) == {
+        "category_id",
+        "transaction_type",
+        "amount",
+        "note",
+        "booking_date",
+    }

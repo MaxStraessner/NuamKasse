@@ -69,6 +69,7 @@ export type OverviewExpense = {
   currency: "THB";
   created_by: OverviewExpenseUser;
   created_at: string;
+  booking_date?: string;
   is_voided: boolean;
   voided_at: string | null;
   voided_by: OverviewExpenseUser | null;

@@ -2431,8 +2431,17 @@ textarea:focus-visible {
 .booking-action--confirm { border-color: var(--color-success); background: var(--color-success); }
 .booking-action--cancel { border-color: var(--color-danger); background: var(--color-danger); }
 .booking-action:disabled { opacity: 0.7; }
-.quick-amounts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
-.quick-amounts button { min-height: 2.75rem; padding: 0 var(--space-1); border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-primary); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.booking-date-field { display: grid; gap: var(--space-2); }
+.booking-date-field > span { color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.booking-date-picker { position: relative; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem; gap: var(--space-2); align-items: stretch; }
+.booking-date-picker > button,
+.booking-date-picker__value { min-height: 2.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-primary); }
+.booking-date-picker > button { display: grid; place-items: center; padding: 0; cursor: pointer; }
+.booking-date-picker > button svg { width: 1.25rem; height: 1.25rem; }
+.booking-date-picker > button:disabled { cursor: default; opacity: 0.4; }
+.booking-date-picker__value { display: grid; place-items: center; padding: 0 var(--space-3); overflow: hidden; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); cursor: pointer; }
+.booking-date-picker__input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.booking-edit-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .success-toast { position: fixed; z-index: 80; top: calc(4.25rem + env(safe-area-inset-top)); left: 50%; display: flex; width: min(calc(100% - 2rem), 28rem); align-items: center; gap: var(--space-3); transform: translateX(-50%); padding: var(--space-3) var(--space-4); border: 1px solid rgba(35, 132, 95, 0.18); border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.96); box-shadow: var(--shadow-md); color: var(--color-success); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); animation: toast-in var(--duration-slow) var(--ease-emphasized); }
 .success-toast svg { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; }
 

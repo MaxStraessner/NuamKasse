@@ -1112,15 +1112,66 @@ describe("Expenses", () => {
     expect(cancelButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getAllByRole("button", { name: "Bestätigen" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Abbrechen" })).toHaveLength(1);
+    expect(screen.queryByLabelText("Schnellbeträge")).not.toBeInTheDocument();
+    const bookingDateInput = screen.getByLabelText("Buchungsdatum im Kalender auswählen") as HTMLInputElement;
+    const initialBookingDate = bookingDateInput.value;
+    expect(screen.getByRole("button", { name: "Einen Tag vor" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Einen Tag zurück" }));
+    expect(bookingDateInput.value).not.toBe(initialBookingDate);
+    expect(screen.getByRole("button", { name: "Einen Tag vor" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Einen Tag vor" }));
+    expect(bookingDateInput.value).toBe(initialBookingDate);
     fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "250,00" } });
     expect(screen.getByText("Voraussichtlich verbleibend")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     await waitFor(() => expect(screen.getByText(/gespeichert/)).toBeInTheDocument());
-    expect(createPayload).toEqual({ category_id: 1, amount: "250.00", note: null });
+    expect(createPayload).toEqual(expect.objectContaining({
+      category_id: 1,
+      amount: "250.00",
+      note: null,
+      booking_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    }));
     expect(screen.queryByText("Letzte Ausgaben")).not.toBeInTheDocument();
     expect(screen.getAllByText("Essen").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/19,750\.00/).length).toBeGreaterThan(0);
+  });
+
+  test("keeps today bookable when the active legacy period starts in the future", async () => {
+    window.history.pushState({}, "", "/");
+    const futurePeriod = {
+      ...activeCashPeriod,
+      name: "Oktober 2099",
+      start_date: "2099-10-01",
+      end_date: "2099-10-31",
+    };
+    let createPayload: { booking_date?: string } | null = null;
+    mockFetch((url, options) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(memberUser);
+      if (url.endsWith("/cash-periods/current/summary")) return jsonResponse(activeCashSummary);
+      if (url.endsWith("/cash-periods/current")) return jsonResponse(futurePeriod);
+      if (url.endsWith("/categories")) return jsonResponse([essenCategory]);
+      if (url.endsWith("/expenses") && options?.method === "POST") {
+        createPayload = JSON.parse(String(options.body)) as typeof createPayload;
+        return jsonResponse({ expense: essenExpense, summary: spentCashSummary }, 201);
+      }
+      if (url.endsWith("/health")) return healthResponse();
+      return jsonResponse({});
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
+
+    const input = screen.getByLabelText("Buchungsdatum im Kalender auswählen") as HTMLInputElement;
+    expect(input).not.toHaveAttribute("min");
+    expect(input.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    fireEvent.change(screen.getByLabelText("Betrag"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
+
+    await waitFor(() => expect(createPayload).not.toBeNull());
+    expect(createPayload).toEqual(expect.objectContaining({ booking_date: input.value }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   test("income remains bookable at zero balance and increases the preview", async () => {
@@ -1227,7 +1278,12 @@ describe("Expenses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bestätigen" }));
 
     expect(await screen.findByText(/Essen > Apotheke gespeichert/)).toBeInTheDocument();
-    expect(createPayload).toEqual({ category_id: apothekeCategory.id, amount: "25.00", note: null });
+    expect(createPayload).toEqual(expect.objectContaining({
+      category_id: apothekeCategory.id,
+      amount: "25.00",
+      note: null,
+      booking_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    }));
   });
 
   test("amount entry can be cancelled directly without creating an expense", async () => {

@@ -7,6 +7,7 @@ import { useDisplayMode } from "../app/DisplayModeContext";
 import { useNetworkStatus } from "../app/NetworkStatusContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
+import { BookingDatePicker } from "../components/BookingDatePicker";
 import { CategoryTile } from "../components/CategoryTile";
 import { CategoryTypeBadge, categoryTypeLabel } from "../components/CategoryTypeBadge";
 import { PageContainer } from "../components/PageContainer";
@@ -15,6 +16,7 @@ import { ApiError } from "../services/apiClient";
 import { getCurrentCashPeriod, getCurrentCashPeriodSummary } from "../services/cashPeriodsApi";
 import { getCategories } from "../services/categoriesApi";
 import { buildCategoryTree, getActiveChildren, getCategoryPath } from "../services/categoryTree";
+import { toLocalDateInput } from "../services/dateTime";
 import { createExpense } from "../services/expensesApi";
 import {
   decimalStringToMinorUnits,
@@ -46,6 +48,7 @@ export function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
+  const [bookingDate, setBookingDate] = useState(toLocalDateInput);
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -69,6 +72,10 @@ export function HomePage() {
   const isIncomeBooking = selectedCategoryType === "income";
   const canBookCategory = (category: Category) => canStartBooking
     && (category.category_type === "income" || remainingMinorUnits > 0);
+  const today = toLocalDateInput();
+  const bookingDateMin = cashPeriod?.start_date && cashPeriod.start_date <= today
+    ? cashPeriod.start_date
+    : undefined;
 
   async function loadCashPeriod(silent = false) {
     if (!silent) {
@@ -178,6 +185,7 @@ export function HomePage() {
     setSelectedRootCategory(rootCategory);
     setExpenseAmount("");
     setExpenseNote("");
+    setBookingDate(today);
     setDialogError(null);
     setBookingError(null);
     setSuccessMessage(null);
@@ -195,6 +203,7 @@ export function HomePage() {
     setSelectedCategory(null);
     setExpenseAmount("");
     setExpenseNote("");
+    setBookingDate(today);
     setDialogError(null);
     if (!shouldReturnToSubcategories) {
       setSelectedRootCategory(null);
@@ -236,6 +245,7 @@ export function HomePage() {
         category_id: selectedCategory.id,
         amount: normalizeMoneyInput(expenseAmount),
         note: expenseNote.trim() || null,
+        booking_date: bookingDate,
       });
       setCashSummary(response.summary);
       setSuccessMessage(`${categoryTypeLabel(response.expense.transaction_type)} über ${formatThaiBaht(response.expense.amount, response.expense.currency)} für ${getCategoryPath(categories, selectedCategory)} gespeichert.`);
@@ -243,6 +253,7 @@ export function HomePage() {
       setSelectedRootCategory(null);
       setExpenseAmount("");
       setExpenseNote("");
+      setBookingDate(today);
       setBookingError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -313,10 +324,15 @@ export function HomePage() {
           </div>
           <small id="amount-help">Betrag in Thai Baht</small>
         </div>
-        <div className="quick-amounts" aria-label="Schnellbeträge">
-          {[100, 250, 500, 1000].map((amount) => (
-            <button key={amount} onClick={() => setExpenseAmount(String(amount))} type="button">฿{amount.toLocaleString("th-TH")}</button>
-          ))}
+        <div className="booking-date-field">
+          <span>Buchungsdatum</span>
+          <BookingDatePicker
+            disabled={isSavingExpense}
+            max={today}
+            min={bookingDateMin}
+            onChange={setBookingDate}
+            value={bookingDate}
+          />
         </div>
         <label className="form-field">
           <span>Notiz optional</span>

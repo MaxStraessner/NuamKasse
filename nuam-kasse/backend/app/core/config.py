@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_name: str = Field(default="Nuam Kasse", alias="APP_NAME")
     app_version: str = Field(default="0.6.0", alias="APP_VERSION")
     app_env: str = Field(default="development", alias="APP_ENV")
+    business_timezone: str = Field(default="Asia/Bangkok", alias="BUSINESS_TIMEZONE")
     debug: bool = Field(default=False, alias="DEBUG")
     enable_api_docs: bool = Field(default=True, alias="ENABLE_API_DOCS")
     database_url: str = Field(default="", alias="DATABASE_URL")

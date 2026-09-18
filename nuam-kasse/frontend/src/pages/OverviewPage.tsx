@@ -6,6 +6,7 @@ import { useAuth } from "../app/AuthContext";
 import { useDisplayMode } from "../app/DisplayModeContext";
 import { AppCard } from "../components/AppCard";
 import { AppDialog } from "../components/AppDialog";
+import { BookingDatePicker } from "../components/BookingDatePicker";
 import { CategoryTile } from "../components/CategoryTile";
 import { CategoryTypeBadge } from "../components/CategoryTypeBadge";
 import { MetricTile } from "../components/MetricTile";
@@ -13,15 +14,18 @@ import { PageContainer } from "../components/PageContainer";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError } from "../services/apiClient";
 import { listCashPeriods } from "../services/cashPeriodsApi";
-import { formatLocalDateTime } from "../services/dateTime";
-import { voidExpense } from "../services/expensesApi";
-import { decimalStringToMinorUnits, formatThaiBaht } from "../services/money";
+import { getCategories } from "../services/categoriesApi";
+import { getCategoryPath } from "../services/categoryTree";
+import { formatBookingDate, toLocalDateInput } from "../services/dateTime";
+import { updateExpense, voidExpense } from "../services/expensesApi";
+import { decimalStringToMinorUnits, formatThaiBaht, normalizeMoneyInput } from "../services/money";
 import {
   getCashPeriodExpenses,
   getCashPeriodOverview,
   getCurrentOverview,
 } from "../services/overviewApi";
 import type { CashPeriod } from "../types/cashPeriod";
+import type { Category } from "../types/category";
 import type {
   CashPeriodOverview,
   OverviewExpense,
@@ -117,6 +121,14 @@ export function OverviewPage() {
   const [hasNoActivePeriod, setHasNoActivePeriod] = useState(false);
   const [voidingExpenseId, setVoidingExpenseId] = useState<number | null>(null);
   const [voidTarget, setVoidTarget] = useState<OverviewExpense | null>(null);
+  const [editTarget, setEditTarget] = useState<OverviewExpense | null>(null);
+  const [editCategories, setEditCategories] = useState<Category[]>([]);
+  const [editAmount, setEditAmount] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editBookingDate, setEditBookingDate] = useState(toLocalDateInput);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
 
@@ -124,6 +136,13 @@ export function OverviewPage() {
   const percentSpent = overview?.summary
     ? consumptionPercent(overview.summary.opening_amount, overview.summary.spent_amount)
     : 0;
+  const today = toLocalDateInput();
+  const editMaxDate = cashPeriod?.end_date && cashPeriod.end_date < today
+    ? cashPeriod.end_date
+    : today;
+  const editMinDate = cashPeriod?.start_date && cashPeriod.start_date <= editMaxDate
+    ? cashPeriod.start_date
+    : undefined;
 
   const periodOptions = useMemo(() => {
     const byId = new Map<number, CashPeriod>();
@@ -334,6 +353,50 @@ export function OverviewPage() {
     }
   }
 
+  async function openEditExpense(expense: OverviewExpense) {
+    setEditTarget(expense);
+    setEditAmount(expense.amount);
+    setEditCategoryId(String(expense.category.id));
+    setEditNote(expense.note ?? "");
+    setEditBookingDate(expense.booking_date || expense.created_at.slice(0, 10));
+    setEditError(null);
+    if (editCategories.length === 0) {
+      try {
+        setEditCategories(await getCategories(true));
+      } catch (err) {
+        setEditError(err instanceof Error ? err.message : "Kategorien konnten nicht geladen werden.");
+      }
+    }
+  }
+
+  async function handleUpdateExpense() {
+    if (!editTarget) {
+      return;
+    }
+    const amountMinor = decimalStringToMinorUnits(editAmount);
+    if (amountMinor === null || amountMinor <= 0) {
+      setEditError("Bitte einen gültigen Betrag größer als null eingeben.");
+      return;
+    }
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      await updateExpense(editTarget.id, {
+        category_id: Number(editCategoryId),
+        amount: normalizeMoneyInput(editAmount),
+        note: editNote.trim() || null,
+        booking_date: editBookingDate,
+      });
+      setEditTarget(null);
+      await loadOverview(true);
+      await loadExpenses(0, false, true);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
   const overviewCategories = Array.isArray(overview?.categories) ? overview.categories : [];
   const displayedCategories = showAllCategories ? overviewCategories : overviewCategories.slice(0, 5);
   const overviewUsers = Array.isArray(overview?.users) ? overview.users : [];
@@ -342,12 +405,82 @@ export function OverviewPage() {
   const hasActiveFilters = Boolean(
     filters.categoryId || filters.userId || filters.datePreset !== "all" || filters.status !== "active" || filters.sort !== "created_at_desc",
   );
+  const editCategoryOptions = useMemo(() => {
+    const activeParentIds = new Set(
+      editCategories
+        .filter((category) => category.is_active && category.parent_category_id !== null)
+        .map((category) => category.parent_category_id),
+    );
+    return editCategories.filter((category) => (
+      category.id === editTarget?.category.id
+      || (category.is_active && !activeParentIds.has(category.id))
+    ));
+  }, [editCategories, editTarget?.category.id]);
 
   function canVoidExpense(expense: OverviewExpense): boolean {
     return Boolean(
       cashPeriod?.status === "active"
       && !expense.is_voided
       && (isAdmin || user?.id === expense.created_by.id),
+    );
+  }
+
+  function canEditExpense(expense: OverviewExpense): boolean {
+    return canVoidExpense(expense);
+  }
+
+  function renderEditDialog() {
+    return (
+      <AppDialog
+        description="Passe die Buchungsdaten an. Abbrechen lässt die ursprüngliche Buchung unverändert."
+        isOpen={Boolean(editTarget)}
+        onClose={() => setEditTarget(null)}
+        preventClose={isSavingEdit}
+        title="Buchung bearbeiten"
+      >
+        {editTarget && cashPeriod ? (
+          <form className="stack-form" onSubmit={(event) => { event.preventDefault(); void handleUpdateExpense(); }}>
+            <label className="form-field">
+              <span>Betrag</span>
+              <input
+                inputMode="decimal"
+                onChange={(event) => setEditAmount(event.target.value.replace(/[^\d,.]/g, ""))}
+                required
+                value={editAmount}
+              />
+            </label>
+            <label className="form-field">
+              <span>Kategorie</span>
+              <select onChange={(event) => setEditCategoryId(event.target.value)} required value={editCategoryId}>
+                {editCategoryOptions.length > 0
+                  ? editCategoryOptions.map((category) => (
+                    <option key={category.id} value={category.id}>{getCategoryPath(editCategories, category)}</option>
+                  ))
+                  : <option value={editTarget.category.id}>{editTarget.category.name}</option>}
+              </select>
+            </label>
+            <div className="booking-date-field">
+              <span>Buchungsdatum</span>
+              <BookingDatePicker
+                disabled={isSavingEdit}
+                max={editMaxDate}
+                min={editMinDate}
+                onChange={setEditBookingDate}
+                value={editBookingDate}
+              />
+            </div>
+            <label className="form-field">
+              <span>Notiz optional</span>
+              <input maxLength={500} onChange={(event) => setEditNote(event.target.value)} value={editNote} />
+            </label>
+            {editError ? <p className="form-error" role="alert">{editError}</p> : null}
+            <div className="booking-edit-actions">
+              <button className="primary-action" disabled={isSavingEdit || !editCategoryId} type="submit">Speichern</button>
+              <button className="secondary-action" disabled={isSavingEdit} onClick={() => setEditTarget(null)} type="button">Abbrechen</button>
+            </div>
+          </form>
+        ) : null}
+      </AppDialog>
     );
   }
 
@@ -423,13 +556,13 @@ export function OverviewPage() {
                     <tbody>
                       {expensesPage.items.map((expense) => (
                         <tr className={`${expense.transaction_type === "income" ? "desktop-bookings__row--income" : "desktop-bookings__row--expense"}${expense.is_voided ? " desktop-bookings__row--voided" : ""}`} key={expense.id}>
-                          <td>{formatLocalDateTime(expense.created_at)}</td>
+                          <td>{formatBookingDate(expense.booking_date || expense.created_at.slice(0, 10))}</td>
                           <td><div className="desktop-bookings__category"><CategoryTile category={expense.category} showLabel={false} size="compact" /><span><strong>{expense.category.name}</strong>{expense.category.parent_category_id ? <small>Unterkategorie</small> : null}</span></div></td>
                           <td>{expense.note || "—"}{isAdmin && expense.is_voided ? <small>Storniert{expense.voided_by ? ` von ${expense.voided_by.display_name}` : ""}{expense.void_reason ? ` · ${expense.void_reason}` : ""}</small> : null}</td>
                           <td>{expense.created_by.display_name}</td>
                           <td><CategoryTypeBadge compact type={expense.transaction_type} /></td>
                           <td className={`desktop-money ${expense.transaction_type === "income" ? "desktop-money--positive" : "desktop-money--negative"}`}>{expense.transaction_type === "income" ? "+" : "−"}{formatThaiBaht(expense.amount, expense.currency)}</td>
-                          <td>{expense.is_voided ? <span className="desktop-status">Storniert</span> : canVoidExpense(expense) ? <button className="link-button" disabled={voidingExpenseId === expense.id} onClick={() => setVoidTarget(expense)} type="button">Stornieren</button> : null}</td>
+                          <td>{expense.is_voided ? <span className="desktop-status">Storniert</span> : canEditExpense(expense) ? <div className="booking-edit-actions"><button className="link-button" onClick={() => void openEditExpense(expense)} type="button">Bearbeiten</button><button className="link-button" disabled={voidingExpenseId === expense.id} onClick={() => setVoidTarget(expense)} type="button">Stornieren</button></div> : null}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -442,6 +575,7 @@ export function OverviewPage() {
             <AppDialog description="Die Buchung bleibt zur Nachvollziehbarkeit gespeichert und wird aus den Summen entfernt." isOpen={Boolean(voidTarget)} onClose={() => setVoidTarget(null)} preventClose={voidingExpenseId !== null} title="Buchung stornieren?">
               {voidTarget ? <div className="stack-form"><div className="closing-summary"><strong>{voidTarget.category.name}</strong><span>{formatThaiBaht(voidTarget.amount, voidTarget.currency)}</span></div><button className="primary-action category-danger-action" onClick={() => void handleVoidExpense(voidTarget)} type="button">Buchung stornieren</button><button className="secondary-action" onClick={() => setVoidTarget(null)} type="button">Abbrechen</button></div> : null}
             </AppDialog>
+            {renderEditDialog()}
           </>
         ) : null}
       </main>
@@ -647,7 +781,7 @@ export function OverviewPage() {
                       <div className="expense-item__body">
                         <strong>{expense.category.name}</strong>
                         <CategoryTypeBadge compact type={expense.transaction_type} />
-                        <span>{expense.created_by.display_name} / {formatLocalDateTime(expense.created_at)}</span>
+                        <span>{expense.created_by.display_name} / {formatBookingDate(expense.booking_date || expense.created_at.slice(0, 10))}</span>
                         {isAdmin && expense.is_voided ? (
                           <small>
                             Storniert{expense.voided_by ? ` von ${expense.voided_by.display_name}` : ""}
@@ -658,16 +792,7 @@ export function OverviewPage() {
                       <div className="expense-item__amount">
                         <strong>{formatThaiBaht(expense.amount, expense.currency)}</strong>
                         {isAdmin && expense.is_voided ? <span className="status-pill">Storniert</span> : null}
-                        {canVoidExpense(expense) ? (
-                          <button
-                            className="link-button"
-                            disabled={voidingExpenseId === expense.id}
-                            onClick={() => setVoidTarget(expense)}
-                            type="button"
-                          >
-                            Buchung entfernen
-                          </button>
-                        ) : null}
+                        {canEditExpense(expense) ? <div className="booking-edit-actions"><button className="link-button" onClick={() => void openEditExpense(expense)} type="button">Bearbeiten</button><button className="link-button" disabled={voidingExpenseId === expense.id} onClick={() => setVoidTarget(expense)} type="button">Buchung entfernen</button></div> : null}
                       </div>
                     </div>
                   );
@@ -705,6 +830,7 @@ export function OverviewPage() {
           <AppDialog description="Die Buchung bleibt zur Nachvollziehbarkeit gespeichert und wird aus den Summen entfernt." isOpen={Boolean(voidTarget)} onClose={() => setVoidTarget(null)} preventClose={voidingExpenseId !== null} title="Buchung stornieren?">
             {voidTarget ? <div className="stack-form"><div className="closing-summary"><strong>{voidTarget.category.name}</strong><span>{formatThaiBaht(voidTarget.amount, voidTarget.currency)}</span></div><button className="primary-action category-danger-action" onClick={() => void handleVoidExpense(voidTarget)} type="button">Buchung stornieren</button><button className="secondary-action" onClick={() => setVoidTarget(null)} type="button">Abbrechen</button></div> : null}
           </AppDialog>
+          {renderEditDialog()}
         </>
       ) : null}
     </PageContainer>

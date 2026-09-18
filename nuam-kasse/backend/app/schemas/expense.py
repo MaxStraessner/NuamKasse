@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
@@ -45,6 +45,16 @@ class ExpenseCreate(BaseModel):
     category_id: int
     amount: str = Field(min_length=1, max_length=20)
     note: str | None = Field(default=None, max_length=500)
+    booking_date: date | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExpenseUpdate(BaseModel):
+    category_id: int | None = None
+    amount: str | None = Field(default=None, min_length=1, max_length=20)
+    note: str | None = Field(default=None, max_length=500)
+    booking_date: date | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -64,6 +74,7 @@ class ExpenseRead(BaseModel):
     currency: str
     created_by: ExpenseUserRead
     created_at: datetime
+    booking_date: date
     is_voided: bool
     voided_at: datetime | None
     voided_by: ExpenseUserRead | None

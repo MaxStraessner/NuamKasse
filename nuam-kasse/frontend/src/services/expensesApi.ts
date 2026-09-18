@@ -1,5 +1,5 @@
 import { apiRequest } from "./apiClient";
-import type { Expense, ExpenseCreate, ExpenseFilters, ExpenseMutationResponse, ExpenseVoid } from "../types/expense";
+import type { Expense, ExpenseCreate, ExpenseFilters, ExpenseMutationResponse, ExpenseUpdate, ExpenseVoid } from "../types/expense";
 
 function buildExpenseQuery(filters: ExpenseFilters = {}): string {
   const params = new URLSearchParams();
@@ -25,6 +25,13 @@ export function getCurrentExpenses(filters: ExpenseFilters = {}): Promise<Expens
 
 export function getExpense(expenseId: number): Promise<Expense> {
   return apiRequest<Expense>(`/expenses/${expenseId}`);
+}
+
+export function updateExpense(expenseId: number, payload: ExpenseUpdate): Promise<ExpenseMutationResponse> {
+  return apiRequest<ExpenseMutationResponse>(`/expenses/${expenseId}`, {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export function voidExpense(expenseId: number, payload: ExpenseVoid = {}): Promise<ExpenseMutationResponse> {
