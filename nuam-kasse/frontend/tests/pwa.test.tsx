@@ -62,20 +62,13 @@ describe("PWA install prompt", () => {
   });
 });
 
-describe("PWA update prompt", () => {
-  it("shows and applies a controlled service worker update", async () => {
-    const updateServiceWorker = vi.fn(async () => undefined);
-    vi.mocked(registerSW).mockReturnValueOnce(updateServiceWorker);
-
+describe("PWA automatic updates", () => {
+  it("registers immediate automatic service worker updates", () => {
     render(<PwaUpdatePrompt />);
 
     const calls = vi.mocked(registerSW).mock.calls;
     const options = calls[calls.length - 1]?.[0];
-    options?.onNeedRefresh?.();
-
-    expect(await screen.findByText("Neue Version verfügbar")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Jetzt aktualisieren"));
-
-    await waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true));
+    expect(options).toEqual(expect.objectContaining({ immediate: true }));
+    expect(screen.queryByText("Neue Version verfügbar")).not.toBeInTheDocument();
   });
 });

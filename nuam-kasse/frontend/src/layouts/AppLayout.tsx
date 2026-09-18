@@ -8,7 +8,6 @@ import { DesktopSidebar } from "../components/DesktopSidebar";
 import { DesktopTopbar } from "../components/DesktopTopbar";
 import { OfflineNotice } from "../components/OfflineNotice";
 import { PwaInstallPrompt } from "../components/PwaInstallPrompt";
-import { PwaUpdatePrompt } from "../components/PwaUpdatePrompt";
 
 export function AppLayout() {
   const { user } = useAuth();
@@ -23,7 +22,6 @@ export function AppLayout() {
           <OfflineNotice />
           <div className="desktop-page"><Outlet /></div>
           <PwaInstallPrompt />
-          <PwaUpdatePrompt />
         </div>
       </div>
     );
@@ -43,7 +41,6 @@ export function AppLayout() {
       <OfflineNotice />
       <Outlet />
       <PwaInstallPrompt />
-      <PwaUpdatePrompt />
       <BottomNav />
     </div>
   );

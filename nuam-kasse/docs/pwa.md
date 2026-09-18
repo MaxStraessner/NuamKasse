@@ -67,9 +67,6 @@ Auf iOS gibt es keine allgemeine automatische Installationsaufforderung. Die App
 
 ## Updates
 
-Der Service Worker nutzt eine kontrollierte Update-Strategie. Wenn eine neue Version verfuegbar ist, erscheint ein Hinweis mit:
+Der Service Worker nutzt `autoUpdate`. Neue Builds aktivieren den neuen Service Worker mit `skipWaiting` und uebernehmen offene Clients mit `clientsClaim`. Die Registrierung erfolgt sofort und auch auf der Login-Seite, damit ein veralteter App-Build nicht dauerhaft aktiv bleiben kann.
 
-- `Jetzt aktualisieren`
-- `Spaeter`
-
-Die App laedt nicht automatisch neu, waehrend Eingaben oder Buchungen laufen koennen.
+Statische Assets bleiben inhaltlich versioniert und langfristig cachebar. `index.html`, `sw.js` und das Manifest werden vom Webserver weiterhin mit Revalidierungs- beziehungsweise `no-store`-Headern ausgeliefert. API-Antworten bleiben `NetworkOnly`.

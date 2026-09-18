@@ -4,6 +4,7 @@ import { AuthProvider } from "./app/AuthContext";
 import { DisplayModeProvider } from "./app/DisplayModeContext";
 import { NetworkStatusProvider } from "./app/NetworkStatusContext";
 import { AdminRoute, ProtectedRoute, PublicOnlyRoute } from "./app/routes";
+import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
 import { AppLayout } from "./layouts/AppLayout";
 import { CategoryAdminPage } from "./pages/CategoryAdminPage";
 import { CashPeriodAdminPage } from "./pages/CashPeriodAdminPage";
@@ -98,6 +99,7 @@ export function App() {
     <DisplayModeProvider>
       <AuthProvider>
         <NetworkStatusProvider>
+          <PwaUpdatePrompt />
           <RouterProvider router={router} />
         </NetworkStatusProvider>
       </AuthProvider>
