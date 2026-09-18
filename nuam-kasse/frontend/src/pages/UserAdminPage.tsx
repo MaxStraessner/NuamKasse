@@ -66,6 +66,7 @@ const actionLabels: Record<string, string> = {
   "user.access_changed": "Kassen- und Archivzugriff geändert",
   "user.cashbook_access_changed": "Kassenzugriff geändert",
   "user.period_access_changed": "Archivzugriff geändert",
+  "expense.updated": "Buchung bearbeitet",
 };
 
 const periodAccessLabels: Record<PeriodAccessMode, string> = {
@@ -964,7 +965,7 @@ export function UserAdminPage() {
                     <thead>
                       <tr>
                         <th>Zeitpunkt</th>
-                        <th>Administrator</th>
+                         <th>Administrator</th>
                         <th>Aktion</th>
                         <th>Betroffenes Konto</th>
                       </tr>

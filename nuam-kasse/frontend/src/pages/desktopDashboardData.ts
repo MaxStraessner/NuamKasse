@@ -47,7 +47,7 @@ export function buildTimelineBuckets(
     return [];
   }
   const end = requestedEnd < start ? start : requestedEnd;
-  const visibleExpenses = expenses.filter((expense) => !expense.is_voided && parseDate(expense.created_at));
+  const visibleExpenses = expenses.filter((expense) => !expense.is_voided && parseDate(expense.booking_date || expense.created_at));
   if (visibleExpenses.length === 0) {
     return [];
   }
@@ -66,7 +66,7 @@ export function buildTimelineBuckets(
   });
 
   visibleExpenses.forEach((expense) => {
-    const createdAt = parseDate(expense.created_at);
+    const createdAt = parseDate(expense.booking_date || expense.created_at);
     const amountMinor = decimalStringToMinorUnits(expense.amount) ?? 0;
     if (!createdAt || createdAt < start || createdAt > end || amountMinor <= 0) {
       return;

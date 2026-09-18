@@ -85,6 +85,7 @@ def create_expense(
         currency="THB",
         created_by_user_id=created_by_user_id,
         created_at=created_at,
+        booking_date=created_at.date(),
         is_voided=is_voided,
         voided_at=datetime(2026, 7, 4, 12, 0, tzinfo=timezone.utc) if is_voided else None,
         voided_by_user_id=voided_by_user_id,

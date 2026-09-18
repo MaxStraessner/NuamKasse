@@ -100,7 +100,7 @@ def _load_expenses(db: Session, cash_period_id: int) -> list[Expense]:
                 joinedload(Expense.voided_by),
             )
             .where(Expense.cash_period_id == cash_period_id)
-            .order_by(Expense.created_at.asc(), Expense.id.asc())
+            .order_by(Expense.booking_date.asc(), Expense.created_at.asc(), Expense.id.asc())
         )
     )
 
@@ -277,7 +277,7 @@ def build_cash_period_export(
     for expense in expenses:
         if expense.is_voided:
             continue
-        key = expense.created_at.date()
+        key = expense.booking_date
         target = "income" if expense.transaction_type == CategoryType.income else "expense"
         daily[key][target] += expense.amount
     if len(daily) >= 2:
@@ -384,7 +384,7 @@ def build_cash_period_export(
     for row_index, expense in enumerate(expenses, 4):
         parent = expense.category.parent
         created_at = _plain_datetime(expense.created_at)
-        transaction_sheet.cell(row_index, 1, created_at.date()).number_format = "dd.mm.yyyy"
+        transaction_sheet.cell(row_index, 1, expense.booking_date).number_format = "dd.mm.yyyy"
         transaction_sheet.cell(row_index, 2, created_at.time()).number_format = "hh:mm"
         transaction_sheet.cell(row_index, 3, "Einnahme" if expense.transaction_type == CategoryType.income else "Ausgabe")
         transaction_sheet.cell(row_index, 4, parent.name if parent else expense.category.name)

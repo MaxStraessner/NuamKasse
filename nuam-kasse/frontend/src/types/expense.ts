@@ -27,6 +27,7 @@ export type Expense = {
   currency: "THB";
   created_by: ExpenseUser;
   created_at: string;
+  booking_date?: string;
   is_voided: boolean;
   voided_at: string | null;
   voided_by: ExpenseUser | null;
@@ -38,6 +39,14 @@ export type ExpenseCreate = {
   category_id: number;
   amount: string;
   note?: string | null;
+  booking_date?: string;
+};
+
+export type ExpenseUpdate = {
+  category_id?: number;
+  amount?: string;
+  note?: string | null;
+  booking_date?: string;
 };
 
 export type ExpenseVoid = {

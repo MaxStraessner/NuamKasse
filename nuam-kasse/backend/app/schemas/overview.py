@@ -106,6 +106,7 @@ class OverviewExpenseRead(BaseModel):
     currency: str
     created_by: OverviewExpenseUser
     created_at: datetime
+    booking_date: date
     is_voided: bool
     voided_at: datetime | None = None
     voided_by: OverviewExpenseUser | None = None

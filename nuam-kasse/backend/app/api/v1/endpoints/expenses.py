@@ -1,22 +1,41 @@
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import ensure_cash_period_access, require_cashbook_member
+from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.expense import Expense
 from app.models.cash_period import CashPeriod
-from app.schemas.expense import ExpenseCreate, ExpenseMutationResponse, ExpenseRead, ExpenseVoidRequest
+from app.schemas.expense import (
+    ExpenseCreate,
+    ExpenseMutationResponse,
+    ExpenseRead,
+    ExpenseUpdate,
+    ExpenseVoidRequest,
+)
 from app.services.expense_service import (
     ExpenseServiceError,
     create_expense,
     get_expense_by_id,
     list_current_expenses,
+    update_expense,
     void_expense,
 )
 from app.services.cashbook_service import CashbookAccess
 from app.services.cash_period_service import get_active_cash_period
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
+
+
+def _current_business_date(settings: Settings):
+    try:
+        timezone_info = ZoneInfo(settings.business_timezone)
+    except ZoneInfoNotFoundError:
+        timezone_info = timezone.utc
+    return datetime.now(timezone_info).date()
 
 
 def _service_error(exc: ExpenseServiceError) -> HTTPException:
@@ -49,6 +68,7 @@ def create_expense_endpoint(
     payload: ExpenseCreate,
     db: Session = Depends(get_db),
     access: CashbookAccess = Depends(require_cashbook_member),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, object]:
     _ensure_active_period_access(db, access)
     try:
@@ -60,6 +80,8 @@ def create_expense_endpoint(
             created_by=access.user,
             cashbook_id=access.cashbook.id,
             category_owner_user_id=access.cashbook.category_owner_user_id,
+            booking_date=payload.booking_date,
+            latest_booking_date=_current_business_date(settings),
         )
     except ExpenseServiceError as exc:
         raise _service_error(exc) from exc
@@ -101,6 +123,34 @@ def read_expense(
     access: CashbookAccess = Depends(require_cashbook_member),
 ) -> Expense:
     return _get_expense(db, expense_id, access)
+
+
+@router.patch("/{expense_id}", response_model=ExpenseMutationResponse)
+def update_expense_endpoint(
+    expense_id: int,
+    payload: ExpenseUpdate,
+    db: Session = Depends(get_db),
+    access: CashbookAccess = Depends(require_cashbook_member),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    expense = _get_expense(db, expense_id, access)
+    try:
+        updated_expense, summary = update_expense(
+            db,
+            expense=expense,
+            updated_by=access.user,
+            cashbook_id=access.cashbook.id,
+            category_owner_user_id=access.cashbook.category_owner_user_id,
+            is_admin=access.is_admin,
+            latest_booking_date=_current_business_date(settings),
+            category_id=payload.category_id,
+            amount=payload.amount,
+            note=payload.note if "note" in payload.model_fields_set else expense.note,
+            booking_date=payload.booking_date,
+        )
+    except ExpenseServiceError as exc:
+        raise _service_error(exc) from exc
+    return {"expense": updated_expense, "summary": summary}
 
 
 @router.post("/{expense_id}/void", response_model=ExpenseMutationResponse)
