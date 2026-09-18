@@ -1,39 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { registerSW } from "virtual:pwa-register";
 
 export function PwaUpdatePrompt() {
-  const [updateServiceWorker, setUpdateServiceWorker] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null);
-
   useEffect(() => {
-    const update = registerSW({
-      immediate: false,
-      onNeedRefresh() {
-        setUpdateServiceWorker(() => update);
-      },
-      onOfflineReady() {
-        return undefined;
-      },
-    });
+    registerSW({ immediate: true });
   }, []);
 
-  if (!updateServiceWorker) {
-    return null;
-  }
-
-  return (
-    <div className="pwa-prompt pwa-prompt--update" role="status">
-      <div>
-        <strong>Neue Version verfügbar</strong>
-        <span>Aktualisiere, sobald keine Eingabe mehr geöffnet ist.</span>
-      </div>
-      <div className="pwa-prompt__actions">
-        <button type="button" onClick={() => void updateServiceWorker(true)}>
-          Jetzt aktualisieren
-        </button>
-        <button type="button" onClick={() => setUpdateServiceWorker(null)}>
-          Später
-        </button>
-      </div>
-    </div>
-  );
+  return null;
 }

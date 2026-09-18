@@ -140,9 +140,6 @@ export function OverviewPage() {
   const editMaxDate = cashPeriod?.end_date && cashPeriod.end_date < today
     ? cashPeriod.end_date
     : today;
-  const editMinDate = cashPeriod?.start_date && cashPeriod.start_date <= editMaxDate
-    ? cashPeriod.start_date
-    : undefined;
 
   const periodOptions = useMemo(() => {
     const byId = new Map<number, CashPeriod>();
@@ -464,7 +461,6 @@ export function OverviewPage() {
               <BookingDatePicker
                 disabled={isSavingEdit}
                 max={editMaxDate}
-                min={editMinDate}
                 onChange={setEditBookingDate}
                 value={editBookingDate}
               />

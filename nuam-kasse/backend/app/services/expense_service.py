@@ -86,16 +86,6 @@ def _validate_booking_date(
     *,
     latest_booking_date: date,
 ) -> None:
-    # Legacy periods may be marked active even though their configured start is
-    # still in the future. In that state the start cannot be a valid lower
-    # bound for today's booking, so retain the historic unrestricted lower
-    # range instead of constructing an impossible interval.
-    if cash_period.start_date <= latest_booking_date and booking_date < cash_period.start_date:
-        raise ExpenseServiceError(
-            "Das Buchungsdatum liegt vor dem Beginn dieser Kasse.",
-            code="booking_date_before_period",
-            status_code=409,
-        )
     if cash_period.end_date is not None and booking_date > cash_period.end_date:
         raise ExpenseServiceError(
             "Das Buchungsdatum liegt nach dem Ende dieser Kasse.",

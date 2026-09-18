@@ -348,10 +348,17 @@ def test_closed_cash_period_expenses_are_readable_but_not_voidable_or_editable(c
     assert delete.status_code == 405
 
 
-def test_booking_date_is_stored_and_must_match_period_and_not_be_future(client, db_session):
+def test_booking_date_is_stored_and_may_predate_period_but_not_be_future(
+    client, db_session, monkeypatch
+):
     admin = create_test_user(db_session, username="admin", role=UserRole.admin)
     category = create_category(db_session, user_id=admin.id)
     create_cash_period(db_session, created_by_user_id=admin.id)
+    monkeypatch.setattr(
+        expenses_endpoint,
+        "_current_business_date",
+        lambda settings: date(2026, 9, 18),
+    )
     login(client, "admin")
 
     stored = client.post(
@@ -369,11 +376,39 @@ def test_booking_date_is_stored_and_must_match_period_and_not_be_future(client, 
 
     assert stored.status_code == 201
     assert stored.json()["expense"]["booking_date"] == "2026-07-15"
-    assert before_period.status_code == 409
-    assert before_period.json()["detail"]["code"] == "booking_date_before_period"
+    assert before_period.status_code == 201
+    assert before_period.json()["expense"]["booking_date"] == "2026-06-30"
     assert future.status_code == 409
     assert future.json()["detail"]["code"] == "booking_date_future"
-    assert db_session.query(Expense).count() == 1
+    assert db_session.query(Expense).count() == 2
+
+
+def test_period_start_today_allows_backdated_create_and_update(client, db_session, monkeypatch):
+    admin = create_test_user(db_session, username="admin", role=UserRole.admin)
+    category = create_category(db_session, user_id=admin.id)
+    cash_period = create_cash_period(db_session, created_by_user_id=admin.id)
+    cash_period.start_date = date(2026, 9, 18)
+    db_session.commit()
+    monkeypatch.setattr(
+        expenses_endpoint,
+        "_current_business_date",
+        lambda settings: date(2026, 9, 18),
+    )
+    login(client, "admin")
+
+    stored = client.post(
+        "/api/v1/expenses",
+        json={"category_id": category.id, "amount": "25.00", "booking_date": "2026-09-17"},
+    )
+    assert stored.status_code == 201
+
+    updated = client.patch(
+        f"/api/v1/expenses/{stored.json()['expense']['id']}",
+        json={"booking_date": "2026-09-16"},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["expense"]["booking_date"] == "2026-09-16"
 
 
 def test_future_active_period_keeps_today_as_valid_default_booking_date(

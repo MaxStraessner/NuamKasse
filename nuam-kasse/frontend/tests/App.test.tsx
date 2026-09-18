@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { App } from "../src/App";
+import { toLocalDateInput } from "../src/services/dateTime";
 import type { CashPeriod, CashPeriodSummary } from "../src/types/cashPeriod";
 import type { Expense } from "../src/types/expense";
 import type { CashPeriodOverview, OverviewExpense, PaginatedOverviewExpenses } from "../src/types/overview";
@@ -1172,6 +1173,38 @@ describe("Expenses", () => {
     await waitFor(() => expect(createPayload).not.toBeNull());
     expect(createPayload).toEqual(expect.objectContaining({ booking_date: input.value }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("keeps backdating available when the active period starts today", async () => {
+    window.history.pushState({}, "", "/");
+    const today = toLocalDateInput();
+    const sameDayPeriod = {
+      ...activeCashPeriod,
+      name: "Heute gestartete Kasse",
+      start_date: today,
+    };
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return jsonResponse(memberUser);
+      if (url.endsWith("/cash-periods/current/summary")) return jsonResponse(activeCashSummary);
+      if (url.endsWith("/cash-periods/current")) return jsonResponse(sameDayPeriod);
+      if (url.endsWith("/categories")) return jsonResponse([essenCategory]);
+      if (url.endsWith("/health")) return healthResponse();
+      return jsonResponse({});
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: /Start/i }));
+    fireEvent.click(await screen.findByLabelText("Kategorie Essen"));
+
+    const input = screen.getByLabelText("Buchungsdatum im Kalender auswählen") as HTMLInputElement;
+    expect(input).not.toHaveAttribute("min");
+    expect(input).toHaveAttribute("max", today);
+    expect(screen.getByRole("button", { name: "Einen Tag zurück" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Einen Tag vor" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Einen Tag zurück" }));
+    expect(input.value).not.toBe(today);
+    expect(screen.getByRole("button", { name: "Einen Tag vor" })).toBeEnabled();
   });
 
   test("income remains bookable at zero balance and increases the preview", async () => {

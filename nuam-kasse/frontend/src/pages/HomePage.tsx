@@ -73,9 +73,6 @@ export function HomePage() {
   const canBookCategory = (category: Category) => canStartBooking
     && (category.category_type === "income" || remainingMinorUnits > 0);
   const today = toLocalDateInput();
-  const bookingDateMin = cashPeriod?.start_date && cashPeriod.start_date <= today
-    ? cashPeriod.start_date
-    : undefined;
 
   async function loadCashPeriod(silent = false) {
     if (!silent) {
@@ -329,7 +326,6 @@ export function HomePage() {
           <BookingDatePicker
             disabled={isSavingExpense}
             max={today}
-            min={bookingDateMin}
             onChange={setBookingDate}
             value={bookingDate}
           />

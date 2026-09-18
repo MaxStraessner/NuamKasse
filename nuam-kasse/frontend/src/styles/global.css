@@ -256,10 +256,6 @@ textarea:focus-visible {
   color: var(--color-text);
 }
 
-.pwa-prompt--update {
-  border-color: rgba(31, 91, 143, 0.24);
-}
-
 .offline-notice div,
 .pwa-prompt div:first-child {
   display: grid;
